@@ -1,0 +1,40 @@
+{
+  "author": {
+    "name": "Alex Bosworth",
+    "url": "https://twitter.com/alexbosworth"
+  },
+  "bugs": {
+    "url": "https://github.com/alexbosworth/paid-services/issues"
+  },
+  "dependencies": {
+    "async": "3.2.0",
+    "asyncjs-util": "1.2.6",
+    "bolt01": "1.2.2",
+    "invoices": "1.2.1",
+    "ln-service": "51.8.2"
+  },
+  "description": "Lightning Paid Services library",
+  "devDependencies": {
+    "mock-lnd": "1.0.1",
+    "secp256k1": "4.0.2",
+    "tap": "15.0.9"
+  },
+  "engines": {
+    "node": ">=12"
+  },
+  "keywords": [
+    "lightning",
+    "lightning-network"
+  ],
+  "license": "MIT",
+  "main": "index.js",
+  "name": "paid-services",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/alexbosworth/paid-services.git"
+  },
+  "scripts": {
+    "test": "tap --branches=1 --functions=1 --lines=1 --statements=1 -t 60 test/actions/*.js test/client/*.js test/config/*.js test/records/*.js test/respond/*.js test/server/*.js test/server/*.js test/services/*.js"
+  },
+  "version": "1.0.0"
+}

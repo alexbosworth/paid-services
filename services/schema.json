@@ -1,0 +1,40 @@
+{
+  "fields": {
+    "4": [
+      {
+        "description": "Message to deliver to inbox",
+        "limit": 280,
+        "type": "0"
+      },
+      {
+        "description": "Reply email address or other contact method",
+        "limit": 144,
+        "type": "1"
+      }
+    ]
+  },
+  "ids": {
+    "0": "schema",
+    "1": "services",
+    "2": "ping",
+    "3": "profile",
+    "4": "inbox",
+    "5": "network"
+  },
+  "descriptions": {
+    "0": "Get details about a specific service",
+    "1": "Get a list of currently supported services",
+    "2": "Get a pong response to a ping payment",
+    "3": "Get general information about this node",
+    "4": "Deliver a message to this node's inbox",
+    "5": "Get ids of other nodes offering paid services"
+  },
+  "types": {
+    "inbox": "4",
+    "network": "5",
+    "ping": "2",
+    "profile": "3",
+    "schema": "0",
+    "services": "1"
+  }
+}
