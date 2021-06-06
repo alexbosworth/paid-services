@@ -61,6 +61,13 @@ const tests = [
           is_enabled: false,
           name: 'network',
         },
+        {
+          id: '6',
+          description: 'Get routing activity statistics',
+          fields: undefined,
+          is_enabled: false,
+          name: 'activity',
+        },
       ],
     },
   },

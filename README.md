@@ -20,6 +20,20 @@ This service delivers a list of available services
 
 Other services can be configured and enabled using their relevant environment variables.
 
+### `activity`
+
+Return high level information about node routing activity.
+
+To enable this service, specify activity to share.
+
+```
+# Share the fees earned
+PAID_SERVICES_ACTIVITY_FEES=1
+
+# Share the forwarding total
+PAID_SERVICES_ACTIVITY_VOLUME=1
+```
+
 ### `inbox`
 
 Deliver a short message via SMS or email.

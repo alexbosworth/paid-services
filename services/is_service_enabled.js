@@ -1,5 +1,6 @@
 const {types} = require('./schema');
 
+const {isActivityEnabled} = require('./../config');
 const {isEmailConfigured} = require('./../config');
 const {isSmsConfigured} = require('./../config');
 
@@ -20,10 +21,14 @@ const maxProfileLength = 400;
 */
 module.exports = ({env, id}) => {
   switch (id) {
+  case types.activity:
+    return {is_enabled: isActivityEnabled({env})};
+
   // The inbox service requires an external delivery mechanism
   case types.inbox:
     return {is_enabled: isEmailConfigured({env}) || isSmsConfigured({env})};
 
+  // The network service requires a list of other nodes
   case types.network:
     return {is_enabled: !!env.PAID_SERVICES_NETWORK_NODES};
 

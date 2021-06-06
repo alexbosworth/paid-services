@@ -58,6 +58,22 @@ const tests = [
     description: 'Inbox service is enabled',
     expected: {is_enabled: true},
   },
+  {
+    args: {
+      env: {PAID_SERVICES_NETWORK_NODES: Buffer.alloc(33, 2).toString('hex')},
+      id: '5',
+    },
+    description: 'Network service is enabled',
+    expected: {is_enabled: true},
+  },
+  {
+    args: {
+      env: {PAID_SERVICES_ACTIVITY_FEES: '1'},
+      id: '6',
+    },
+    description: 'Routing activity service is enabled',
+    expected: {is_enabled: true},
+  },
 ];
 
 tests.forEach(({args, description, error, expected}) => {

@@ -2,6 +2,7 @@ const asyncAuto = require('async/auto');
 const asyncReflect = require('async/reflect');
 const {returnResult} = require('asyncjs-util');
 
+const responseForActivity = require('./response_for_activity');
 const responseForInbox = require('./response_for_inbox');
 const responseForNetwork = require('./response_for_network');
 const responseForPong = require('./response_for_pong');
@@ -70,6 +71,9 @@ module.exports = ({arguments, env, fetch, id, lnd, type}, cbk) => {
       // Generate response to request
       respond: ['validate', asyncReflect(({}, cbk) => {
         switch (type) {
+        case types.activity:
+          return responseForActivity({env, lnd}, cbk);
+
         case types.inbox:
           return responseForInbox({arguments, env, fetch, id, lnd}, cbk);
 

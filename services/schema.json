@@ -19,7 +19,8 @@
     "2": "ping",
     "3": "profile",
     "4": "inbox",
-    "5": "network"
+    "5": "network",
+    "6": "activity"
   },
   "descriptions": {
     "0": "Get details about a specific service",
@@ -27,9 +28,11 @@
     "2": "Get a pong response to a ping payment",
     "3": "Get general information about this node",
     "4": "Deliver a message to this node's inbox",
-    "5": "Get ids of other nodes offering paid services"
+    "5": "Get ids of other nodes offering paid services",
+    "6": "Get routing activity statistics"
   },
   "types": {
+    "activity": "6",
     "inbox": "4",
     "network": "5",
     "ping": "2",
