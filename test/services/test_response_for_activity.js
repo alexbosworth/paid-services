@@ -1,3 +1,5 @@
+const {makeForwardsResponse} = require('mock-lnd');
+const {makeLnd} = require('mock-lnd');
 const {test} = require('tap');
 
 const method = require('./../../services/response_for_activity');
@@ -11,35 +13,7 @@ const makeEnv = overrides => {
 };
 
 const makeArgs = overrides => {
-  const args = {
-    env: makeEnv({}),
-    lnd: {
-      default: {
-        forwardingHistory: (args, cbk) => {
-          // Exit early when paging
-          if (args.index_offset !== 0) {
-            return cbk(null, {forwarding_events: [], last_offset_index: '1'});
-          }
-
-          return cbk(null, {
-            forwarding_events: [{
-              amt_in: '2',
-              amt_in_msat: '2000',
-              amt_out: '1',
-              amt_out_msat: '1000',
-              chan_id_in: '1',
-              chan_id_out: '2',
-              fee: '1',
-              fee_msat: '1000',
-              timestamp: (Date.now() / 1e3).toString(),
-              timestamp_ns: (Date.now() / 1e3 * 1e9).toString(),
-            }],
-            last_offset_index: '1',
-          });
-        },
-      },
-    },
-  };
+  const args = {env: makeEnv({}), lnd: makeLnd({})};
 
   Object.keys(overrides).forEach(k => args[k] = overrides[k]);
 
@@ -63,9 +37,7 @@ const tests = [
     error: [400, 'ExpectedLndToGenerateRoutingActivityResponse'],
   },
   {
-    args: makeArgs({
-      lnd: {default: {forwardingHistory: ({}, cbk) => cbk('err')}},
-    }),
+    args: makeArgs({lnd: makeLnd({getForwards: ({}, cbk) => cbk('err')})}),
     description: 'LND returns an error',
     error: [
       503,
@@ -76,13 +48,9 @@ const tests = [
   },
   {
     args: makeArgs({
-      lnd: {
-        default: {
-          forwardingHistory: (args, cbk) => {
-            return cbk(null, {forwarding_events: [], last_offset_index: '1'});
-          },
-        },
-      },
+      lnd: makeLnd({
+        getForwards: ({}, cbk) => cbk(null, makeForwardsResponse({offset: 1})),
+      }),
     }),
     description: 'Routing summary is returned for zero events',
     expected: {
