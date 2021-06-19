@@ -1,7 +1,7 @@
 const {encodeTlvStream} = require('bolt01');
 
 const errorAsErrorRecords = require('./error_as_error_records');
-const requestAsRequestRecords = require('./request_as_request_records');
+const {requestAsRequestRecords} = require('./../records');
 const urlsAsUrlsRecord = require('./urls_as_urls_record');
 
 const additionalRecordsType = '1';
@@ -15,6 +15,7 @@ const errorType = '0';
 const linksType = '4';
 const nodesType = '3';
 const paywallRecordsType = '2';
+const relayRecordsType = '5';
 const responseType = '805805';
 const standardRecordsType = '0';
 const textMessageType = '1';
@@ -26,9 +27,7 @@ const textMessageType = '1';
       0: <Error Code Number>
       1: <Error Message String>
     [1]: <Text Message String>
-    [2]: <Paywall>
-      0: <Payment Request Details>
-      [1]: <Requested Amount>
+    [2]: <Paywall Request Records>
     [3]: <Nodes List>
     [4]: <URLs List>
 

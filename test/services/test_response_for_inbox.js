@@ -1,6 +1,6 @@
 const {encodeTlvStream} = require('bolt01');
 const {makeLnd} = require('mock-lnd');
-const {test} = require('tap');
+const {test} = require('@alexbosworth/tap');
 
 const method = require('./../../services/response_for_inbox');
 

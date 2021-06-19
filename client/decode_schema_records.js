@@ -26,8 +26,9 @@ const {isArray} = Array;
   {
     description: <Schema Description String>
     [fields]: [{
+      [data]: <Data Type String>
       description: <Field Description String>
-      limit: <Byte Limit Number>
+      [limit]: <Byte Limit Number>
       type: <Type Number String>
     }]
     [id]: <Service Id Number String>

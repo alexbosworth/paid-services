@@ -1,4 +1,4 @@
-const {test} = require('tap');
+const {test} = require('@alexbosworth/tap');
 
 const errorAsErrorRecords = require('./../../respond/error_as_error_records');
 

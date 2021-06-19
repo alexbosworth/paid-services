@@ -10,7 +10,7 @@ const decodeTlv = encoded => decodeTlvStream({encoded}).records;
 const findCustomRecords = records => records.find(n => n.type === '1');
 const findErrorRecords = records => records.find(n => n.type === '0');
 const findNodesRecord = records => records.find(n => n.type === '3');
-const findPaywallRecords = records => records.find(n => n.type === '2');
+const findPaywallRecord = records => records.find(n => n.type === '2');
 const findResponse = records => records.find(n => n.type === '805805');
 const findStandardRecords = records => records.find(n => n.type === '0');
 const findTextRecord = records => records.find(n => n.type === '1');
@@ -128,10 +128,10 @@ module.exports = ({messages, network}) => {
   }
 
   // A paywall is a standard field
-  const paywallRecords = findPaywallRecords(standard);
+  const paywallRecord = findPaywallRecord(standard);
 
-  if (!!paywallRecords) {
-    response.paywall = decodeReq(requestArgs(paywallRecords.value, network));
+  if (!!paywallRecord) {
+    response.paywall = decodeReq(requestArgs(paywallRecord.value, network));
   }
 
   // A text response is a standard field

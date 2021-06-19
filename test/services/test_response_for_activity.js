@@ -1,6 +1,6 @@
 const {makeForwardsResponse} = require('mock-lnd');
 const {makeLnd} = require('mock-lnd');
-const {test} = require('tap');
+const {test} = require('@alexbosworth/tap');
 
 const method = require('./../../services/response_for_activity');
 

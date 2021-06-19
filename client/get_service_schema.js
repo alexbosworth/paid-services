@@ -21,6 +21,7 @@ const schemaServiceId = '0';
   {
     description: <Schema Description String>
     [fields]: [{
+      [data]: <Data Type String>
       description: <Field Description String>
       limit: <Byte Limit Number>
       type: <Type Number String>

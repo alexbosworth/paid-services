@@ -1,4 +1,4 @@
-const {test} = require('tap');
+const {test} = require('@alexbosworth/tap');
 
 const method = require('./../../services/respond_to_request');
 
@@ -8,6 +8,7 @@ const makeArgs = overrides => {
     fetch: () => {},
     id: Buffer.alloc(32).toString('hex'),
     lnd: {},
+    network: 'btc',
     type: '2',
   };
 
@@ -20,27 +21,27 @@ const tests = [
   {
     args: makeArgs({env: undefined}),
     description: 'Responding requires env vars',
-    error: [500, 'ExpectedKnownConfigurationToRespondToRequest'],
+    error: [400, 'ExpectedKnownConfigurationToRespondToRequest'],
   },
   {
     args: makeArgs({fetch: undefined}),
     description: 'Responding requires a fetch function',
-    error: [500, 'ExpectedNodeFetchFunctionToRespondToRequest'],
+    error: [400, 'ExpectedNodeFetchFunctionToRespondToRequest'],
   },
   {
     args: makeArgs({id: undefined}),
     description: 'Responding requires an id',
-    error: [500, 'ExpectedInvoiceidToRespondToRequest'],
+    error: [400, 'ExpectedInvoiceidToRespondToRequest'],
   },
   {
     args: makeArgs({lnd: undefined}),
     description: 'Responding requires LND',
-    error: [500, 'ExpectedBackingLndToRespondToRequest'],
+    error: [400, 'ExpectedBackingLndToRespondToRequest'],
   },
   {
     args: makeArgs({type: undefined}),
     description: 'Responding requires a type number',
-    error: [500, 'ExpectedStandardRequestTypeToRespondToRequest'],
+    error: [400, 'ExpectedStandardRequestTypeToRespondToRequest'],
   },
   {
     args: makeArgs({}),

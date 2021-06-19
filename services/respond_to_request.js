@@ -7,6 +7,7 @@ const responseForInbox = require('./response_for_inbox');
 const responseForNetwork = require('./response_for_network');
 const responseForPong = require('./response_for_pong');
 const responseForProfile = require('./response_for_profile');
+const responseForRelay = require('./response_for_relay');
 const responseForSchema = require('./response_for_schema');
 const responseForServices = require('./response_for_services');
 const {types} = require('./schema');
@@ -19,6 +20,7 @@ const {types} = require('./schema');
     fetch: <Node Fetch Function>
     id: <Invoice Id Hex String>
     lnd: <Authenticated LND API Object>
+    network: <Network Name String>
     type: <Request Type Number String>
   }
 
@@ -40,29 +42,33 @@ const {types} = require('./schema');
     }
   }
 */
-module.exports = ({arguments, env, fetch, id, lnd, type}, cbk) => {
+module.exports = ({arguments, env, fetch, id, lnd, network, type}, cbk) => {
   return new Promise((resolve, reject) => {
     return asyncAuto({
       // Check arguments
       validate: cbk => {
         if (!env) {
-          return cbk([500, 'ExpectedKnownConfigurationToRespondToRequest']);
+          return cbk([400, 'ExpectedKnownConfigurationToRespondToRequest']);
         }
 
         if (!fetch) {
-          return cbk([500, 'ExpectedNodeFetchFunctionToRespondToRequest']);
+          return cbk([400, 'ExpectedNodeFetchFunctionToRespondToRequest']);
         }
 
         if (!id) {
-          return cbk([500, 'ExpectedInvoiceidToRespondToRequest']);
+          return cbk([400, 'ExpectedInvoiceidToRespondToRequest']);
         }
 
         if (!lnd) {
-          return cbk([500, 'ExpectedBackingLndToRespondToRequest']);
+          return cbk([400, 'ExpectedBackingLndToRespondToRequest']);
+        }
+
+        if (!network) {
+          return cbk([400, 'ExpectedNetworkNameToRespondToRequest']);
         }
 
         if (!type) {
-          return cbk([500, 'ExpectedStandardRequestTypeToRespondToRequest']);
+          return cbk([400, 'ExpectedStandardRequestTypeToRespondToRequest']);
         }
 
         return cbk();
@@ -85,6 +91,9 @@ module.exports = ({arguments, env, fetch, id, lnd, type}, cbk) => {
 
         case types.profile:
           return responseForProfile({env}, cbk);
+
+        case types.relay:
+          return responseForRelay({arguments, env, lnd, network}, cbk);
 
         case types.schema:
           return responseForSchema({arguments, env}, cbk);

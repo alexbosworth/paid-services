@@ -1,4 +1,7 @@
 {
+  "dataTypes": {
+    "request": "1"
+  },
   "fields": {
     "4": [
       {
@@ -11,7 +14,13 @@
         "limit": 144,
         "type": "1"
       }
-    ]
+    ],
+    "7": [{
+      "data": "request",
+      "description": "Payment request to relay",
+      "limit": 500,
+      "type": "0"
+    }]
   },
   "ids": {
     "0": "schema",
@@ -20,7 +29,8 @@
     "3": "profile",
     "4": "inbox",
     "5": "network",
-    "6": "activity"
+    "6": "activity",
+    "7": "relay"
   },
   "descriptions": {
     "0": "Get details about a specific service",
@@ -29,7 +39,8 @@
     "3": "Get general information about this node",
     "4": "Deliver a message to this node's inbox",
     "5": "Get ids of other nodes offering paid services",
-    "6": "Get routing activity statistics"
+    "6": "Get routing activity statistics",
+    "7": "Relay a payment through this node"
   },
   "types": {
     "activity": "6",
@@ -37,6 +48,7 @@
     "network": "5",
     "ping": "2",
     "profile": "3",
+    "relay": "7",
     "schema": "0",
     "services": "1"
   }

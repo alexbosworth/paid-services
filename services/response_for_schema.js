@@ -5,11 +5,13 @@ const {encodeBigSize} = require('bolt01');
 const {encodeTlvStream} = require('bolt01');
 const {returnResult} = require('asyncjs-util');
 
+const {dataTypes} = require('./schema');
 const registeredServices = require('./registered_services');
 const {types} = require('./schema');
 
 const asBigSize = number => encodeBigSize({number}).encoded;
 const encodeNumber = number => encodeBigSize({number}).encoded;
+const fieldDataType = '2';
 const fieldDescriptionType = '0';
 const fieldExpectByteLimit = '1';
 const findId = records => records.find(n => n.type === '0');
@@ -144,8 +146,14 @@ module.exports = ({env, arguments}, cbk) => {
             value: !field.limit ? null : asBigSize(field.limit.toString()),
           }
 
+          // The data type for the field
+          const data = {
+            type: fieldDataType,
+            value: !!field.data ? asBigSize(dataTypes[field.data]) : undefined,
+          };
+
           // Fields are described in a TLV stream
-          const records = [description, limit].filter(n => !!n.value);
+          const records = [data, description, limit].filter(n => !!n.value);
 
           return {type: field.type, value: encodeTlvStream({records}).encoded};
         });

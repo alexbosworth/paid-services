@@ -2,7 +2,7 @@ const {encodeTlvStream} = require('bolt01');
 const {makeInvoice} = require('mock-lnd');
 const {makeInvoiceSubscription} = require('mock-lnd');
 const {makeLnd} = require('mock-lnd');
-const {test} = require('tap');
+const {test} = require('@alexbosworth/tap');
 
 const method = require('./../../client/wait_for_response');
 

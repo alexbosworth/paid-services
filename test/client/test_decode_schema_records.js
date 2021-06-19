@@ -1,4 +1,4 @@
-const {test} = require('tap');
+const {test} = require('@alexbosworth/tap');
 
 const method = require('./../../client/decode_schema_records');
 
@@ -54,11 +54,13 @@ const tests = [
       description: 'Deliver a message to node inbox',
       fields: [
         {
+          data: undefined,
           description: 'Message to deliver to inbox',
           limit: 280,
           type: '0',
         },
         {
+          data: undefined,
           description: 'Reply email address or node public key',
           limit: 144,
           type: '1',

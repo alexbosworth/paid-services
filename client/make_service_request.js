@@ -2,7 +2,8 @@ const {randomBytes} = require('crypto');
 
 const asyncAuto = require('async/auto');
 const {createInvoice} = require('ln-service');
-const {payViaPaymentDetails} = require('ln-service');
+const {payViaRoutes} = require('ln-service');
+const {probeForRoute} = require('ln-service');
 const {returnResult} = require('asyncjs-util');
 
 const {invoiceNetwork} = require('./../config');
@@ -16,7 +17,7 @@ const defaultRequestMtokens = '10000';
 const findResponse = messages => messages.find(n => n.type === '805805');
 const makeSecret = () => randomBytes(32).toString('hex');
 const maxPathfindingTimeMs = 1000 * 60 * 5;
-const waitForResponseMs = 1000 * 60 * 3;
+const waitForResponseMs = 1000 * 60 * 10;
 
 /** Make a service request
 
@@ -94,17 +95,39 @@ module.exports = ({arguments, id, lnd, network, node, secret}, cbk) => {
         });
       }],
 
-      // Make the push payment
-      push: ['requestMessages', ({requestMessages}, cbk) => {
-        return payViaPaymentDetails({
+      // Find a route to make a payment
+      findRoute: ['requestMessages', ({requestMessages}, cbk) => {
+        return probeForRoute({
           lnd,
           cltv_delta: defaultCltvDelta,
           destination: node,
-          id: requestMessages.id,
           max_fee_mtokens: defaultMaxFeeMtokens,
           messages: requestMessages.messages,
           mtokens: defaultRequestMtokens,
-          pathfinding_timeout: maxPathfindingTimeMs,
+          probe_timeout_ms: maxPathfindingTimeMs,
+        },
+        cbk);
+      }],
+
+      // Make the push payment
+      push: [
+        'findRoute',
+        'requestMessages',
+        ({findRoute, requestMessages}, cbk) =>
+      {
+        // Exit early when not using find route
+        if (!findRoute) {
+          return cbk();
+        }
+
+        if (!findRoute.route) {
+          return cbk([503, 'FailedToFindRouteToDestination']);
+        }
+
+        return payViaRoutes({
+          lnd,
+          id: requestMessages.id,
+          routes: [findRoute.route],
         },
         cbk);
       }],

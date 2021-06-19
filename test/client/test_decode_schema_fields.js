@@ -1,6 +1,6 @@
 const {encodeBigSize} = require('bolt01');
 const {encodeTlvStream} = require('bolt01');
-const {test} = require('tap');
+const {test} = require('@alexbosworth/tap');
 
 const method = require('./../../client/decode_schema_fields');
 
@@ -49,7 +49,12 @@ const tests = [
     },
     description: 'Fields are returned for a description and a limit',
     expected: {
-      fields: [{description: 'description', limit: undefined, type: '0'}],
+      fields: [{
+        data: undefined,
+        description: 'description',
+        limit: 9007199254740991,
+        type: '0',
+      }],
     },
   },
   {
@@ -60,11 +65,13 @@ const tests = [
     expected: {
       fields: [
         {
+          data: undefined,
           description: 'Message to deliver to inbox',
           limit: 280,
           type: '0',
         },
         {
+          data: undefined,
           description: 'Reply email address or node public key',
           limit: 144,
           type: '1',

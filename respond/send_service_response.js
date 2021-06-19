@@ -1,6 +1,7 @@
 const asyncAuto = require('async/auto');
 const {parsePaymentRequest} = require('invoices');
-const {payViaPaymentDetails} = require('ln-service');
+const {payViaRoutes} = require('ln-service');
+const {probeForRoute} = require('ln-service');
 const {returnResult} = require('asyncjs-util');
 
 const messagesForResponse = require('./messages_for_response');
@@ -88,20 +89,31 @@ module.exports = (args, cbk) => {
           text: args.text,
         });
 
-        return payViaPaymentDetails({
+        return probeForRoute({
           messages,
           cltv_delta: details.cltv_delta,
           destination: details.destination,
           features: details.features,
-          id: details.id,
           lnd: args.lnd,
           max_fee_mtokens: maxFeeMtok(mtokens.toString(), args.mtokens),
           mtokens: mtokens.toString(),
-          pathfinding_timeout: pathfindingTimeoutMs,
           payment: details.payment,
+          probe_timeout_ms: pathfindingTimeoutMs,
           routes: details.routes,
+          total_mtokens: !!details.payment ? mtokens.toString() : undefined,
         },
         cbk);
+      }],
+
+      // Send payment
+      send: ['payment', ({payment}, cbk) => {
+        if (!payment.route) {
+          return cbk([503, 'FailedToFindRouteToSendServiceResponse']);
+        }
+
+        const {id} = parsePaymentRequest({request: args.request});
+
+        return payViaRoutes({id, lnd: args.lnd, routes: [payment.route]}, cbk);
       }],
     },
     returnResult({reject, resolve}, cbk));

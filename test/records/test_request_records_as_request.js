@@ -1,5 +1,5 @@
 const {encodeTlvStream} = require('bolt01');
-const {test} = require('tap');
+const {test} = require('@alexbosworth/tap');
 
 const method = require('./../../records/request_records_as_request');
 

@@ -1,7 +1,11 @@
 const {decodeBigSize} = require('bolt01');
 const {decodeTlvStream} = require('bolt01');
 
+const decodeDataType = require('./decode_data_type');
+
 const decodeNumber = n => decodeBigSize({encoded: n.value}).decoded;
+const defaultLimit = Number.MAX_SAFE_INTEGER;
+const findData = records => records.find(n => n.type === '2');
 const findDescription = records => records.find(n => n.type === '0');
 const findByteLimit = records => records.find(n => n.type === '1');
 const hexAsUtf8 = hex => Buffer.from(hex, 'hex').toString('utf8');
@@ -15,6 +19,7 @@ const hexAsUtf8 = hex => Buffer.from(hex, 'hex').toString('utf8');
   <Type>: {
     0: <Description UTF8 String>
     1: <BigSize Byte Limit Number>
+    [2]: <Data Type Number>
   }
 
   {
@@ -27,6 +32,7 @@ const hexAsUtf8 = hex => Buffer.from(hex, 'hex').toString('utf8');
   @returns
   {
     fields: [{
+      [data]: <Expected Data Type String>
       description: <Field Description String>
       limit: <Byte Limit Number>
       type: <Type Number String>
@@ -61,8 +67,9 @@ module.exports = ({encoded}) => {
 
     return {
       type,
+      data: decodeDataType({encoded: (findData(meta) || {}).value}).data,
       description: hexAsUtf8(descriptionRecord.value),
-      limit: !!limitRecord ? Number(decodeNumber(limitRecord)) : undefined,
+      limit: !!limitRecord ? Number(decodeNumber(limitRecord)) : defaultLimit,
     };
   });
 

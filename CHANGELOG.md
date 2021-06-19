@@ -1,5 +1,13 @@
 # Versions
 
+## Version 2.0.0
+
+- Add service `relay`
+
+### Breaking Changes
+
+- Add client data type to specify a payment request type field
+
 ## Version 1.1.0
 
 - Add service: `activity`

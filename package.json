@@ -11,13 +11,13 @@
     "asyncjs-util": "1.2.6",
     "bolt01": "1.2.2",
     "invoices": "1.2.1",
-    "ln-service": "51.8.2"
+    "ln-service": "51.8.4"
   },
   "description": "Lightning Paid Services library",
   "devDependencies": {
+    "@alexbosworth/tap": "15.0.9",
     "mock-lnd": "1.1.0",
-    "secp256k1": "4.0.2",
-    "tap": "15.0.9"
+    "secp256k1": "4.0.2"
   },
   "engines": {
     "node": ">=12"
@@ -36,5 +36,5 @@
   "scripts": {
     "test": "tap --branches=1 --functions=1 --lines=1 --statements=1 -t 60 test/actions/*.js test/client/*.js test/config/*.js test/records/*.js test/respond/*.js test/server/*.js test/server/*.js test/services/*.js"
   },
-  "version": "1.1.0"
+  "version": "2.0.0"
 }

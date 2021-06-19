@@ -2,6 +2,7 @@ const {types} = require('./schema');
 
 const {isActivityEnabled} = require('./../config');
 const {isEmailConfigured} = require('./../config');
+const {isRelayConfigured} = require('./../config');
 const {isSmsConfigured} = require('./../config');
 
 const byteLength = str => Buffer.byteLength(str, 'utf8');
@@ -46,6 +47,10 @@ module.exports = ({env, id}) => {
     }
 
     return {is_enabled: true};
+
+  // The relay service requires a fee rate
+  case types.relay:
+    return {is_enabled: isRelayConfigured({env})};
 
   default:
     return {is_enabled: true};

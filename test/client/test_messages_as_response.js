@@ -1,5 +1,5 @@
 const {encodeTlvStream} = require('bolt01');
-const {test} = require('tap');
+const {test} = require('@alexbosworth/tap');
 
 const method = require('./../../client/messages_as_response');
 

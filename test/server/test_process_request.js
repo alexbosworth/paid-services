@@ -2,7 +2,7 @@ const {encodeTlvStream} = require('bolt01');
 const {makeInvoice} = require('mock-lnd');
 const {makeLnd} = require('mock-lnd');
 const {makePaymentRequest} = require('mock-lnd');
-const {test} = require('tap');
+const {test} = require('@alexbosworth/tap');
 
 const messagesForRequest = require('./../../client/messages_for_request');
 const method = require('./../../server/process_request');
@@ -15,6 +15,82 @@ const {request} = makePaymentRequest({});
 const {messages} = messagesForRequest({reply: request, service: '2'});
 
 const makeArgs = overrides => {
+  let requests = 0;
+
+  const lnd = makeLnd({});
+
+  lnd.default.getInfo = ({}, cbk) => {
+    return cbk(null, {
+      alias: '',
+      best_header_timestamp: 1,
+      block_hash: Buffer.alloc(32).toString('hex'),
+      block_height: 1,
+      chains: [{chain: 'bitcoin', network: 'mainnet'}],
+      color: '#000000',
+      features: {'1': {is_known: true, is_required: false}},
+      identity_pubkey: '020000000000000000000000000000000000000000000000000000000000000000',
+      num_active_channels: 0,
+      num_peers: 0,
+      num_pending_channels: 0,
+      synced_to_chain: false,
+      uris: [],
+      version: '',
+    });
+  };
+
+  lnd.default.queryRoutes = ({}, cbk) => {
+    return cbk(null, {
+      routes: [{
+        hops: [{
+          amt_to_forward_msat: '1',
+          chan_capacity: '1',
+          chan_id: '1',
+          custom_records: {},
+          expiry: 1,
+          fee_msat: '1',
+          pub_key: Buffer.alloc(33, 3).toString('hex'),
+        }],
+        total_amt: 1,
+        total_amt_msat: '1',
+        total_fees: '1',
+        total_fees_msat: '1',
+        total_time_lock: 1,
+      }],
+      success_prob: 1,
+    });
+  };
+
+  lnd.chain = {
+    registerBlockEpochNtfn: ({}) => {
+      const emitter = new EventEmitter();
+
+      emitter.cancel = () => {};
+
+      process.nextTick(() => emitter.emit('error', 'err'));
+
+      return emitter;
+    },
+  };
+
+  lnd.router = {
+    sendToRoute: (args, cbk) => {
+      requests++;
+
+      if (requests === 2) {
+        return cbk(null, {preimage: Buffer.alloc(32)});
+      }
+
+      return cbk(null, {
+        failure: {
+          chan_id: '1',
+          code: 'UNKNOWN_FAILURE',
+          failure_source_index: 1,
+        },
+        preimage: Buffer.alloc(Number()),
+      });
+    },
+  };
+
   const args = {
     env: {},
     fetch: () => {},
@@ -29,7 +105,7 @@ const makeArgs = overrides => {
       },
     }),
     network: 'btc',
-    payer: makeLnd({}),
+    payer: lnd,
   };
 
   Object.keys(overrides).forEach(k => args[k] = overrides[k]);

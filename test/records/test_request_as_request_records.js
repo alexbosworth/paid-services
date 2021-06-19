@@ -1,6 +1,6 @@
-const {test} = require('tap');
+const {test} = require('@alexbosworth/tap');
 
-const method = require('./../../respond/request_as_request_records');
+const method = require('./../../records/request_as_request_records');
 
 const tests = [
   {

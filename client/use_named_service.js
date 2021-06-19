@@ -19,8 +19,13 @@ const schemaServiceId = '0';
 
   @returns via cbk or Promise
   {
-    [nodes]: [<Node Public Key Hex String>]
+    [links]: [<URL String>]
     [paywall]: <BOLT 11 Payment Request String>
+    [nodes]: [<Node Public Key Hex String>]
+    [records]: [{
+      type: <Type Number String>
+      value: <Value Hex String>
+    }]
     [text]: <Response Message String>
   }
 */

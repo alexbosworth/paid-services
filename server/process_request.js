@@ -86,6 +86,7 @@ module.exports = ({env, fetch, id, lnd, network, payer}, cbk) => {
           fetch,
           id,
           lnd,
+          network,
           arguments: paidRequest.service.arguments,
           type: paidRequest.service.type,
         },

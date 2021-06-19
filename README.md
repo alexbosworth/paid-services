@@ -73,3 +73,11 @@ To enable this service, set the profile of your node:
 PAID_SERVICES_PROFILE_FOR_NODE="detail text about this node"
 PAID_SERVICES_PROFILE_URLS="URL\nOTHER_URL" (separate multiple with newlines)
 ```
+
+### `relay`
+
+Return a relay payment request
+
+```
+PAID_SERVICES_RELAY="1"
+```
