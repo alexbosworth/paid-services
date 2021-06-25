@@ -16,7 +16,7 @@
   "description": "Lightning Paid Services library",
   "devDependencies": {
     "@alexbosworth/tap": "15.0.9",
-    "mock-lnd": "1.1.0",
+    "mock-lnd": "1.2.0",
     "secp256k1": "4.0.2"
   },
   "engines": {
