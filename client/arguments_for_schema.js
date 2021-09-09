@@ -25,10 +25,12 @@ const referenceType = '0';
   }
 */
 module.exports = ({id, named}) => {
+  // Either a service id or name is required
   if (!id && !named) {
     throw new Error('ExpectedServiceReferenceToGenerateArgsForSchemaReq');
   }
 
+  // Check that the id of the service can be encoded as a big size
   if (!!id) {
     try {
       encodeBigSize({number: id});

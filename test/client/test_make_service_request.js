@@ -65,20 +65,6 @@ const tests = [
     description: 'Waiting for a response requires a service id',
     error: [400, 'ExpectedServiceIdNumberToMakeServiceRequest'],
   },
-  {
-    args: makeArgs({}),
-    description: 'The response is returned',
-    expected: {
-      links: undefined,
-      nodes: undefined,
-      paywall: undefined,
-      records: [
-        {type: '1', value: '04'},
-        {type: '2', value: '6465736372697074696f6e'},
-      ],
-      text: undefined,
-    },
-  },
 ];
 
 tests.forEach(({args, description, error, expected}) => {

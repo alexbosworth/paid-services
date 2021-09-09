@@ -1,4 +1,4 @@
-const isPublicKey = n => !!n && /^[0-9A-F]{66}$/i.test(n);
+const isPublicKey = n => !!n && /^0[2-3][0-9A-F]{64}$/i.test(n);
 const split = encoded => encoded.match(/.{1,66}/g);
 
 /** Decode a nodes record

@@ -28,6 +28,7 @@ module.exports = ({encoded}) => {
     throw new Error('ExpectedEncodedErrorToDecodeErrorRecords');
   }
 
+  // The error record is expected to be a TLV stream
   try {
     decodeTlvStream({encoded});
   } catch (err) {

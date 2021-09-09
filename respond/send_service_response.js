@@ -1,6 +1,6 @@
 const asyncAuto = require('async/auto');
 const {parsePaymentRequest} = require('invoices');
-const {payViaRoutes} = require('ln-service');
+const {payViaPaymentDetails} = require('ln-service');
 const {probeForRoute} = require('ln-service');
 const {returnResult} = require('asyncjs-util');
 
@@ -8,6 +8,7 @@ const messagesForResponse = require('./messages_for_response');
 
 const defaultSendMtokens = '1000';
 const maxFeeMtok = (requested, received) => (received - requested).toString();
+const mtokToSend = mtokens => mtokens !== '0' ? mtokens : defaultSendMtokens;
 const pathfindingTimeoutMs = 1000 * 60 * 10;
 
 /** Send a paid service response
@@ -73,7 +74,7 @@ module.exports = (args, cbk) => {
           return cbk([400, 'ExpectedUnexpiredInvoiceToSendServiceResponse']);
         }
 
-        const mtokens = BigInt(details.mtokens || defaultSendMtokens);
+        const mtokens = BigInt(mtokToSend(details.mtokens));
 
         if (mtokens > BigInt(args.mtokens)) {
           return cbk([400, 'ExpectedPaymentTokensNotGreaterThanReceived']);
@@ -89,31 +90,20 @@ module.exports = (args, cbk) => {
           text: args.text,
         });
 
-        return probeForRoute({
+        return payViaPaymentDetails({
           messages,
           cltv_delta: details.cltv_delta,
           destination: details.destination,
           features: details.features,
+          id: details.id,
           lnd: args.lnd,
           max_fee_mtokens: maxFeeMtok(mtokens.toString(), args.mtokens),
           mtokens: mtokens.toString(),
+          pathfinding_timeout: pathfindingTimeoutMs,
           payment: details.payment,
-          probe_timeout_ms: pathfindingTimeoutMs,
           routes: details.routes,
-          total_mtokens: !!details.payment ? mtokens.toString() : undefined,
         },
         cbk);
-      }],
-
-      // Send payment
-      send: ['payment', ({payment}, cbk) => {
-        if (!payment.route) {
-          return cbk([503, 'FailedToFindRouteToSendServiceResponse']);
-        }
-
-        const {id} = parsePaymentRequest({request: args.request});
-
-        return payViaRoutes({id, lnd: args.lnd, routes: [payment.route]}, cbk);
       }],
     },
     returnResult({reject, resolve}, cbk));

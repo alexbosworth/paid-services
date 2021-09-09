@@ -1,5 +1,9 @@
 # Versions
 
+## Version 2.0.2
+
+- `makeServiceRequest`: Switch back to regular payment call
+
 ## Version 2.0.1
 
 - Add service `relay`

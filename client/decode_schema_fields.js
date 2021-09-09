@@ -44,9 +44,8 @@ module.exports = ({encoded}) => {
     throw new Error('ExpectedTlvStreamEncodedFieldMetadataToDecodeFields');
   }
 
-  const {records} = decodeTlvStream({encoded});
-
-  const fields = records.map(({type, value}) => {
+  const fields = decodeTlvStream({encoded}).records.map(({type, value}) => {
+    // The TLV value is TLV encoded data
     const meta = decodeTlvStream({encoded: value}).records;
 
     const descriptionRecord = findDescription(meta);

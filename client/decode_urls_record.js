@@ -24,6 +24,7 @@ module.exports = ({encoded}) => {
     throw new Error('ExpectedEncodedUrlsHexString');
   }
 
+  // Check that the encoded data can be decoded as TLV
   try {
     decodeTlvStream({encoded});
   } catch (err) {
