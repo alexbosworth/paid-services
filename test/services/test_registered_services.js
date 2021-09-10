@@ -82,6 +82,17 @@ const tests = [
           is_enabled: false,
           name: 'relay',
         },
+        {
+          id: '8',
+          description: 'Connect up as peers',
+          fields: [{
+            description: 'Socket to connect to (host:port)',
+            limit: 144,
+            type: '1',
+          }],
+          is_enabled: false,
+          name: 'connect',
+        },
       ],
     },
   },

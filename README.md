@@ -34,6 +34,17 @@ PAID_SERVICES_ACTIVITY_FEES=1
 PAID_SERVICES_ACTIVITY_VOLUME=1
 ```
 
+### `connect`
+
+Initiate a connection to a node to peer with them
+
+To enable this service, specify activity to share.
+
+```
+# Enable connect service
+PAID_SERVICES_CONNECT=1
+```
+
 ### `inbox`
 
 Deliver a short message via SMS or email.

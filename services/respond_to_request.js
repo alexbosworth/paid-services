@@ -3,6 +3,7 @@ const asyncReflect = require('async/reflect');
 const {returnResult} = require('asyncjs-util');
 
 const responseForActivity = require('./response_for_activity');
+const responseForConnect = require('./response_for_connect');
 const responseForInbox = require('./response_for_inbox');
 const responseForNetwork = require('./response_for_network');
 const responseForPong = require('./response_for_pong');
@@ -21,6 +22,7 @@ const {types} = require('./schema');
     id: <Invoice Id Hex String>
     lnd: <Authenticated LND API Object>
     network: <Network Name String>
+    to: <Responding to Public Key Hex String>
     type: <Request Type Number String>
   }
 
@@ -42,7 +44,7 @@ const {types} = require('./schema');
     }
   }
 */
-module.exports = ({arguments, env, fetch, id, lnd, network, type}, cbk) => {
+module.exports = ({arguments, env, fetch, id, lnd, network, to, type}, cb) => {
   return new Promise((resolve, reject) => {
     return asyncAuto({
       // Check arguments
@@ -67,6 +69,10 @@ module.exports = ({arguments, env, fetch, id, lnd, network, type}, cbk) => {
           return cbk([400, 'ExpectedNetworkNameToRespondToRequest']);
         }
 
+        if (!to) {
+          return cbk([400, 'ExpectedRespondingToPublicKeyToRespondToRequest']);
+        }
+
         if (!type) {
           return cbk([400, 'ExpectedStandardRequestTypeToRespondToRequest']);
         }
@@ -79,6 +85,9 @@ module.exports = ({arguments, env, fetch, id, lnd, network, type}, cbk) => {
         switch (type) {
         case types.activity:
           return responseForActivity({env, lnd}, cbk);
+
+        case types.connect:
+          return responseForConnect({arguments, env, lnd, to}, cbk);
 
         case types.inbox:
           return responseForInbox({arguments, env, fetch, id, lnd}, cbk);
@@ -115,6 +124,6 @@ module.exports = ({arguments, env, fetch, id, lnd, network, type}, cbk) => {
         return cbk(null, {response: respond.value.response});
       }],
     },
-    returnResult({reject, resolve, of: 'result'}, cbk));
+    returnResult({reject, resolve, of: 'result'}, cb));
   });
 };

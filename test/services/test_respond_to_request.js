@@ -9,6 +9,7 @@ const makeArgs = overrides => {
     id: Buffer.alloc(32).toString('hex'),
     lnd: {},
     network: 'btc',
+    to: Buffer.alloc(33).toString('hex'),
     type: '2',
   };
 

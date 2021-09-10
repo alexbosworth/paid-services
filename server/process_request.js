@@ -1,5 +1,6 @@
 const asyncAuto = require('async/auto');
 const {getInvoice} = require('ln-service');
+const {parsePaymentRequest} = require('ln-service');
 const {returnResult} = require('asyncjs-util');
 
 const invoiceAsRequest = require('./invoice_as_request');
@@ -81,12 +82,15 @@ module.exports = ({env, fetch, id, lnd, network, payer}, cbk) => {
           return cbk(null, {});
         }
 
+        const respondTo = parsePaymentRequest({request: paidRequest.request});
+
         return respondToRequest({
           env,
           fetch,
           id,
           lnd,
           network,
+          to: respondTo.destination,
           arguments: paidRequest.service.arguments,
           type: paidRequest.service.type,
         },

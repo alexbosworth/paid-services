@@ -164,6 +164,9 @@ module.exports = ({arguments, env, lnd, network}, cbk) => {
         // A HTLC held locally needs a long CLTV to cover the next hops.
         const cltvDelta = probe.route.timeout - getHeight.current_block_height;
 
+        // Amounts to request as BigInts
+        const amounts = [details.mtokens, fee.mtokens].map(n => BigInt(n));
+
         // The incoming HTLC will get held for the route timeout + a buffer.
         // The peer could still use the preimage until the timeout is swept.
         // To allow time to sweep that timeout path, a CLTV delta is added.
@@ -174,7 +177,7 @@ module.exports = ({arguments, env, lnd, network}, cbk) => {
           description_hash: details.description_hash,
           expires_at: expiresAt(),
           id: details.id,
-          mtokens: sumOf([details.mtokens, fee.mtokens]).toString(),
+          mtokens: sumOf(amounts).toString(),
         },
         cbk);
       }],

@@ -20,6 +20,11 @@
       "description": "Payment request to relay",
       "limit": 500,
       "type": "0"
+    }],
+    "8": [{
+      "description": "Socket to connect to (host:port)",
+      "limit": 144,
+      "type": "1"
     }]
   },
   "ids": {
@@ -30,7 +35,8 @@
     "4": "inbox",
     "5": "network",
     "6": "activity",
-    "7": "relay"
+    "7": "relay",
+    "8": "connect"
   },
   "descriptions": {
     "0": "Get details about a specific service",
@@ -40,10 +46,12 @@
     "4": "Deliver a message to this node's inbox",
     "5": "Get ids of other nodes offering paid services",
     "6": "Get routing activity statistics",
-    "7": "Relay a payment through this node"
+    "7": "Relay a payment through this node",
+    "8": "Connect up as peers"
   },
   "types": {
     "activity": "6",
+    "connect": "8",
     "inbox": "4",
     "network": "5",
     "ping": "2",

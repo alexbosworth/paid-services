@@ -1,6 +1,10 @@
 # Versions
 
-## Version 2.0.2
+## Version 2.1.0
+
+- Add service `connect` to allow requesting a peer connection
+
+## Version 2.0.3
 
 - `makeServiceRequest`: Switch back to regular payment call
 
