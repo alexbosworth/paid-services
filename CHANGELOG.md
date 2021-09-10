@@ -1,5 +1,9 @@
 # Versions
 
+## Version 2.1.1
+
+- Correct `relay` service summation of sending amount and fee
+
 ## Version 2.1.0
 
 - Add service `connect` to allow requesting a peer connection

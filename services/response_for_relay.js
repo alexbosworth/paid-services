@@ -167,6 +167,9 @@ module.exports = ({arguments, env, lnd, network}, cbk) => {
         // Amounts to request as BigInts
         const amounts = [details.mtokens, fee.mtokens].map(n => BigInt(n));
 
+        // Total mtokens to charge
+        const mtokens = amounts.reduce((sum, n) => sum + n, BigInt(Number()));
+
         // The incoming HTLC will get held for the route timeout + a buffer.
         // The peer could still use the preimage until the timeout is swept.
         // To allow time to sweep that timeout path, a CLTV delta is added.
@@ -177,7 +180,7 @@ module.exports = ({arguments, env, lnd, network}, cbk) => {
           description_hash: details.description_hash,
           expires_at: expiresAt(),
           id: details.id,
-          mtokens: sumOf(amounts).toString(),
+          mtokens: mtokens.toString(),
         },
         cbk);
       }],
