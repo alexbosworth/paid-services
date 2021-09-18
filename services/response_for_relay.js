@@ -1,4 +1,5 @@
 const asyncAuto = require('async/auto');
+const asyncRetry = require('async/retry');
 const {cancelHodlInvoice} = require('ln-service');
 const {createHodlInvoice} = require('ln-service');
 const {getFeeRates} = require('ln-service');
@@ -15,9 +16,11 @@ const {sendRelayPayment} = require('./../actions');
 const defaultCltvDelta = 80;
 const defaultProbeTimeoutMs = 1000 * 60 * 5;
 const expiresAt = () => new Date(Date.now() + 1000 * 60 * 30).toISOString();
+const interval = 1000 * 60 * 10;
 const rateDivisor = BigInt(1e6);
 const sumOf = arr => arr.reduce((sum, n) => BigInt(n) + n, BigInt(0));
 const text = 'Relay payment request created';
+const times = 12;
 
 /** Generate a response for a relay request
 
@@ -207,21 +210,24 @@ module.exports = ({arguments, env, lnd, network}, cbk) => {
 
           sub.removeAllListeners();
 
-          return sendRelayPayment({
-            lnd,
-            cltv_delta: details.cltv_delta,
-            destination: details.destination,
-            expires_at: details.expires_at,
-            features: details.features,
-            id: details.id,
-            max_mtokens: probe.route.mtokens,
-            mtokens: details.mtokens,
-            outgoing_channel: channel,
-            payment: details.payment,
-            payments: invoice.payments,
-            routes: details.routes,
+          return asyncRetry({interval, times}, cbk => {
+            return sendRelayPayment({
+              lnd,
+              cltv_delta: details.cltv_delta,
+              destination: details.destination,
+              expires_at: details.expires_at,
+              features: details.features,
+              id: details.id,
+              max_mtokens: probe.route.mtokens,
+              mtokens: details.mtokens,
+              outgoing_channel: channel,
+              payment: details.payment,
+              payments: invoice.payments,
+              routes: details.routes,
+            },
+            cbk);
           },
-          (err, res) => {
+          err => {
             if (!!err) {
               return cancelHodlInvoice({lnd, id: details.id}, err => {
                 return;
@@ -229,7 +235,7 @@ module.exports = ({arguments, env, lnd, network}, cbk) => {
             }
 
             return;
-          });
+          })
         });
 
         return cbk(null, sub);

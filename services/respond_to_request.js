@@ -5,6 +5,7 @@ const {returnResult} = require('asyncjs-util');
 const responseForActivity = require('./response_for_activity');
 const responseForConnect = require('./response_for_connect');
 const responseForInbox = require('./response_for_inbox');
+const responseForInvoice = require('./response_for_invoice');
 const responseForNetwork = require('./response_for_network');
 const responseForPong = require('./response_for_pong');
 const responseForProfile = require('./response_for_profile');
@@ -91,6 +92,9 @@ module.exports = ({arguments, env, fetch, id, lnd, network, to, type}, cb) => {
 
         case types.inbox:
           return responseForInbox({arguments, env, fetch, id, lnd}, cbk);
+
+        case types.invoice:
+          return responseForInvoice({arguments, env, lnd, to}, cbk);
 
         case types.ping:
           return responseForPong({}, cbk);

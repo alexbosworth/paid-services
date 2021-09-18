@@ -40,6 +40,7 @@ const pollIntervalMs = 1000 * 60 * 60;
   @event 'success'
   {
     mtokens: <Received Millitokens String>
+    [node]: <Node Public Key Id Hex String>
     service: <Service Name String>
   }
 */
@@ -108,7 +109,11 @@ module.exports = ({env, fetch, lnd, network, payer}) => {
         return emitter.emit('failure', ({service, error: res.error}));
       }
 
-      return emitter.emit('success', ({service, received: mtokens}));
+      return emitter.emit('success', ({
+        service,
+        node: res.node || undefined,
+        received: mtokens,
+      }));
     });
   });
 

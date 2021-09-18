@@ -38,8 +38,6 @@ PAID_SERVICES_ACTIVITY_VOLUME=1
 
 Initiate a connection to a node to peer with them
 
-To enable this service, specify activity to share.
-
 ```
 # Enable connect service
 PAID_SERVICES_CONNECT=1
@@ -64,6 +62,15 @@ PAID_SERVICES_INBOX_TWILIO_ACCOUNT_SID="Twilio account id"
 PAID_SERVICES_INBOX_TWILIO_AUTH_TOKEN="Twilio account id"
 
 PAID_SERVICES_INBOX_PRICE="optional sats price to charge for inbox message"
+```
+
+### `connect`
+
+Request a signed BOLT 11 encoded payment request
+
+```
+# Enable invoice service
+PAID_SERVICES_INVOICE=1
 ```
 
 ### `network`

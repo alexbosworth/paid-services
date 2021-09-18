@@ -33,6 +33,9 @@ module.exports = ({env, id}) => {
   case types.inbox:
     return {is_enabled: isEmailConfigured({env}) || isSmsConfigured({env})};
 
+  case types.invoice:
+    return {is_enabled: env.PAID_SERVICES_INVOICE === enabled};
+
   // The network service requires a list of other nodes
   case types.network:
     return {is_enabled: !!env.PAID_SERVICES_NETWORK_NODES};

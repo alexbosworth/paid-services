@@ -25,7 +25,19 @@
       "description": "Socket to connect to (host:port)",
       "limit": 144,
       "type": "1"
-    }]
+    }],
+    "9": [
+      {
+        "description": "Amount to invoice",
+        "limit": 20,
+        "type": "1"
+      },
+      {
+        "description": "Description for invoice",
+        "limit": 100,
+        "type": "3"
+      }
+    ]
   },
   "ids": {
     "0": "schema",
@@ -36,7 +48,8 @@
     "5": "network",
     "6": "activity",
     "7": "relay",
-    "8": "connect"
+    "8": "connect",
+    "9": "invoice"
   },
   "descriptions": {
     "0": "Get details about a specific service",
@@ -47,12 +60,14 @@
     "5": "Get ids of other nodes offering paid services",
     "6": "Get routing activity statistics",
     "7": "Relay a payment through this node",
-    "8": "Connect up as peers"
+    "8": "Connect up as peers",
+    "9": "Create an invoice"
   },
   "types": {
     "activity": "6",
     "connect": "8",
     "inbox": "4",
+    "invoice": "9",
     "network": "5",
     "ping": "2",
     "profile": "3",

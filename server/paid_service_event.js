@@ -23,6 +23,7 @@ const {schema} = require('./../services');
       <Error Code Number>
       <Error Code String>
     ]
+    [node]: <Response for Node with Public Key Id Hex String>
     [service]: <Service Name String>
   }
 */
@@ -95,6 +96,7 @@ module.exports = ({env, fetch, id, lnd, network, payer}, cbk) => {
         // Service types are numbers but they have names for easier reference
         return cbk(null, {
           error: processRequest.error,
+          node: getRequest.node,
           service: schema.ids[type],
         });
       }],

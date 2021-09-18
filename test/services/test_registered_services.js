@@ -93,6 +93,24 @@ const tests = [
           is_enabled: false,
           name: 'connect',
         },
+        {
+          id: '9',
+          description: 'Create an invoice',
+          fields: [
+            {
+              description: 'Amount to invoice',
+              limit: 20,
+              type: '1',
+            },
+            {
+              description: 'Description for invoice',
+              limit: 100,
+              type: '3',
+            },
+          ],
+          is_enabled: false,
+          name: 'invoice',
+        }
       ],
     },
   },

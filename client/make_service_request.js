@@ -32,8 +32,8 @@ const waitForResponseMs = 1000 * 60 * 10;
 
   @returns via cbk or Promise
   {
+    [invoice]: <BOLT 11 Payment Request String>
     [links]: [<URL String>]
-    [paywall]: <BOLT 11 Payment Request String>
     [nodes]: [<Node Public Key Hex String>]
     [records]: [{
       type: <Type Number String>
@@ -170,9 +170,9 @@ module.exports = ({arguments, id, lnd, network, node, secret}, cbk) => {
         }
 
         return cbk(null, {
+          invoice: decode.paywall,
           links: decode.links,
           nodes: decode.nodes,
-          paywall: decode.paywall,
           records: decode.records,
           text: decode.text,
         });

@@ -1,5 +1,14 @@
 # Versions
 
+## Version 3.0.0
+
+- `servicePaidRequests`: Add service `invoice` request a payment request
+- `servicePaidRequests`: Adjust `relay` service to execute retries on failure
+
+### Breaking Changes
+
+- `makeServiceRequest`: Change `paywall` to `invoice`
+
 ## Version 2.1.1
 
 - Correct `relay` service summation of sending amount and fee

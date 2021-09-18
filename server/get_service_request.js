@@ -1,9 +1,12 @@
 const asyncAuto = require('async/auto');
 const asyncReflect = require('async/reflect');
 const {getInvoice} = require('ln-service');
+const {parsePaymentRequest} = require('invoices');
 const {returnResult} = require('asyncjs-util');
 
 const invoiceAsRequest = require('./invoice_as_request');
+
+const attempt = (m, n) => { try { return m(n); } catch (e) { return {}; } };
 
 /** Get a paid service request if there is one present
 
@@ -22,6 +25,7 @@ const invoiceAsRequest = require('./invoice_as_request');
       <Error Number>
       <Error Type String>
     ]
+    [node]: <Response For Node Id Public Key Hex String>
     [paywall]: <Required Payment to BOLT 11 Paywall Request String>
     [request]: <BOLT 11 Encoded Respond Payment Request String>
     [service]: {
@@ -113,11 +117,16 @@ module.exports = ({env, id, lnd, network}, cbk) => {
             return cbk(null, {});
           }
 
+          const {destination} = attempt(parsePaymentRequest, {
+            request: paid.request,
+          });
+
           // A paywall invoice has the parent push as its description hash
           const isPaywall = !!getParent && !!getParent.value;
 
           return cbk(null, {
             error: paid.error,
+            node: destination,
             paywall: !!isPaywall ? getReference.request : undefined,
             request: paid.request,
             service: paid.service,

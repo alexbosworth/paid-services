@@ -85,7 +85,11 @@ const tests = [
   {
     args: makeArgs({}),
     description: 'A paid service event happens',
-    expected: {error: undefined, service: 'ping'},
+    expected: {
+      error: undefined,
+      node: '03e7156ae33b0a208d0744199163177e909e80176e55d97a2f221ede0f934dd9ad',
+      service: 'ping',
+    },
   },
   {
     args: makeArgs({
@@ -145,7 +149,11 @@ const tests = [
       }),
     }),
     description: 'A paywall request is processed',
-    expected: {error: undefined, service: 'inbox'},
+    expected: {
+      error: undefined,
+      node: '03e7156ae33b0a208d0744199163177e909e80176e55d97a2f221ede0f934dd9ad',
+      service: 'inbox',
+    },
   },
   {
     args: makeArgs({
@@ -168,6 +176,7 @@ const tests = [
     description: 'A request is processed',
     expected: {
       error: [404, 'ServiceCurrentlyUnsupported'],
+      node: '03e7156ae33b0a208d0744199163177e909e80176e55d97a2f221ede0f934dd9ad',
       service: 'profile',
     },
   },
