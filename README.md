@@ -64,7 +64,7 @@ PAID_SERVICES_INBOX_TWILIO_AUTH_TOKEN="Twilio account id"
 PAID_SERVICES_INBOX_PRICE="optional sats price to charge for inbox message"
 ```
 
-### `connect`
+### `invoice`
 
 Request a signed BOLT 11 encoded payment request
 
