@@ -1,5 +1,9 @@
 # Versions
 
+## Version 3.1.0
+
+- `manageTrades`: Add method to create and interact with secret trades
+
 ## Version 3.0.0
 
 - `servicePaidRequests`: Add service `invoice` request a payment request
