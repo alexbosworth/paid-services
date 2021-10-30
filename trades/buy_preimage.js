@@ -4,6 +4,8 @@ const {payViaRoutes} = require('ln-service');
 const {returnResult} = require('asyncjs-util');
 const {subscribeToProbeForRoute} = require('ln-service');
 
+const cltvDeltaBuffer = 5;
+
 /** Buy the preimage for a trade
 
   {
@@ -68,7 +70,7 @@ module.exports = ({ask, lnd, logger, request}, cbk) => {
       getRoute: ['parseRequest', ({parseRequest}, cbk) => {
         const sub = subscribeToProbeForRoute({
           lnd,
-          cltv_delta: parseRequest.cltv_delta,
+          cltv_delta: parseRequest.cltv_delta + cltvDeltaBuffer,
           destination: parseRequest.destination,
           features: parseRequest.features,
           mtokens: parseRequest.mtokens,
