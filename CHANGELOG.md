@@ -1,6 +1,6 @@
 # Versions
 
-## Version 3.1.1
+## Version 3.1.2
 
 - `manageTrades`: Add method to create and interact with secret trades
 

@@ -10,8 +10,8 @@
     "async": "3.2.2",
     "asyncjs-util": "1.2.7",
     "bolt01": "1.2.3",
-    "invoices": "2.0.1",
-    "ln-service": "52.14.2"
+    "invoices": "2.0.2",
+    "ln-service": "52.16.0"
   },
   "description": "Lightning Paid Services library",
   "devDependencies": {
@@ -36,5 +36,5 @@
   "scripts": {
     "test": "tap --branches=1 --functions=1 --lines=1 --statements=1 -t 60 test/actions/*.js test/client/*.js test/config/*.js test/records/*.js test/respond/*.js test/server/*.js test/server/*.js test/services/*.js"
   },
-  "version": "3.1.1"
+  "version": "3.1.2"
 }
