@@ -1,5 +1,10 @@
 # Versions
 
+## Version 3.2.0
+
+- `makePeerRequest`: Add method to make peer messaging requests
+- `servicePeerRequests`: Add method to handle peer messaging requests
+
 ## Version 3.1.2
 
 - `manageTrades`: Add method to create and interact with secret trades
