@@ -1,6 +1,10 @@
 const asyncAuto = require('async/auto');
+const {addPeer} = require('ln-service');
 const {createInvoice} = require('ln-service');
 const {getIdentity} = require('ln-service');
+const {getNode} = require('ln-service');
+const {getPeers} = require('ln-service');
+const {sendMessageToPeer} = require('ln-service');
 const {returnResult} = require('asyncjs-util');
 
 const encodeTrade = require('./encode_trade');
@@ -26,7 +30,7 @@ const utf8AsHex = utf8 => Buffer.from(utf8).toString('hex');
     trade: <Hex Encoded Trade String>
   }
 */
-module.exports = ({ask, lnd}, cbk) => {
+module.exports = ({ask, lnd, logger}, cbk) => {
   return new Promise((resolve, reject) => {
     return asyncAuto({
       // Check arguments
@@ -182,6 +186,67 @@ module.exports = ({ask, lnd}, cbk) => {
           return cbk([500, err.message]);
         }
       }],
+
+      //Ask to send trade via p2p
+      select: ['encodeTradeToWireFormat', ({}, cbk) => {
+        return ask({
+          default: true,
+          message: 'Send Trade?',
+          name: 'send',
+          type: 'confirm'
+        },
+        cbk);
+      }],
+
+      //Send trade via p2p messaging if possible
+      sendTrade: [
+        'select',
+        async ({encodeTradeToWireFormat, askForNodeId, select}, cbk) =>
+        {
+          //Exit early if not sending trade
+          if(!select.send) {
+            return;
+          }
+
+          try {
+            //Get socket of pubkey if we have to connect
+            const nodeDetails = await getNode({lnd, public_key: askForNodeId.id});
+
+            //Get currently connected peers
+            const myPeers = await getPeers({lnd});
+            
+            //Check if peer is already connected
+            if(myPeers.peers.map(n => n.public_key).includes(askForNodeId.id)) {
+              const x = await sendMessageToPeer({
+                lnd,
+                message: utf8AsHex(encodeTradeToWireFormat.trade),
+                public_key: askForNodeId.id,
+              });
+              logger.info({messageSentToPeer: true});
+            } 
+            //Add peer and send message
+            else {
+                asyncDetectSeries(nodeDetails.sockets, ({socket}, cbk) => {
+                addPeer({socket, lnd, public_key: askForNodeId.id}, err => {
+                  return cbk(null, !err);
+                });
+              });
+
+              await sendMessageToPeer({
+                lnd,
+                message: utf8AsHex(encodeTradeToWireFormat.trade),
+                public_key: askForNodeId.id,
+              });
+              logger.info({messageSentToPeer: true})
+            }
+
+          } catch(err) {
+            logger.error({err});
+          }
+
+
+        }
+      ],
     },
     returnResult({reject, resolve, of: 'encodeTradeToWireFormat'}, cbk));
   });
