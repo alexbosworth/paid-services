@@ -209,9 +209,6 @@ module.exports = ({ask, lnd, logger}, cbk) => {
           }
 
           try {
-            //Get socket of pubkey if we have to connect
-            const nodeDetails = await getNode({lnd, public_key: askForNodeId.id});
-
             //Get currently connected peers
             const myPeers = await getPeers({lnd});
             
@@ -226,9 +223,14 @@ module.exports = ({ask, lnd, logger}, cbk) => {
             } 
             //Add peer and send message
             else {
+                //Get socket of pubkey to connect
+                const nodeDetails = await getNode({lnd, public_key: askForNodeId.id});
+
                 asyncDetectSeries(nodeDetails.sockets, ({socket}, cbk) => {
                 addPeer({socket, lnd, public_key: askForNodeId.id}, err => {
-                  return cbk(null, !err);
+                  if(!err) {
+                    logger.info({peerAdded: true})
+                  }
                 });
               });
 
