@@ -1,4 +1,6 @@
 const defaultNetwork = 'bitcoin';
+const regtestNetwork = 'regtest';
+const regtestNetworkType = '02';
 const testnetNetwork = 'testnet';
 const testnetNetworkType = '01';
 
@@ -16,6 +18,10 @@ const testnetNetworkType = '01';
 module.exports = ({value}) => {
   if (!value) {
     return defaultNetwork;
+  }
+
+  if (value === regtestNetworkType) {
+    return regtestNetwork;
   }
 
   if (value === testnetNetworkType) {

@@ -1,5 +1,9 @@
 # Versions
 
+## Version 3.3.0
+
+- `changeChannelCapacity`: Add method to change a channel's capacity
+
 ## Version 3.2.0
 
 - `makePeerRequest`: Add method to make peer messaging requests

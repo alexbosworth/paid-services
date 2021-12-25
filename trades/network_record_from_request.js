@@ -1,4 +1,5 @@
 const defaultNetwork = 'lnbc';
+const regtestNetwork = 'lnbcrt';
 const testnetNetwork = 'lntb';
 const testnetNetworkType = '01';
 
@@ -19,6 +20,10 @@ module.exports = ({request}) => {
   }
 
   if (request.startsWith(defaultNetwork)) {
+    return {};
+  }
+
+  if (request.startsWith(regtestNetwork)) {
     return {};
   }
 
