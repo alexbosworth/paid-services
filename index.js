@@ -1,3 +1,4 @@
+const {changeChannelCapacity} = require('./capacity');
 const {confirmServiceUse} = require('./client');
 const {getServiceSchema} = require('./client');
 const {getServicesList} = require('./client');
@@ -11,6 +12,7 @@ const {servicePeerRequests} = require('./p2p');
 const serviceIds = schema.types;
 
 module.exports = {
+  changeChannelCapacity,
   confirmServiceUse,
   getServiceSchema,
   getServicesList,

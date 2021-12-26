@@ -6,7 +6,6 @@ const encodeResponseCode = require('./encode_response_code');
 
 const headers = null;
 const params = null;
-const present = n => !!n;
 const version = null;
 
 /** Encode a response to a peer

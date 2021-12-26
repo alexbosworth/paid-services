@@ -24,8 +24,8 @@ const makeId = () => randomBytes(32).toString('hex');
     type: <Request Type Number String>
   }
 
-   @throws error via cbk or Promise
-  [408, PeerRequestTimeout]
+  @throws error via cbk or Promise
+  [0, PeerRequestTimeout]
 
   @returns via cbk or Promise
   {
@@ -80,7 +80,7 @@ module.exports = ({lnd, records, timeout, to, type}, cbk) => {
           return !timeout ? null : setTimeout(() => {
             sub.removeAllListeners();
 
-            return cbk([408, 'PeerRequestTimeout']);
+            return cbk([0, 'PeerRequestTimeout']);
           },
           timeout);
         })();

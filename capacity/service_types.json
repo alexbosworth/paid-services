@@ -1,0 +1,6 @@
+{
+  "serviceTypeAcceptCapacityChange": "8050002",
+  "serviceTypeChangeCapacity": "8050001",
+  "serviceTypeSignCapacityChange": "805004",
+  "serviceTypeWaitOnConfirmation": "8050003"
+}
