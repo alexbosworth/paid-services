@@ -91,6 +91,7 @@ module.exports = ({ask, delay, lnd, logger}, cbk) => {
             const delta = request.decrease || request.increase;
             const id = request.channel;
             const peer = peerName(res);
+            const publicPrivate = !!request.public_private ? request.public_private : undefined;
             const size = tokensAsBigUnit(request.capacity);
 
             const action = `${change} capacity ${size} channel ${id}`;
@@ -99,7 +100,7 @@ module.exports = ({ask, delay, lnd, logger}, cbk) => {
             return ask({
               type: 'confirm',
               name: 'accept',
-              message: `${action} with ${peer}${by}?`,
+              message: !!publicPrivate ? `${action} with ${peer}${by} and change channel type to ${publicPrivate}?` : `${action} with ${peer}${by}?`,
             },
             ({accept}) => {
               if (!accept) {

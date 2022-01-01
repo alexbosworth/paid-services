@@ -69,6 +69,7 @@ module.exports = ({channels, requests}) => {
         from: channel.partner_public_key,
         id: request.id,
         increase: request.increase,
+        public_private: request.public_private,
       };
     });
 
