@@ -122,6 +122,7 @@ module.exports = (args, cbk) => {
           id: args.channel,
           is_private: args.is_private,
           increase: args.increase,
+          is_private: args.is_private,
           lnd: args.lnd,
           open_transaction: args.open_transaction,
           transaction_id: args.transaction_id,
