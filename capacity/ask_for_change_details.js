@@ -395,10 +395,34 @@ module.exports = ({ask, id, lnd}, cbk) => {
         ({amount}) => cbk(null, Number(amount)));
       }],
 
+      askForPublicPrivate: [
+        'askForDecrease',
+        'askForIncrease',
+        'channel',
+        ({channel}, cbk) => {
+          const askMessage = !!channel.is_private ? `Change channel type from private to public? (is_private?: true)` : 'Change channel type from public to private? (is_public?: true)';
+          return ask({
+            default: false,
+            type: 'confirm',
+            name: 'accept',
+            message: askMessage,
+          },
+          ({accept}) => {
+            if (!accept) {
+              return cbk(null, false);
+            }
+
+            return cbk(null, true);
+          });     
+
+        }
+      ],
+
       // Estimate the chain fee
       estimateChainFee: [
         'askForDecrease',
         'askForIncrease',
+        'askForPublicPrivate',
         'channel',
         'getFeeRate',
         ({askForDecrease, askForIncrease, channel, getFeeRate}, cbk) =>
@@ -437,6 +461,7 @@ module.exports = ({ask, id, lnd}, cbk) => {
       details: [
         'askForDecrease',
         'askForIncrease',
+        'askForPublicPrivate',
         'channel',
         'confirmFeeEstimate',
         'estimateChainFee',
@@ -444,6 +469,7 @@ module.exports = ({ask, id, lnd}, cbk) => {
         ({
           askForDecrease,
           askForIncrease,
+          askForPublicPrivate,
           channel,
           confirmFeeEstimate,
           estimateChainFee,
@@ -472,12 +498,29 @@ module.exports = ({ask, id, lnd}, cbk) => {
           return cbk([400, 'InsufficientFundsToChangeChannelCapacity']);
         }
 
+        //If chaning channel type, set new type to public if currently private and vice versa.
+        let newChannelType;
+        let isPrivate;
+        if(askForPublicPrivate) {
+          newChannelType = !!channel.is_private ? 'public' : 'private';
+          if(newChannelType === 'public') {
+            isPrivate = false;
+          }
+          else if(newChannelType === 'private') {
+            isPrivate = true;
+          }
+        }
+        else {
+          isPrivate = channel.is_private;
+        } 
+        
         // The change will be communicated in change records
         const {records} = encodeChangeRequest({
           id,
           channel: channel.id,
           decrease: !!askForDecrease ? sumOfTokens(askForDecrease) : undefined,
           increase: askForIncrease,
+          new_channel_type: !!newChannelType ? newChannelType : undefined,
         });
 
         return cbk(null, {
@@ -491,7 +534,7 @@ module.exports = ({ask, id, lnd}, cbk) => {
           fee_rate: channel.fee_rate,
           id: channel.id,
           increase: askForIncrease,
-          is_private: channel.is_private,
+          is_private: isPrivate,
           open_transaction: channel.open_transaction,
           partner_csv_delay: channel.partner_csv_delay,
           partner_public_key: channel.partner_public_key,

@@ -12,6 +12,7 @@ const findDecreaseRecord = records => records.find(n => n.type === '3');
 const findIncreaseRecord = records => records.find(n => n.type === '4');
 const findRequestIdRecord = records => records.find(n => n.type === '1');
 const findVersionRecord = records => records.find(n => n.type === '0');
+const findPublicPrivateRecord = records => records.find(n => n.type === '5');
 
 /** Parse a capacity change request
 
@@ -67,6 +68,7 @@ module.exports = ({from, records}) => {
 
   const decreaseRecord = findDecreaseRecord(records);
   const increaseRecord = findIncreaseRecord(records);
+  const publicPrivateRecord = findPublicPrivateRecord(records);
 
   // Exit early when there is a change in both directions
   if (!!decreaseRecord && !!increaseRecord) {
@@ -83,6 +85,19 @@ module.exports = ({from, records}) => {
 
   const decrease = decodeNumber((decreaseRecord || defaultRecord).value);
   const increase = decodeNumber((increaseRecord || defaultRecord).value);
+  
+  let publicPrivate;
+  let newChannelType;
+  if(!!publicPrivateRecord) {
+    publicPrivate = decodeNumber(publicPrivateRecord.value);
+  }
+
+  if(!!publicPrivate && publicPrivate === 1337n) {
+    newChannelType = 'public';
+  }
+  else if(!!publicPrivate && publicPrivate === 1339n) {
+    newChannelType = 'private';
+  }
 
   // Exit early when there is no reasonably sized increase or decrease
   if (decrease > tooLarge || increase > tooLarge) {
@@ -96,6 +111,7 @@ module.exports = ({from, records}) => {
       id,
       decrease: Number(decrease) || undefined,
       increase: Number(increase) || undefined,
+      public_private: newChannelType || undefined,
     },
   };
 };

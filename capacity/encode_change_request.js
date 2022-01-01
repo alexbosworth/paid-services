@@ -5,6 +5,7 @@ const channelIdRecordType = '2';
 const decreaseRecordType = '3';
 const increaseRecordType = '4';
 const requestIdRecordType = '1';
+const publicPrivateRecordType = '5';
 
 /** Encode a request to change a channel capacity
 
@@ -23,7 +24,7 @@ const requestIdRecordType = '1';
     }]
   }
 */
-module.exports = ({channel, decrease, id, increase}) => {
+module.exports = ({channel, decrease, id, increase, new_channel_type}) => {
   const records = [
     {
       type: requestIdRecordType,
@@ -49,6 +50,13 @@ module.exports = ({channel, decrease, id, increase}) => {
       type: increaseRecordType,
       value: encodeBigSize({number: increase.toString()}).encoded,
     });
+  }
+
+  if(!!new_channel_type) {
+    records.push({
+      type: publicPrivateRecordType,
+      value: new_channel_type === 'public' ? encodeBigSize({number: 1337}).encoded : encodeBigSize({number: 1339}).encoded,
+    })
   }
 
   return {records};
