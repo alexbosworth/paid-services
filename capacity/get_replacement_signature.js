@@ -10,7 +10,7 @@ const {Transaction} = require('bitcoinjs-lib');
 const signCapacityReplacement = require('./sign_capacity_replacement');
 const witnessScriptFromCloseTxs = require('./witness_script_from_close_txs');
 
-const blocksBuffer = 1;
+const blocksBuffer = 1e3;
 const {fromHex} = Transaction;
 const interval = 200;
 const notFoundIndex = -1;
