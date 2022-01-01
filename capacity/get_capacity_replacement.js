@@ -265,9 +265,9 @@ module.exports = (args, cbk) => {
             capacity: newCapacity,
             give_tokens: pendingChannel.remote_balance,
             partner_public_key: pendingChannel.partner_public_key,
+            is_private: args.is_private,
           }],
           is_avoiding_broadcast: true,
-          is_private: args.is_private,
           lnd: args.lnd,
         },
         cbk);

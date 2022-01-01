@@ -120,6 +120,7 @@ module.exports = (args, cbk) => {
           decrease: args.decrease,
           id: args.channel,
           increase: args.increase,
+          is_private: args.is_private,
           lnd: args.lnd,
           open_transaction: args.open_transaction,
           transaction_id: args.transaction_id,
