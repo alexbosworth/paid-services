@@ -12,9 +12,9 @@ const {makePeerRequest} = require('./../p2p');
 const parseAcceptResponse = require('./parse_accept_response');
 const parseSignCapacityRequest = require('./parse_sign_capacity_request');
 const {servicePeerRequests} = require('./../p2p');
-const {serviceTypeAcceptCapacityChange} = require('./service_types');
-const {serviceTypeSignCapacityChange} = require('./service_types');
-const {serviceTypeWaitOnConfirmation} = require('./service_types');
+const {serviceTypeAcceptCapacityChange} = require('./../service_types');
+const {serviceTypeSignCapacityChange} = require('./../service_types');
+const {serviceTypeWaitOnConfirmation} = require('./../service_types');
 
 const acceptChangeTimeoutMs = 1000 * 45;
 const bufferAsHex = buffer => buffer.toString('hex');

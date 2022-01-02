@@ -1,50 +1,65 @@
-const {encodeTlvStream} = require('bolt01');
+const encodeOpenTrade = require('./encode_open_trade');
+const encodeTradeSecret = require('./encode_trade_secret');
 
-const networkRecordFromRequest = require('./network_record_from_request');
-const {requestAsRequestRecords} = require('./../records');
+/** Encode v1 trade records
 
-const asTrade = hex => `626f73ff${hex}`;
+  A v1 trade is either a qualified trade with a request, or an open ended trade
+  with connection details.
 
-/** Encode a trade
+  0: version (v1)
+  [1]: network
+  [2]: payment request
+  [3]: trade details
+  [4]: nodes records
+  [5]: trade identifier
 
   {
-    auth: <Encrypted Payload Auth Hex String>
-    payload: <Preimage Encrypted Payload Hex String>
-    request: <BOLT 11 Payment Request String>
+    [connect]: {
+      [id]: <Reference Trade Id Hex String>
+      network: <Network Name String>
+      nodes: [{
+        channels: [<Standard Format Channel Id String>]
+        id: <Node Public Key Id Hex String>
+        [sockets]: [<Peer Socket String>]
+      }]
+    }
+    [secret]: {
+      auth: <Encrypted Payload Auth Hex String>
+      payload: <Preimage Encrypted Payload Hex String>
+      request: <BOLT 11 Payment Request String>
+    }
   }
+
+  @throws
+  <Error>
 
   @returns
   {
     trade: <Hex Encoded Trade String>
   }
 */
-module.exports = ({auth, payload, request}, cbk) => {
-  // Encode the trade record
-  const tradeRecords = [{
-    type: '2',
-    value: requestAsRequestRecords({request}).encoded,
-  }];
+module.exports = ({connect, secret}) => {
+  if (!connect && !secret) {
+    throw new Error('ExpectedEitherConnectDetailsOrTradeSecret');
+  }
 
-  // Add a network name record if required
-  if (!!networkRecordFromRequest({request}).value) {
-    tradeRecords.push({
-      type: '1',
-      value: networkRecordFromRequest({request}).value,
+  if (!!connect && !!secret) {
+    throw new Error('ExpectedEitherConnectDetailsOrTradeSecretNotBoth');
+  }
+
+  // Exit early when this is an open ended trade
+  if (!!connect) {
+    return encodeOpenTrade({
+      id: connect.id,
+      network: connect.network,
+      nodes: connect.nodes,
     });
   }
 
-  // Encode the encrypted data
-  const encryptionRecords = encodeTlvStream({
-    records: [{type: '0', value: payload}, {type: '1', value: auth}],
+  // Encode the trade secret
+  return encodeTradeSecret({
+    auth: secret.auth,
+    payload: secret.payload,
+    request: secret.request,
   });
-
-  // Encode the details of the trade
-  const detailsRecords = encodeTlvStream({
-    records: [{type: '0', value: encryptionRecords.encoded}],
-  });
-
-  // Add the trade details to the trade
-  tradeRecords.push({type: '3', value: detailsRecords.encoded});
-
-  return {trade: asTrade(encodeTlvStream({records: tradeRecords}).encoded)};
 };

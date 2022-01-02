@@ -10,6 +10,7 @@
     "async": "3.2.2",
     "asyncjs-util": "1.2.7",
     "bolt01": "1.2.3",
+    "bolt07": "1.8.0",
     "invoices": "2.0.2",
     "ln-service": "53.2.0",
     "ln-sync": "3.6.0"
@@ -37,7 +38,7 @@
   },
   "scripts": {
     "integration-tests": "tap --branches=1 --functions=1 --lines=1 --statements=1 -t 120 test/integration/*.js",
-    "test": "tap --branches=1 --functions=1 --lines=1 --statements=1 -t 60 test/actions/*.js test/capacity/*.js test/client/*.js test/config/*.js test/p2p/*.js test/records/*.js test/respond/*.js test/server/*.js test/server/*.js test/services/*.js"
+    "test": "tap --branches=1 --functions=1 --lines=1 --statements=1 -t 60 test/actions/*.js test/capacity/*.js test/client/*.js test/config/*.js test/p2p/*.js test/records/*.js test/respond/*.js test/server/*.js test/server/*.js test/services/*.js test/trades/*.js"
   },
-  "version": "3.3.0"
+  "version": "3.4.0"
 }

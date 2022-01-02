@@ -4,7 +4,7 @@ const {returnResult} = require('asyncjs-util');
 const {subscribeToPeerMessages} = require('ln-service');
 
 const capacityChangeRequests = require('./capacity_change_requests');
-const {serviceTypeChangeCapacity} = require('./service_types');
+const {serviceTypeChangeCapacity} = require('./../service_types');
 const parseCapacityChangeRequest = require('./parse_capacity_change_request');
 const {servicePeerRequests} = require('./../p2p');
 

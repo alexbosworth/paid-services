@@ -111,9 +111,12 @@ test(`Accept capacity replacement`, async ({end, equal, strictSame}) => {
           transaction_id: channel.transaction_id,
           transaction_vout: channel.transaction_vout,
         });
+
+        proposeDone = true;
+
+        return;
       },
 
-      // Wait for a
       accept: async () => {
         await acceptCapacityChange({
           id,
@@ -123,25 +126,59 @@ test(`Accept capacity replacement`, async ({end, equal, strictSame}) => {
           lnd: target.lnd,
         });
       },
+
+      confirmTarget: ['accept', async ({}) => {
+        // Wait for the new channel to be active
+        const recreated = await asyncRetry({interval, times}, async () => {
+          const controlChannels = (await getChannels({lnd, is_active: true}));
+
+          const [channel] = controlChannels.channels;
+
+          const targetChans = await getChannels({
+            is_active: true,
+            lnd: target.lnd,
+          });
+
+          const targetChan = targetChans.channels;
+
+          if (!!channel && !!targetChan && channel.capacity < capacity) {
+            return channel;
+          }
+
+          await generate({});
+
+          throw new Error('ExpectedChannelActivation');
+        });
+
+        strictSame(recreated.is_active, true, 'Recreated channel is active');
+      }],
+
+      confirmControl: ['accept', 'propose', async ({}) => {
+        // Wait for the new channel to be active
+        const recreated = await asyncRetry({interval, times}, async () => {
+          const controlChannels = (await getChannels({lnd, is_active: true}));
+
+          const [channel] = controlChannels.channels;
+
+          const targetChans = await getChannels({
+            is_active: true,
+            lnd: target.lnd,
+          });
+
+          const targetChan = targetChans.channels;
+
+          if (!!channel && !!targetChan && channel.capacity < capacity) {
+            return channel;
+          }
+
+          await generate({});
+
+          throw new Error('ExpectedChannelActivation');
+        });
+
+        strictSame(recreated.is_active, true, 'Recreated channel is active');
+      }],
     });
-
-    // Wait for the new channel to be active
-    const recreated = await asyncRetry({interval, times}, async () => {
-      const [channel] = (await getChannels({lnd, is_active: true})).channels;
-
-      if (!!channel) {
-        return channel;
-      }
-
-      await generate({});
-
-      throw new Error('ExpectedChannelActivation');
-    });
-
-    strictSame(recreated.is_active, true, 'Recreated channel is active');
-
-    // Recreate the channel but in reverse roles
-
   } catch (err) {
     strictSame(err, null, 'Expected no failure');
   } finally {

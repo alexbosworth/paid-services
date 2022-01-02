@@ -17,7 +17,7 @@ const finalizeCapacityReplacement = require('./finalize_capacity_replacement');
 const getCapacityReplacement = require('./get_capacity_replacement');
 const interimReplacementPsbt = require('./interim_replacement_psbt');
 const {makePeerRequest} = require('./../p2p');
-const {serviceTypeSignCapacityChange} = require('./service_types');
+const {serviceTypeSignCapacityChange} = require('./../service_types');
 
 const capacityChangeIdType = '0';
 const findSignatureRecord = records => records.find(n => n.type === '1');
@@ -40,6 +40,7 @@ const unsignedTransactionType = '1';
       tokens: <Spend Value Number>
     }]
     id: <Capacity Change Request Id Hex String>
+    is_private: <Channel is Private Bool>
     [increase]: <Increase Channel Size Tokens Number>
     [increase_key_index]: <Increase Funds Transit Key Number>
     [increase_output_script]: <Increase Funds Output Script Hex String>
@@ -119,6 +120,7 @@ module.exports = (args, cbk) => {
           bitcoinjs_network: args.bitcoinjs_network,
           decrease: args.decrease,
           id: args.channel,
+          is_private: args.is_private,
           increase: args.increase,
           lnd: args.lnd,
           open_transaction: args.open_transaction,

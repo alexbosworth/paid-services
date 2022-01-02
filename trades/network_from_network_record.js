@@ -17,15 +17,15 @@ const testnetNetworkType = '01';
 */
 module.exports = ({value}) => {
   if (!value) {
-    return defaultNetwork;
+    return {network: defaultNetwork};
   }
 
   if (value === regtestNetworkType) {
-    return regtestNetwork;
+    return {network: regtestNetwork};
   }
 
   if (value === testnetNetworkType) {
-    return testnetNetwork;
+    return {network: testnetNetwork};
   }
 
   throw new Error('UnknownNetworkType');

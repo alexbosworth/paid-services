@@ -264,10 +264,10 @@ module.exports = (args, cbk) => {
           channels: [{
             capacity: newCapacity,
             give_tokens: pendingChannel.remote_balance,
+            is_private: args.is_private,
             partner_public_key: pendingChannel.partner_public_key,
           }],
           is_avoiding_broadcast: true,
-          is_private: args.is_private,
           lnd: args.lnd,
         },
         cbk);

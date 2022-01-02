@@ -11,6 +11,7 @@ const {returnResult} = require('asyncjs-util');
 const buyPreimage = require('./buy_preimage');
 const decodeTrade = require('./decode_trade');
 const decryptTradeSecret = require('./decrypt_trade_secret');
+const findTrade = require('./find_trade');
 
 const hexAsUtf8 = hex => Buffer.from(hex, 'hex').toString();
 const {isArray} = Array;
@@ -52,13 +53,7 @@ module.exports = ({ask, lnd, logger}, cbk) => {
           name: 'trade',
           message: 'Enter encoded trade',
           type: 'input',
-          validate: input => {
-            if (!input) {
-              return false;
-            }
-
-            return true;
-          },
+          validate: input => !!input,
         },
         cbk);
       }],
@@ -71,22 +66,43 @@ module.exports = ({ask, lnd, logger}, cbk) => {
         try {
           const details = decodeTrade({trade: askForTrade.trade});
 
-          return cbk(null, {
-            auth: details.auth,
-            payload: details.payload,
-            request: details.request,
-          });
+          return cbk(null, details);
         } catch (err) {
           return cbk([400, err.message]);
         }
       }],
 
-      // Parse the trade payment request
-      requestDetails: ['decodeDetails', ({decodeDetails}, cbk) => {
-        const {request} = decodeDetails;
+      // Get details about an open ended trade
+      findTrade: [
+        'decodeDetails',
+        'getIdentity',
+        ({decodeDetails, getIdentity}, cbk) =>
+      {
+        // Exit early when there is a known trade
+        if (!!decodeDetails.secret) {
+          return cbk(null, {
+            auth: decodeDetails.secret.auth,
+            payload: decodeDetails.secret.payload,
+            request: decodeDetails.secret.request,
+          });
+        }
 
+        // Get the trade details interactively
+        return findTrade({
+          ask,
+          lnd,
+          logger,
+          id: decodeDetails.connect.id,
+          identity: getIdentity.public_key,
+          nodes: decodeDetails.connect.nodes,
+        },
+        cbk);
+      }],
+
+      // Parse the trade payment request
+      requestDetails: ['findTrade', ({findTrade}, cbk) => {
         try {
-          return cbk(null, parsePaymentRequest({request}));
+          return cbk(null, parsePaymentRequest({request: findTrade.request}));
         } catch (err) {
           return cbk([400, err.message]);
         }
@@ -184,11 +200,11 @@ module.exports = ({ask, lnd, logger}, cbk) => {
 
       // Select a purchase option for the trade
       selectPurchaseAction: [
-        'decodeDetails',
+        'findTrade',
         'getPurchase',
         'getRequest',
         'requestDetails',
-        ({decodeDetails, getPurchase, getRequest, requestDetails}, cbk) =>
+        ({findTrade, getPurchase, getRequest, requestDetails}, cbk) =>
       {
         // Exit early when the trade was already purchased
         if (!!getPurchase.value && !!getPurchase.value.is_confirmed) {
@@ -201,7 +217,7 @@ module.exports = ({ask, lnd, logger}, cbk) => {
         }
 
         logger.info({
-          request: decodeDetails.request,
+          request: findTrade.request,
           purchase: requestDetails.description,
           price: requestDetails.tokens,
           to: requestDetails.destination,
@@ -257,9 +273,9 @@ module.exports = ({ask, lnd, logger}, cbk) => {
 
       // Pay and get the preimage through paying for it
       payForPreimage: [
-        'decodeDetails',
+        'findTrade',
         'selectPurchaseAction',
-        ({decodeDetails, selectPurchaseAction}, cbk) =>
+        ({findTrade, selectPurchaseAction}, cbk) =>
       {
         // Exit early when this is an offer
         if (!selectPurchaseAction) {
@@ -271,32 +287,25 @@ module.exports = ({ask, lnd, logger}, cbk) => {
           return cbk();
         }
 
+        const {request} = findTrade;
+
         return asyncRetry({
           errorFilter: err => !!isArray(err) && err.slice().shift() >= 500,
         },
-        cbk => {
-          return buyPreimage({
-            ask,
-            lnd,
-            logger,
-            request: decodeDetails.request,
-          },
-          cbk);
-        },
-        cbk);
+        cbk => buyPreimage({ask, lnd, logger, request}, cbk), cbk);
       }],
 
       // Use the preimage to decrypt the trade secret
       decryptSecret: [
         'askForPreimage',
-        'decodeDetails',
+        'findTrade',
         'getPurchase',
         'payForPreimage',
         'requestDetails',
         'selectPurchaseAction',
         ({
           askForPreimage,
-          decodeDetails,
+          findTrade,
           getPurchase,
           payForPreimage,
           requestDetails,
@@ -327,11 +336,13 @@ module.exports = ({ask, lnd, logger}, cbk) => {
 
         const paid = payForPreimage || askForPreimage || payment;
 
+        const {auth, payload} = findTrade;
+
         return decryptTradeSecret({
+          auth,
           lnd,
-          auth: decodeDetails.auth,
+          payload,
           from: requestDetails.destination,
-          payload: decodeDetails.payload,
           secret: paid.secret,
         },
         cbk);

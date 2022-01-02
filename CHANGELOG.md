@@ -1,5 +1,10 @@
 # Versions
 
+## Version 3.4.0
+
+- `changeChannelCapacity`: Fix broken preservation of channel announce status
+- `manageTrades`: Add support for open-ended trades
+
 ## Version 3.3.0
 
 - `changeChannelCapacity`: Add method to change a channel's capacity

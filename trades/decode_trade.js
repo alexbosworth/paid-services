@@ -1,32 +1,49 @@
+const {decodeBigSize} = require('bolt01');
 const {decodeTlvStream} = require('bolt01');
 
+const decodeOpenTrade = require('./decode_open_trade');
+const decodeTradeSecret = require('./decode_trade_secret');
 const networkFromNetworkRecord = require('./network_from_network_record');
-const {requestRecordsAsRequest} = require('./../records');
 
-const findAuth = records => records.find(n => n.type === '1');
-const findCipher = records => records.find(n => n.type === '0');
-const findDetails = records => records.find(n => n.type === '3');
-const findEncrypt = records => records.find(n => n.type === '0');
 const findNetwork = records => records.find(n => n.type === '1');
-const findRequest = records => records.find(n => n.type === '2');
-const findVersion = records => records.find(n => n.type === '0');
+const findVer = records => records.find(n => n.type === '0') || {value: '00'};
+const findRequestRecord = records => records.find(n => n.type === '2');
 const isTrade = trade => trade.toLowerCase().startsWith('626f73ff');
+const isValidVersion = version => BigInt(version) <= BigInt(1);
 const tradeData = trade => trade.slice('626f73ff'.length);
 
-/** Encode a trade
+/** Decode a trade record
+
+  [0]: <Version Record>
+  [1]: <Network Name Record>
+  [2]: <Payment Request Record>
+  [3]: <Trade Details Record
+  [4]: <Nodes Records>
+  [5]: <Trade Identifier>
 
   {
-    trade: <Hex Encoded Trade String>
+    trade: <Trade Record Hex String>
   }
-
-  @throws
-  <Error>
 
   @returns
   {
-    auth: <Encrypted Payload Auth Hex String>
-    payload: <Preimage Encrypted Payload Hex String>
-    request: <BOLT 11 Payment Request String>
+    [connect]: {
+      [id]: <Reference Trade Id Hex String>
+      network: <Network Name String>
+      nodes: [{
+        [high_channel]: <High Key Channel Id String>
+        [low_channel]: <Low Key Channel Id String>
+        [node]: {
+          id: <Node Public Key Id Hex String>
+          sockets: [<Peer Socket String>]
+        }
+      }]
+    }
+    [secret]: {
+      auth: <Encrypted Payload Auth Hex String>
+      payload: <Preimage Encrypted Payload Hex String>
+      request: <BOLT 11 Payment Request String>
+    }
   }
 */
 module.exports = ({trade}) => {
@@ -45,64 +62,29 @@ module.exports = ({trade}) => {
   }
 
   // Decode the overall packet
-  const tradeRecords = decodeTlvStream({encoded: tradeData(trade)}).records;
+  const {records} = decodeTlvStream({encoded: tradeData(trade)});
 
   // Get the trade version
-  const version = findVersion(tradeRecords);
+  const versionRecord = findVer(records);
 
-  if (!!version) {
-    throw new Error('UnexpectedVersionOfTradeData');
+  // Decode the version number
+  const version = decodeBigSize({encoded: versionRecord.value}).decoded;
+
+  // Too-high versions cannot be parsed
+  if (!isValidVersion(version)) {
+    throw new Error('ExpectedKnownVersionToDecodeTrade');
   }
 
   // Get the network record
-  const networkRecord = findNetwork(tradeRecords) || {};
+  const networkRecord = findNetwork(records) || {};
 
-  // Get the payment request record
-  const requestRecord = findRequest(tradeRecords);
+  // Decode the network record
+  const {network} = networkFromNetworkRecord({value: networkRecord.value});
 
-  if (!requestRecord) {
-    throw new Error('ExpectedRequestRecordInTradeData');
+  // A trade is either a trade secret to someone or an open trade offer
+  if (!!findRequestRecord(records)) {
+    return {secret: decodeTradeSecret({network, records})};
+  } else {
+    return {connect: decodeOpenTrade({network, records})};
   }
-
-  const {request} = requestRecordsAsRequest({
-    network: networkFromNetworkRecord({value: networkRecord.value}),
-    encoded: requestRecord.value,
-  });
-
-  // Get the trade details
-  const detailsRecord = findDetails(tradeRecords);
-
-  if (!detailsRecord) {
-    throw new Error('ExpctedDetailsRecordToDecodeTrade');
-  }
-
-  // Trade details
-  const details = decodeTlvStream({encoded: detailsRecord.value}).records;
-
-  // Encode the encrypted data
-  const encryptedRecord = findEncrypt(details);
-
-  if (!encryptedRecord) {
-    throw new Error('ExpectedEncryptedRecordToDecodeTrade');
-  }
-
-  const encrypted = decodeTlvStream({encoded: encryptedRecord.value}).records;
-
-  const encryptedDataRecord = findCipher(encrypted);
-
-  if (!encryptedDataRecord) {
-    throw new Error('ExpectedEncryptedDataRecordToDecodeTrade');
-  }
-
-  const authDataRecord = findAuth(encrypted);
-
-  if (!authDataRecord) {
-    throw new Error('ExpectedAuthDataRecordToDecodeTrade');
-  }
-
-  return {
-    request,
-    auth: authDataRecord.value,
-    payload: encryptedDataRecord.value,
-  };
 };

@@ -23,10 +23,10 @@ const {makePeerRequest} = require('./../p2p');
 const parseAcceptRequest = require('./parse_accept_request');
 const proposeCapacityChange = require('./propose_capacity_change');
 const {servicePeerRequests} = require('./../p2p');
-const {serviceTypeAcceptCapacityChange} = require('./service_types');
-const {serviceTypeChangeCapacity} = require('./service_types');
-const {serviceTypeSignCapacityChange} = require('./service_types');
-const {serviceTypeWaitOnConfirmation} = require('./service_types');
+const {serviceTypeAcceptCapacityChange} = require('./../service_types');
+const {serviceTypeChangeCapacity} = require('./../service_types');
+const {serviceTypeSignCapacityChange} = require('./../service_types');
+const {serviceTypeWaitOnConfirmation} = require('./../service_types');
 
 const bufferAsHex = buffer => buffer.toString('hex');
 const capacityChangeRequestIdType = '0';
@@ -438,6 +438,7 @@ module.exports = ({ask, lnd, logger}, cbk) => {
           increase_transaction_id: getFunding.id,
           increase_transaction_vout: getFunding.vout,
           increase_witness_script: getFunding.script,
+          is_private: channel.is_private,
           open_transaction: sendBasicRequest,
           partner_public_key: askForChangeDetails.partner_public_key,
           transaction_id: channel.transaction_id,

@@ -16,6 +16,7 @@ const returnSuccessResponse = require('./return_success_response');
 
   @returns
   {
+    end: <Add a Service Ended Function>
     error: <Add an Error Listener Function>
     request: <Add A Request Listener For Type Function>
     stop: <Stop Listening Function> ({}) => {};
@@ -55,8 +56,14 @@ const returnSuccessResponse = require('./return_success_response');
 */
 module.exports = ({lnd}) => {
   const listeners = {};
-  const service = {error: () => {}};
+  const service = {end: () => {}, error: () => {}};
   const sub = subscribeToPeerMessages({lnd});
+
+  sub.on('error', error => {
+    service.error(error);
+
+    return service.end();
+  });
 
   sub.on('message_received', received => {
     const from = received.public_key;
@@ -93,7 +100,8 @@ module.exports = ({lnd}) => {
   });
 
   return {
-    error: cbk => service[error] = cbk,
+    end: cbk => service.end = cbk,
+    error: cbk => service.error = cbk,
     request: ({type}, cbk) => listeners[type] = cbk,
     stop: ({}) => sub.removeAllListeners(),
   };

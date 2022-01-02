@@ -49,6 +49,7 @@ test(`Accept capacity replacement`, async ({end, equal, strictSame}) => {
     // Open up a new channel
     const channelOpen = await openChannel({
       lnd,
+      is_private: true,
       local_tokens: capacity,
       partner_public_key: target.id,
       partner_socket: target.socket,
@@ -158,6 +159,8 @@ test(`Accept capacity replacement`, async ({end, equal, strictSame}) => {
           if (!channel) {
             throw new Error('ExpectedChannelActivation');
           }
+
+          equal(channel.is_private, true, 'Channel is private');
 
           {
             const {policies} = await getChannel({lnd, id: channel.id});
