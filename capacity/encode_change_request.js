@@ -5,7 +5,8 @@ const channelIdRecordType = '2';
 const decreaseRecordType = '3';
 const increaseRecordType = '4';
 const requestIdRecordType = '1';
-const publicPrivateRecordType = '5';
+const publicRecordType = 0;
+const privateRecordType = 1;
 
 /** Encode a request to change a channel capacity
 
@@ -54,8 +55,7 @@ module.exports = ({channel, decrease, id, increase, new_channel_type}) => {
 
   if(!!new_channel_type) {
     records.push({
-      type: publicPrivateRecordType,
-      value: new_channel_type === 'public' ? encodeBigSize({number: 1337}).encoded : encodeBigSize({number: 1339}).encoded,
+      type: new_channel_type === 'public' ? publicRecordType : privateRecordType,
     })
   }
 
