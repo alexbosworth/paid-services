@@ -1,5 +1,9 @@
 # Versions
 
+## Version 3.5.0
+
+- `changeChannelCapacity`: Allow changing private/public status of channel
+
 ## Version 3.4.0
 
 - `changeChannelCapacity`: Fix broken preservation of channel announce status
