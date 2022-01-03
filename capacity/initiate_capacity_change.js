@@ -438,7 +438,7 @@ module.exports = ({ask, lnd, logger}, cbk) => {
           increase_transaction_id: getFunding.id,
           increase_transaction_vout: getFunding.vout,
           increase_witness_script: getFunding.script,
-          is_private: channel.is_private,
+          is_private: askForChangeDetails.is_private,
           open_transaction: sendBasicRequest,
           partner_public_key: askForChangeDetails.partner_public_key,
           transaction_id: channel.transaction_id,

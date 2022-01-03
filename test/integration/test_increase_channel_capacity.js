@@ -111,6 +111,10 @@ test(`Accept capacity replacement`, async ({end, equal, strictSame}) => {
               return cbk({query: target.id});
             }
 
+            if (args.name === 'type') {
+              return cbk({type: args.default});
+            }
+
             throw new Error('UnexpectedQueryNameForProposingSide');
           },
         });

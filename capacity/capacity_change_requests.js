@@ -1,3 +1,5 @@
+const privateAsType = isPrivate => isPrivate ? 1 : 0;
+
 /** Map change requests to requests considering local channels
 
   {
@@ -13,6 +15,7 @@
       from: <From Node Public Key Id Hex String>
       id: <Change Request Id Hex String>
       [increase]: <Add Capacity Tokens Number>
+      [type]: <Intended Replacement Channel Channel Type Flags Number>
     }]
   }
 
@@ -26,6 +29,7 @@
       from: <From Node Public Key Id Hex String>
       id: <Change Request Id Hex String>
       [increase]: <Add Capacity Tokens Number>
+      [type]: <Change Channel Channel Type Flags Number>
     }]
   }
 */
@@ -61,6 +65,10 @@ module.exports = ({channels, requests}) => {
     .map(request => {
       const channel = channels.find(chan => chan.id === request.channel);
 
+      const currentType = privateAsType(channel.is_private);
+
+      const type = request.type !== undefined && request.type !== currentType;
+
       return {
         address: channel.cooperative_close_address,
         capacity: channel.capacity,
@@ -69,7 +77,7 @@ module.exports = ({channels, requests}) => {
         from: channel.partner_public_key,
         id: request.id,
         increase: request.increase,
-        public_private: request.public_private,
+        type: type ? request.type : undefined,
       };
     });
 

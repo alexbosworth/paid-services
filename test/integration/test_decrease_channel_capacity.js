@@ -47,11 +47,13 @@ test(`Decrease capacity replacement`, async ({end, equal, strictSame}) => {
 
   try {
     // Open up a new channel
-    const channelOpen = await openChannel({
-      lnd,
-      local_tokens: capacity,
-      partner_public_key: target.id,
-      partner_socket: target.socket,
+    const channelOpen = await asyncRetry({interval, times}, async () => {
+      return await openChannel({
+        lnd,
+        local_tokens: capacity,
+        partner_public_key: target.id,
+        partner_socket: target.socket,
+      });
     });
 
     // Wait for the channel to be active
@@ -116,6 +118,10 @@ test(`Decrease capacity replacement`, async ({end, equal, strictSame}) => {
               return cbk({query: target.id});
             }
 
+            if (args.name === 'type') {
+              return cbk({type: 'Private'});
+            }
+
             throw new Error('UnexpectedQueryNameForProposingSide');
           },
         });
@@ -159,13 +165,17 @@ test(`Decrease capacity replacement`, async ({end, equal, strictSame}) => {
           interval: slow,
         },
         async () => {
-          const [channel] = (await getChannels({lnd, is_active: true})).channels.filter(n => n.capacity < capacity);
+          const {channels} = await getChannels({lnd, is_active: true});
+
+          const [channel] = channels.filter(n => n.capacity < capacity);
 
           await generate({});
 
           if (!channel) {
             throw new Error('ExpectedChannelActivation');
           }
+
+          equal(channel.is_private, true, 'Channel is changed to private');
 
           {
             const {policies} = await getChannel({lnd, id: channel.id});

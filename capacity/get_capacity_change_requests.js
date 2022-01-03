@@ -28,6 +28,7 @@ const waitForRequestsTimeoutMs = 5000;
       from: <From Node Public Key Id Hex String>
       id: <Change Request Id Hex String>
       [increase]: <Add Capacity Tokens Number>
+      [type]: <Intended Replacement Channel Channel Type Flags Number>
     }]
   }
 */

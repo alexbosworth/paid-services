@@ -10,6 +10,7 @@ const acceptCapacityChange = require('./accept_capacity_change');
 const getCapacityChangeRequests = require('./get_capacity_change_requests');
 const initiateCapacityChange = require('./initiate_capacity_change');
 
+const describeType = type => !(type & 0) ? 'private' : 'public';
 const interval = 10 * 1000;
 const peerName = ({alias, id}) => `${alias} ${id.substring(0, 8)}`.trim();
 const times = 6 * 60 * 6;
@@ -89,18 +90,22 @@ module.exports = ({ask, delay, lnd, logger}, cbk) => {
 
             const change = !!request.increase ? 'Increase' : 'Decrease';
             const delta = request.decrease || request.increase;
+            const hasType = request.type !== undefined;
             const id = request.channel;
             const peer = peerName(res);
-            const publicPrivate = !!request.public_private ? request.public_private : undefined;
             const size = tokensAsBigUnit(request.capacity);
+
 
             const action = `${change} capacity ${size} channel ${id}`;
             const by = !!delta ? ` by ${tokensAsBigUnit(delta)}` : '';
+            const type = hasType ? describeType(request.type) : '';
+
+            const changeType = hasType ? ` and make channel ${type}` : '';
 
             return ask({
               type: 'confirm',
               name: 'accept',
-              message: !!publicPrivate ? `${action} with ${peer}${by} and change channel type to ${publicPrivate}?` : `${action} with ${peer}${by}?`,
+              message: `${action} with ${peer}${by}${changeType}?`,
             },
             ({accept}) => {
               if (!accept) {

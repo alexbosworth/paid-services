@@ -8,6 +8,7 @@ const makeArgs = overrides => {
     decrease: 0,
     id: Buffer.alloc(32).toString('hex'),
     increase: undefined,
+    type: 1,
   };
 
   Object.keys(overrides).forEach(k => args[k] = overrides[k]);
@@ -28,6 +29,10 @@ const tests = [
         {
           type: '2',
           value: '0000000000000000',
+        },
+        {
+          type: '5',
+          value: '01',
         },
       ],
     },

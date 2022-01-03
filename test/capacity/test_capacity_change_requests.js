@@ -34,6 +34,7 @@ const tests = [
         from: Buffer.alloc(33, 3).toString('hex'),
         id: Buffer.alloc(32).toString('hex'),
         increase: undefined,
+        type: undefined,
       }],
     },
   },

@@ -1,12 +1,12 @@
 const {encodeBigSize} = require('bolt01');
 const {rawChanId} = require('bolt07');
 
+const channelFlagsType = '5';
 const channelIdRecordType = '2';
 const decreaseRecordType = '3';
 const increaseRecordType = '4';
 const requestIdRecordType = '1';
-const publicRecordType = 0;
-const privateRecordType = 1;
+const typeAsHex = type => Buffer.from([type]).toString('hex');
 
 /** Encode a request to change a channel capacity
 
@@ -15,6 +15,7 @@ const privateRecordType = 1;
     [decrease]: <Remove Channel Funds By Tokens Number>
     id: <Request Id Hex String>
     increase: <Add Channel Funds By Tokens Number>
+    type: <New Channel Type Number>
   }
 
   @returns
@@ -25,7 +26,7 @@ const privateRecordType = 1;
     }]
   }
 */
-module.exports = ({channel, decrease, id, increase, new_channel_type}) => {
+module.exports = ({channel, decrease, id, increase, type}) => {
   const records = [
     {
       type: requestIdRecordType,
@@ -34,6 +35,10 @@ module.exports = ({channel, decrease, id, increase, new_channel_type}) => {
     {
       type: channelIdRecordType,
       value: rawChanId({channel}).id,
+    },
+    {
+      type: channelFlagsType,
+      value: typeAsHex(type),
     },
   ];
 
@@ -51,12 +56,6 @@ module.exports = ({channel, decrease, id, increase, new_channel_type}) => {
       type: increaseRecordType,
       value: encodeBigSize({number: increase.toString()}).encoded,
     });
-  }
-
-  if(!!new_channel_type) {
-    records.push({
-      type: new_channel_type === 'public' ? publicRecordType : privateRecordType,
-    })
   }
 
   return {records};
