@@ -1,6 +1,6 @@
 # Versions
 
-## Version 3.5.0
+## Version 3.5.1
 
 - `changeChannelCapacity`: Allow changing private/public status of channel
 

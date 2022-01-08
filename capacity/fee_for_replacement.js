@@ -13,7 +13,7 @@ const dummySignature = Buffer.alloc(74);
 const dummyTokens = 0;
 const dummyVout = 0;
 const hexAsBuffer = hex => Buffer.from(hex, 'hex');
-const increaseBuffer = 150;
+const increaseBuffer = 300;
 const {max} = Math;
 const weightAsVBytes = weight => weight / 4;
 
