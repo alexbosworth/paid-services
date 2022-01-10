@@ -183,7 +183,6 @@ module.exports = (args, cbk) => {
           witness_script: getReplacement.witness_script,
         });
 
-        // Create the commitment transaction with the peer on the replacement
         return fundPendingChannels({
           channels: [getReplacement.pending_channel_id],
           funding: psbt,
@@ -192,10 +191,42 @@ module.exports = (args, cbk) => {
         cbk);
       }],
 
+      //Fund the channel with the 2nd output
+      fundWithChange: [
+        'getReplacement',
+        'signAddFunds',
+        'fundWithReplacement',
+        ({getReplacement, signAddFunds}, cbk) =>
+      {
+        if(!getReplacement.second_pending_channel) {
+          return cbk();
+        }
+        const [addFundsSignature] = signAddFunds.signatures || [];
+
+        const {psbt} = interimReplacementPsbt({
+          increase_public_key: args.increase_key,
+          increase_signature: addFundsSignature,
+          increase_transaction: args.increase_transaction,
+          increase_transaction_vin: getReplacement.add_funds_vin,
+          open_transaction: args.open_transaction,
+          signature: getReplacement.signature,
+          unsigned_transaction: getReplacement.unsigned_transaction,
+          witness_script: getReplacement.witness_script,
+        });
+
+        // Create the commitment transaction with the peer on the replacement
+        return fundPendingChannels({
+          channels: [getReplacement.second_pending_channel.pending[0].id],
+          funding: psbt,
+          lnd: args.lnd,
+        }, cbk);
+      }],
+
       // Send the final go ahead signal now that a proposal is made
       getPeerSignature: [
         'getReplacement',
         'fundWithReplacement',
+        'fundWithChange',
         asyncReflect(({getReplacement}, cbk) =>
       {
         return makePeerRequest({
@@ -251,6 +282,31 @@ module.exports = (args, cbk) => {
         err => {
           if (!!err) {
             return cbk([503, 'FailedToCancelPendingChannel', {err}]);
+          }
+
+          // Return the original error
+          return cbk(getPeerSignature.error);
+        });
+      }],
+
+      //Cancel Funding 2nd channel
+      cancelFundingSecondChannel: [
+        'getPeerSignature',
+        'getReplacement',
+        ({getPeerSignature, getReplacement}, cbk) =>
+      {
+        // Exit early when there is no need to cancel
+        if (!getPeerSignature.error || !getReplacement.second_pending_channel) {
+          return cbk();
+        }
+
+        return cancelPendingChannel({
+          id: getReplacement.second_pending_channel.pending[0].id,
+          lnd: args.lnd,
+        },
+        err => {
+          if (!!err) {
+            return cbk([503, 'FailedToCancelPendingSecondChannel', {err}]);
           }
 
           // Return the original error

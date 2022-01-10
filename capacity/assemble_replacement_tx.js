@@ -11,6 +11,7 @@ const hexAsBuffer = hex => Buffer.from(hex, 'hex');
 const {isArray} = Array;
 const sequence = 0;
 const {toOutputScript} = address;
+let secondChannelFundingOutput = {};
 
 /** Put together the replacement transaction
 
@@ -97,13 +98,30 @@ module.exports = args => {
     tokens: args.funding_tokens,
   };
 
-  // There can also be other outputs attached
-  const decreaseOutputs = args.decrease.map(({output, tokens}) => ({
-    tokens,
-    script: hexAsBuffer(output),
-  }));
+  //Check if there is a 2nd pubkey to open a channel to
+  const [pubkey] = args.decrease.map(n => n.pubkey);
 
-  const outputs = [].concat(decreaseOutputs).concat(fundingOutput);
+  let secondChannelFundingOutput;
+  let decreaseOutputs;
+  let outputs;
+  if(!!pubkey) {
+    const address = args.second_funding_address;
+    const [tokens] = args.decrease.map(n => n.tokens);
+
+    secondChannelFundingOutput = {
+      script: toOutputScript(address, network),
+      tokens: tokens,
+    };
+    outputs = [].concat(secondChannelFundingOutput).concat(fundingOutput);
+  }
+  else {
+    // There can also be other outputs attached
+      decreaseOutputs = args.decrease.map(({output, tokens}) => ({
+      tokens,
+      script: hexAsBuffer(output),
+    }));
+    outputs = [].concat(decreaseOutputs).concat(fundingOutput);
+  }
 
   // Sort outputs by BIP 69
   outputs.sort((a, b) => {

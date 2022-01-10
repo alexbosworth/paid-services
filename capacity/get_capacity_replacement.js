@@ -102,8 +102,32 @@ module.exports = (args, cbk) => {
       // Get the current chain height
       getHeight: ['validate', ({}, cbk) => getHeight({lnd: args.lnd}, cbk)],
 
+      // Propose the second new channel to with the change output of decreasing capacity
+      proposeSecondChannel: [
+        'validate',
+        'getHeight',
+        ({}, cbk) =>
+      {
+        const [pubkey] = args.decrease.map(n => n.public_key);
+        const [tokens] = args.decrease.map(n => n.tokens);
+
+        if(!pubkey) {
+          return cbk();
+        }
+        return openChannels({
+          channels: [{
+            capacity: tokens,
+            is_private: false,
+            partner_public_key: pubkey,
+          }],
+          is_avoiding_broadcast: true,
+          lnd: args.lnd,
+        },
+        cbk);
+      }],
+
       // Force close the channel in order to get a non-final sequence number
-      channelClose: ['getFeeRate', ({}, cbk) => {
+      channelClose: ['getFeeRate','proposeSecondChannel', ({}, cbk) => {
         return closeChannel({
           lnd: args.lnd,
           is_force_close: true,
@@ -279,7 +303,8 @@ module.exports = (args, cbk) => {
         'closeTx',
         'newCapacity',
         'proposeChannel',
-        ({closeTx, newCapacity, proposeChannel}, cbk) =>
+        'proposeSecondChannel',
+        ({closeTx, newCapacity, proposeChannel, proposeSecondChannel}, cbk) =>
       {
         // The replacement tx pays to the proposed channel multisig address
         const [{address}] = proposeChannel.pending;
@@ -292,14 +317,15 @@ module.exports = (args, cbk) => {
             close_transaction: closeTx.transaction,
             decrease: args.decrease.map(decrease => ({
               output: decrease.output,
+              pubkey: decrease.public_key,
               tokens: decrease.tokens,
             })),
             funding_address: address,
+            second_funding_address: !!proposeSecondChannel ? proposeSecondChannel.pending[0].address : undefined,
             funding_tokens: newCapacity,
             transaction_id: args.transaction_id,
             transaction_vout: args.transaction_vout,
           });
-
           return cbk(null, {
             add_funds_vin: replacement.add_funds_vin,
             transaction: replacement.transaction,
@@ -337,6 +363,7 @@ module.exports = (args, cbk) => {
         'newCapacity',
         'pendingChannel',
         'proposeChannel',
+        'proposeSecondChannel',
         'replacementTx',
         'signReplacement',
         ({
@@ -344,6 +371,7 @@ module.exports = (args, cbk) => {
           newCapacity,
           pendingChannel,
           proposeChannel,
+          proposeSecondChannel,
           replacementTx,
           signReplacement,
         },
@@ -359,6 +387,7 @@ module.exports = (args, cbk) => {
           signature: signReplacement.signature,
           signing_key: signReplacement.key,
           pending_channel_id: pending.id,
+          second_pending_channel: proposeSecondChannel || undefined,
           transaction_id: replacementTx.transaction_id,
           transaction_vin: replacementTx.transaction_vin,
           transaction_vout: replacementTx.transaction_vout,

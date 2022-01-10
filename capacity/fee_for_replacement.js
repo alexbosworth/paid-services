@@ -51,14 +51,24 @@ module.exports = args => {
 
   // Add the decreases as outputs
   args.decrease.forEach(({output, tokens}) => {
-    return tx.addOutput(hexAsBuffer(output), tokens);
+    if(!!output) {
+      return tx.addOutput(hexAsBuffer(output), tokens);
+    }
+    else {
+      return tx.addOutput(dummyP2wsh, tokens);
+    }
   });
 
   // Add an output to represent the new channel output
   tx.addOutput(dummyP2wsh, args.capacity);
 
   args.decrease.forEach(({output}) => {
-    return tx.addOutput(hexAsBuffer(output), dummyTokens);
+    if(!!output) {
+      return tx.addOutput(hexAsBuffer(output), dummyTokens);
+    }
+    else {
+      return;
+    }
   });
 
   // Add an input to represent the old channel input

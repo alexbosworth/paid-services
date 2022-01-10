@@ -358,7 +358,7 @@ module.exports = ({ask, id, lnd}, cbk) => {
 
             const final = decreases
               .filter(n => !!n.tokens)
-              .map(({address, output, tokens}) => ({address, output, tokens}));
+              .map(({address, output, public_key, tokens}) => ({address, output, public_key, tokens}));
 
             return cbk(null, final);
           }

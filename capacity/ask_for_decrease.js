@@ -1,14 +1,19 @@
 const {address} = require('bitcoinjs-lib');
 const asyncAuto = require('async/auto');
 const {createChainAddress} = require('ln-service');
+const {getWalletInfo} = require('ln-service');
+const {acceptsChannelOpen} = require('ln-sync');
 const {getNetwork} = require('ln-sync');
 const {networks} = require('bitcoinjs-lib');
 const {returnResult} = require('asyncjs-util');
+const proposeChannelOpen = require('./propose_channel_open');
 
 const bufferAsHex = buffer => buffer.toString('hex');
 const dust = 550;
 const isNumber = n => !isNaN(n);
+const isPublicKey = n => !!n && /^0[2-3][0-9A-F]{64}$/i.test(n);
 const {toOutputScript} = address;
+let channelOpenAddress = {};
 
 /** Ask for details about a decrease
 
@@ -75,12 +80,45 @@ module.exports = ({ask, lnd, max}, cbk) => {
       // Get network name
       getNetwork: ['validate', ({}, cbk) => getNetwork({lnd}, cbk)],
 
+      //Ask for public key to open channel with
+
+      // Get the node identity key
+      getIdentity: ['validate', ({}, cbk) => getWalletInfo({lnd}, cbk)],
+
+      // Ask for the public key of the node to trade with
+      askForNodeId: ['getIdentity','askForAmount', ({getIdentity, askForAmount}, cbk) => {
+        return ask({
+          name: 'query',
+          message: `Public key of node to open channel with for ${askForAmount}? (optional)`,
+          type: 'input',
+          validate: input => {
+            if(!input) {
+              return true;
+            }
+
+            if (!isPublicKey(input)) {
+              return 'Expected public key of node to open channel with';
+            }
+
+            if (input === getIdentity.public_key) {
+              return 'Expected public key of other node';
+            }
+
+            return true;
+          },
+        },
+        ({query}) => cbk(null, query));
+      }],
+
       // Ask if withdrawing to an external address
-      askForExternal: ['askForAmount', ({askForAmount}, cbk) => {
-        if (!Number(askForAmount)) {
+      askForExternal: [
+        'askForAmount',
+        'askForNodeId',
+        ({askForAmount, askForNodeId}, cbk) => {
+          //Exit early if there is a pubkey to open channel with
+        if (!Number(askForAmount) || !!askForNodeId) {
           return cbk();
         }
-
         return ask({
           default: false,
           name: 'spend',
@@ -94,6 +132,7 @@ module.exports = ({ask, lnd, max}, cbk) => {
       askForAddress: [
         'askForAmount',
         'askForExternal',
+        'askForNodeId',
         ({askForAmount, askForExternal}, cbk) =>
       {
         // Exit early when the withdraw address is internal
@@ -114,10 +153,10 @@ module.exports = ({ask, lnd, max}, cbk) => {
       askForAddition: [
         'askForAddress',
         'askForExternal',
-        ({askForExternal}, cbk) =>
+        ({askForExternal, askForNodeId}, cbk) =>
       {
-        // Exit early when the spend was to an internal addess
-        if (!askForExternal) {
+        // Exit early when the spend was to an internal addess or a 2nd node ID
+        if (!askForExternal || !!askForNodeId) {
           return cbk();
         }
 
@@ -131,13 +170,27 @@ module.exports = ({ask, lnd, max}, cbk) => {
       }],
 
       // Create a decrease address to withdraw funds out to
-      createAddress: ['askForExternal', ({askForExternal}, cbk) => {
-        // Exit early when the withdraw address is external
-        if (askForExternal !== false) {
+      createAddress: ['askForExternal', ({askForExternal, askForNodeId}, cbk) => {
+        // Exit early when the withdraw address is external or an external pubkey was entered
+        if (askForExternal !== false || !!askForNodeId) {
           return cbk();
         }
 
         return createChainAddress({lnd}, cbk);
+      }],
+
+      //Propose channel open
+      checkAccept: ['askForNodeId', ({askForAmount,askForNodeId}, cbk) => {
+        //Exit early if pubkey was not entered
+        if(!askForNodeId) {
+          return cbk();
+        }
+        return proposeChannelOpen({
+          lnd,
+          public_key: askForNodeId,
+          amount: askForAmount,
+        },
+        cbk);
       }],
 
       // Final decrease output details
@@ -145,37 +198,46 @@ module.exports = ({ask, lnd, max}, cbk) => {
         'askForAddition',
         'askForAddress',
         'askForAmount',
+        'checkAccept',
         'createAddress',
         'getNetwork',
         ({
           askForAddition,
           askForAddress,
           askForAmount,
+          askForNodeId,
+          checkAccept,
           createAddress,
           getNetwork,
         },
         cbk) =>
       {
-        const {address} = (createAddress || askForAddress || {});
+        if(!!checkAccept && !checkAccept.is_accepted) {
+          return cbk([400, 'ErrorTestingChannelOpenForNewPeer']);
+        }
 
+        const {address} = (createAddress || askForAddress || {});
         // Exit early when not decreasing to an address
-        if (!address) {
+        if (!address && !checkAccept) {
           return cbk(null, {is_final: true, tokens: Number(askForAmount)});
         }
 
         // Make sure the address is valid
+      if(!!address) {
         try {
           toOutputScript(address, networks[getNetwork.bitcoinjs]);
         } catch (err) {
           return cbk([400, 'FailedToParseAddress', {err}]);
         }
+      }
 
-        const output = toOutputScript(address, networks[getNetwork.bitcoinjs]);
+        const output = !!address ? toOutputScript(address, networks[getNetwork.bitcoinjs]) : undefined;
 
         return cbk(null, {
           address,
           is_final: !askForAddition,
-          output: bufferAsHex(output),
+          output: !!output ? bufferAsHex(output) : undefined,
+          public_key: askForNodeId || undefined,
           tokens: Number(askForAmount),
         });
       }],
