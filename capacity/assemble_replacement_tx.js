@@ -101,14 +101,12 @@ module.exports = args => {
   //Check if there is a 2nd pubkey to open a channel to
   const [pubkey] = args.decrease.map(n => n.pubkey);
 
-  let secondChannelFundingOutput;
-  let decreaseOutputs;
   let outputs;
   if(!!pubkey) {
     const address = args.second_funding_address;
     const [tokens] = args.decrease.map(n => n.tokens);
 
-    secondChannelFundingOutput = {
+    const secondChannelFundingOutput = {
       script: toOutputScript(address, network),
       tokens: tokens,
     };
@@ -116,7 +114,7 @@ module.exports = args => {
   }
   else {
     // There can also be other outputs attached
-      decreaseOutputs = args.decrease.map(({output, tokens}) => ({
+      const decreaseOutputs = args.decrease.map(({output, tokens}) => ({
       tokens,
       script: hexAsBuffer(output),
     }));
