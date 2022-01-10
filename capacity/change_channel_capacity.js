@@ -48,25 +48,24 @@ module.exports = ({ask, delay, lnd, logger}, cbk) => {
 
       // Ask to confirm what will happen in a change capacity
       askToConfirm: ['validate', ({}, cbk) => {
-        // const details = [
-        //   'This is experimental. Channels may force-close instead of change.',
-        //   'Adding funds currently requires an extra confirmation wait.',
-        //   'Chain fees will be deducted from the changed capacity total.',
-        //   'Chain fees will be paid from the initiator local balance.',
-        //   'Forwards with the peer will be halted during capacity change.',
-        // ];
+        const details = [
+          'This is experimental. Channels may force-close instead of change.',
+          'Adding funds currently requires an extra confirmation wait.',
+          'Chain fees will be deducted from the changed capacity total.',
+          'Chain fees will be paid from the initiator local balance.',
+          'Forwards with the peer will be halted during capacity change.',
+        ];
 
-        // // Show the warnings
-        // logger.info({details});
+        // Show the warnings
+        logger.info({details});
 
-        // return ask({type: 'confirm', name: 'ok', message: 'OK?'}, ({ok}) => {
-        //   if (!ok) {
-        //     return cbk([400, 'CanceledChannelCapacityChange']);
-        //   }
+        return ask({type: 'confirm', name: 'ok', message: 'OK?'}, ({ok}) => {
+          if (!ok) {
+            return cbk([400, 'CanceledChannelCapacityChange']);
+          }
 
-        //   return cbk();
-        // });
-        return cbk();
+          return cbk();
+        });
       }],
 
       // Get the public key of this node
