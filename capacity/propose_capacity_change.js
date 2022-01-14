@@ -3,6 +3,7 @@ const asyncDoUntil = require('async/doUntil');
 const asyncReflect = require('async/reflect');
 const {broadcastChainTransaction} = require('ln-service');
 const {cancelPendingChannel} = require('ln-service');
+const {deletePendingChannel} = require('ln-service');
 const {fundPendingChannels} = require('ln-service');
 const {getChainTransactions} = require('ln-service');
 const {getChannels} = require('ln-service');
@@ -270,7 +271,6 @@ module.exports = (args, cbk) => {
         'getReplacement',
         ({getPeerSignature, getReplacement}, cbk) =>
       {
-        // Exit early when there is no need to cancel
         if (!getPeerSignature.error) {
           return cbk();
         }
@@ -347,12 +347,12 @@ module.exports = (args, cbk) => {
         return asyncDoUntil(
           cbk => {
             // Try and override the force close tx using the replacement
-            return broadcastChainTransaction({
-              transaction,
-              after: getHeight.current_block_height - fuzzHeight,
-              lnd: args.lnd,
-            },
-            cbk);
+              return broadcastChainTransaction({
+                transaction,
+                after: getHeight.current_block_height - fuzzHeight,
+                lnd: args.lnd,
+              },
+              cbk);
           },
           (broadcast, cbk) => {
             args.logger.info({waiting_for_confirmation: broadcast.id});
@@ -377,15 +377,17 @@ module.exports = (args, cbk) => {
                 return tx.id === getReplacement.force_close_tx_id;
               });
 
-              // Cancel the pending channel if the force close confirms
-              if (!!replacing) {
-                return cancelPendingChannel({
-                  id: getReplacement.pending_channel_id,
+              // Abandon the pending channel if the force close confirms
+              if(!!replacing) {
+                return deletePendingChannel({
                   lnd: args.lnd,
-                },
+                  confirmed_transaction: getReplacement.force_close_tx_id,
+                  pending_transaction: broadcast.id,
+                  pending_transaction_vout: getReplacement.transaction_vout,
+                }),
                 () => {
-                  return cbk([503, 'FailedToReplaceForceCloseTransaction']);
-                });
+                  return cbk([503, 'FailedToDeletePendingChannel']);
+                }
               }
 
               return getChannels({
