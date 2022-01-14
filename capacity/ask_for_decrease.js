@@ -12,8 +12,9 @@ const bufferAsHex = buffer => buffer.toString('hex');
 const dust = 550;
 const isNumber = n => !isNaN(n);
 const isPublicKey = n => !!n && /^0[2-3][0-9A-F]{64}$/i.test(n);
+const minChannelCapacity = 20000;
 const {toOutputScript} = address;
-let channelOpenAddress = {};
+
 
 /** Ask for details about a decrease
 
@@ -87,6 +88,12 @@ module.exports = ({ask, lnd, max}, cbk) => {
 
       // Ask for the public key of the node to trade with
       askForNodeId: ['getIdentity','askForAmount', ({getIdentity, askForAmount}, cbk) => {
+
+        //Exit early if no decrease amount or amount is too low to open a channel
+        if(!askForAmount || askForAmount < minChannelCapacity) {
+          return cbk();
+        }
+
         return ask({
           name: 'query',
           message: `Public key of node to open channel with for ${askForAmount}? (optional)`,
