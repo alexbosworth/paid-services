@@ -1,6 +1,7 @@
 const asyncAuto = require('async/auto');
 const asyncEach = require('async/each');
 const {cancelHodlInvoice} = require('ln-service');
+const {getInvoice} = require('ln-service');
 const {returnResult} = require('asyncjs-util');
 const {settleHodlInvoice} = require('ln-service');
 
@@ -10,19 +11,24 @@ const {isArray} = Array;
 
   {
     cancel: [<Alternative Invoice Id Hex String>]
+    id: <Trade Id Hex String>
     lnd: <Authenticated LND API Object>
     secret: <Invoice to Settle Preimage Hex String>
   }
 
   @returns via cbk or Promise
 */
-module.exports = ({cancel, lnd, secret}, cbk) => {
+module.exports = ({cancel, id, lnd, secret}, cbk) => {
   return new Promise((resolve, reject) => {
     return asyncAuto({
       // Check arguments
       validate: cbk => {
         if (!isArray(cancel)) {
           return cbk([400, 'ExpectedArrayOfIdsToCancelToAcceptTrade']);
+        }
+
+        if (!id) {
+          return cbk([400, 'ExpectedAnchorTradeIdToAcceptTrade']);
         }
 
         if (!lnd) {
@@ -36,9 +42,12 @@ module.exports = ({cancel, lnd, secret}, cbk) => {
         return cbk();
       },
 
+      // Fetch the anchor invoice to make sure it's still open
+      getAnchor: ['validate', ({}, cbk) => getInvoice({id, lnd}, cbk)],
+
       // Cancel alternative invoices so that only one resolves as settled
-      cancel: ['validate', ({}, cbk) => {
-        return asyncEach(cancel, (id, cbk) => {
+      cancel: ['getAnchor', ({}, cbk) => {
+        return asyncEach([].concat(cancel).concat(id), (id, cbk) => {
           return cancelHodlInvoice({id, lnd}, cbk);
         },
         cbk);

@@ -18,7 +18,6 @@ const defaultProbeTimeoutMs = 1000 * 60 * 5;
 const expiresAt = () => new Date(Date.now() + 1000 * 60 * 30).toISOString();
 const interval = 1000 * 60 * 10;
 const rateDivisor = BigInt(1e6);
-const sumOf = arr => arr.reduce((sum, n) => BigInt(n) + n, BigInt(0));
 const text = 'Relay payment request created';
 const times = 12;
 

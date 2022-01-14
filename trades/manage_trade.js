@@ -16,6 +16,7 @@ const findTrade = require('./find_trade');
 const hexAsUtf8 = hex => Buffer.from(hex, 'hex').toString();
 const {isArray} = Array;
 const isHexPreimage = n => !!n && /^[0-9A-F]{64}$/i.test(n);
+const tokensAsBigUnit = tokens => (tokens / 1e8).toFixed(8);
 
 /** Manage an individual trade
 
@@ -141,7 +142,7 @@ module.exports = ({ask, lnd, logger}, cbk) => {
         logger.info({
           id: requestDetails.id,
           offering: requestDetails.description,
-          price: requestDetails.tokens,
+          price: tokensAsBigUnit(requestDetails.tokens),
           is_canceled: invoice.is_canceled || undefined,
           is_purchased: invoice.is_confirmed || undefined,
         });
@@ -169,7 +170,7 @@ module.exports = ({ask, lnd, logger}, cbk) => {
         logger.info({
           id: requestDetails.id,
           offering: requestDetails.description,
-          price: requestDetails.tokens,
+          price: tokensAsBigUnit(requestDetails.tokens),
         });
 
         return ask({
@@ -195,7 +196,15 @@ module.exports = ({ask, lnd, logger}, cbk) => {
           return cbk();
         }
 
-        return cancelHodlInvoice({lnd, id: requestDetails.id}, cbk);
+        return cancelHodlInvoice({lnd, id: requestDetails.id}, err => {
+          if (!!err) {
+            return cbk(err);
+          }
+
+          logger.info({trade_canceled: true});
+
+          return cbk();
+        });
       }],
 
       // Select a purchase option for the trade
@@ -216,10 +225,12 @@ module.exports = ({ask, lnd, logger}, cbk) => {
           return cbk();
         }
 
+        logger.info({trade: findTrade.trade});
+
         logger.info({
           request: findTrade.request,
           purchase: requestDetails.description,
-          price: requestDetails.tokens,
+          price: tokensAsBigUnit(requestDetails.tokens),
           to: requestDetails.destination,
         });
 

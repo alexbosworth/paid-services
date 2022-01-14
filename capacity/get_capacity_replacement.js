@@ -266,7 +266,6 @@ module.exports = (args, cbk) => {
             give_tokens: pendingChannel.remote_balance,
             is_private: args.is_private,
             partner_public_key: pendingChannel.partner_public_key,
-            is_private: args.is_private,
           }],
           is_avoiding_broadcast: true,
           lnd: args.lnd,

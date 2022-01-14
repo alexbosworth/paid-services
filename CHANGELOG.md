@@ -1,5 +1,13 @@
 # Versions
 
+## Version 3.6.0
+
+- `manageTrades`: Add support for persistent open trades
+- `manageTrades`: Add expiration dates to open trades
+- `manageTrades`: Support longer-lived open trade scenarios
+- `manageTrades`: Show final encoded trade when requesting open trade
+- `manageTrades`: Check for RPC signer support before trading
+
 ## Version 3.5.1
 
 - `changeChannelCapacity`: Allow changing private/public status of channel

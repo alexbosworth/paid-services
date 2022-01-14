@@ -17,6 +17,7 @@ const utf8AsHex = utf8 => Buffer.from(utf8, 'utf8').toString('hex');
 
   {
     description: <Trade Description String>
+    expires_at: <Trade Expires At ISO 8601 Date String>
     is_hold: <Create Hold Invoice Bool>
     lnd: <Authenticated LND API Object>
     secret: <Clear Secret String>
@@ -38,6 +39,10 @@ module.exports = (args, cbk) => {
       validate: cbk => {
         if (!args.description) {
           return cbk([400, 'ExpectedDescriptionToFinalizeTradeSecret']);
+        }
+
+        if (!args.expires_at) {
+          return cbk([400, 'ExpectedExpiresAtDateToFinalizeTradeSecret']);
         }
 
         if (!args.lnd) {
@@ -75,6 +80,7 @@ module.exports = (args, cbk) => {
         if (!!args.is_hold) {
           return createHodlInvoice({
             description: args.description,
+            expires_at: args.expires_at,
             id: bufferAsHex(sha256(hexAsBuffer(encrypt.payment_secret))),
             lnd: args.lnd,
             secret: encrypt.payment_secret,
@@ -85,6 +91,7 @@ module.exports = (args, cbk) => {
 
         return createInvoice({
           description: args.description,
+          expires_at: args.expires_at,
           lnd: args.lnd,
           secret: encrypt.payment_secret,
           tokens: args.tokens,

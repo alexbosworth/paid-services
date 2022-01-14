@@ -47,7 +47,6 @@ const rebroadcastTimeMs = 1000 * 5;
 const recordsAsObject = a => a.reduce((sum, n) => sum[n.type] = n.value, {});
 const requestCapacityChangeIntervalMs = 2000;
 const requestCapacityChangeTimeoutMs = 1000 * 60 * 60 * 6;
-const sumOf = arr => arr.reduce((sum, n) => sum + n, Number());
 const testMessage = '00';
 const tokensAsBigUnit = tokens => (tokens / 1e8).toFixed(8);
 const uniq = arr => Array.from(new Set(arr));

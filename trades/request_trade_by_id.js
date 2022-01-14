@@ -22,6 +22,7 @@ const tradeIdRecordType = '0';
     auth: <Encrypted Payload Auth Hex String>
     payload: <Preimage Encrypted Payload Hex String>
     request: <BOLT 11 Payment Request String>
+    trade: <Encoded Trade Record String>
   }
 */
 module.exports = ({id, lnd, to}, cbk) => {
@@ -77,7 +78,12 @@ module.exports = ({id, lnd, to}, cbk) => {
           }
 
           try {
-            return cbk(null, secret);
+            return cbk(null, {
+              auth: secret.auth,
+              payload: secret.payload,
+              request: secret.request,
+              trade: tradeRecord.value,
+            });
           } catch (err) {
             return cbk([503, 'ExpectedValidTradeRecordFromPeer', {err}]);
           }

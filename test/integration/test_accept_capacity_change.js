@@ -32,7 +32,6 @@ const maturity = 100;
 const proposeCapacityChange = propose;
 const signCapacityReplacement = method;
 const size = 2;
-const sumOf = arr => arr.reduce((sum, n) => sum + n, 0);
 const times = 2000;
 const {toOutputScript} = address;
 const weightAsVBytes = n => Math.ceil(n / 4);

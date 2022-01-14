@@ -24,6 +24,8 @@ const makeRequestId = () => randomBytes(32).toString('hex');
 const requestTradeType = '805005';
 const requestTradesTimeoutMs = 1000 * 30;
 const tradesRequestIdType = '1';
+const uniq = arr => Array.from(new Set(arr));
+const uniqBy = (a,b) => a.filter((e,i) => a.findIndex(n => n[b] == e[b]) == i);
 const waitForTradesMs = 1000 * 5;
 
 /** Find a trade to purchase
@@ -49,6 +51,7 @@ const waitForTradesMs = 1000 * 5;
     auth: <Encrypted Payload Auth Hex String>
     payload: <Preimage Encrypted Payload Hex String>
     request: <BOLT 11 Payment Request String>
+    trade: <Encoded Trade String>
   }
 */
 module.exports = ({ask, id, identity, lnd, logger, nodes}, cbk) => {
@@ -89,7 +92,23 @@ module.exports = ({ask, id, identity, lnd, logger, nodes}, cbk) => {
 
           // Exit early when the node id and sockets is specified directly
           if (!!connect.node) {
-            return cbk(null, connect.node);
+            return getNode({
+              lnd,
+              is_omitting_channels: true,
+              public_key: connect.node.id,
+            },
+            (err, res) => {
+              if (!!err) {
+                return cbk(null, connect.node);
+              }
+
+              const sockets = connect.node.sockets.map(n => n.socket);
+
+              return cbk(null, {
+                id: connect.node.id,
+                sockets: uniq([].concat(sockets).concat(connect.node.sockets)),
+              });
+            });
           }
 
           // Exit early when there is no landmark channel
@@ -156,6 +175,8 @@ module.exports = ({ask, id, identity, lnd, logger, nodes}, cbk) => {
 
         // Try and connect to a referenced node
         return asyncDetect(getNodes.filter(n => !!n), (node, cbk) => {
+          logger.info({connecting_to: node.id});
+
           // Attempt referenced sockets to establish p2p connection
           return asyncDetectSeries(node.sockets, (socket, cbk) => {
             return addPeer({lnd, socket, public_key: node.id}, err => {
@@ -238,6 +259,8 @@ module.exports = ({ask, id, identity, lnd, logger, nodes}, cbk) => {
           return res.success({});
         });
 
+        logger.info({requesting_trade_details: true});
+
         // Once connected, ask for the trade details
         return makePeerRequest({
           lnd,
@@ -270,7 +293,9 @@ module.exports = ({ask, id, identity, lnd, logger, nodes}, cbk) => {
           return cbk([404, 'NoTradesFound']);
         }
 
-        const [trade, other] = requestTrades.trades;
+        const uniqueTrades = uniqBy(requestTrades.trades, 'description');
+
+        const [trade, other] = uniqueTrades;
 
         // Exit early when there is only a single trade
         if (!other) {
@@ -279,7 +304,7 @@ module.exports = ({ask, id, identity, lnd, logger, nodes}, cbk) => {
 
         // Present the possible choices
         return ask({
-          choices: requestTrades.trades.map(trade => ({
+          choices: uniqueTrades.map(trade => ({
             name: trade.description,
             value: trade.id,
           })),

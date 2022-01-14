@@ -1,21 +1,23 @@
 const asyncAuto = require('async/auto');
+const {createInvoice} = require('ln-service');
 const {getChannels} = require('ln-service');
 const {getNetwork} = require('ln-sync');
-const {getNodeAlias} = require('ln-sync');
 const {getWalletInfo} = require('ln-service');
 const {returnResult} = require('asyncjs-util');
 
-const encodeOpenTrade = require('./encode_open_trade');
+const encodeAnchoredTrade = require('./encode_anchored_trade');
 const finalizeTradeSecret = require('./finalize_trade_secret');
-const serviceTradeRequests = require('./service_trade_requests');
+const serviceOpenTrade = require('./service_open_trade');
 
 const asNumber = n => parseFloat(n, 10);
+const daysAsMs = days => Number(days) * 1000 * 60 * 60 * 24;
+const defaultExpirationDays = 14;
 const {floor} = Math;
+const futureDate = ms => new Date(Date.now() + ms).toISOString();
 const isNumber = n => !isNaN(n);
 const isPublicKey = n => !!n && /^0[2-3][0-9A-F]{64}$/i.test(n);
 const maxDescriptionLength = 100;
 const maxSecretLength = 100;
-const nodeName = (alias, id) => `${alias} ${id}`;
 const uriAsSocket = n => n.substring(67);
 const utf8AsHex = utf8 => Buffer.from(utf8).toString('hex');
 
@@ -164,20 +166,76 @@ module.exports = ({ask, lnd, logger}, cbk) => {
         cbk);
       }],
 
-      // Wait for a peer to connect and ask for the trade details
-      serviceTradeRequests: [
+      // Ask for the expiration of the trade
+      askForExpiration: ['askForPrice', ({}, cbk) => {
+        return ask({
+          default: defaultExpirationDays,
+          name: 'days',
+          message: 'Days to offer this for?',
+          validate: input => {
+            if (!isNumber(input) || !Number(input)) {
+              return false;
+            }
+
+            return true;
+          },
+        },
+        cbk);
+      }],
+
+      // Create an anchor invoice for the trade
+      createAnchor: [
         'askForDescription',
+        'askForExpiration',
         'askForNodeId',
         'askForPrice',
         'askForSecret',
+        ({
+          askForDescription,
+          askForExpiration,
+          askForNodeId,
+          askForPrice,
+          askForSecret,
+        },
+        cbk) =>
+      {
+        // Exit early if this is a closed trade
+        if (!!askForNodeId.id) {
+          return cbk();
+        }
+
+        const {encoded} = encodeAnchoredTrade({
+          description: askForDescription.description,
+          secret: askForSecret.secret,
+        });
+
+        return createInvoice({
+          lnd,
+          description: encoded,
+          expires_at: futureDate(daysAsMs(askForExpiration.days)),
+          tokens: asNumber(askForPrice.tokens),
+        },
+        cbk);
+      }],
+
+      // Wait for a peer to connect and ask for the trade details
+      serviceTradeRequests: [
+        'askForDescription',
+        'askForExpiration',
+        'askForNodeId',
+        'askForPrice',
+        'askForSecret',
+        'createAnchor',
         'getChannels',
         'getIdentity',
         'getNetwork',
         ({
           askForDescription,
+          askForExpiration,
           askForNodeId,
           askForPrice,
           askForSecret,
+          createAnchor,
           getChannels,
           getIdentity,
           getNetwork,
@@ -189,64 +247,37 @@ module.exports = ({ask, lnd, logger}, cbk) => {
           return cbk();
         }
 
-        // Encode the open trade details to give out
-        const openTrade = encodeOpenTrade({
-          network: getNetwork.network,
-          nodes: [{
-            channels: getChannels.channels,
-            id: getIdentity.public_key,
-            sockets: (getIdentity.uris || []).map(uriAsSocket),
-          }],
-        });
-
-        const settled = [];
-
-        const sub = serviceTradeRequests({
+        return serviceOpenTrade({
           lnd,
+          logger,
+          channels: getChannels.channels,
           description: askForDescription.description,
+          expires_at: futureDate(daysAsMs(askForExpiration.days)),
+          id: createAnchor.id,
+          network: getNetwork.network,
+          public_key: getIdentity.public_key,
           secret: askForSecret.secret,
           tokens: asNumber(askForPrice.tokens),
-        });
-
-        sub.on('details', async ({to}) => {
-          const {alias, id} = await getNodeAlias({lnd, id: to});
-
-          return logger.info({return_trade_info_to: nodeName(alias, id)});
-        });
-
-        sub.once('end', async () => {
-          const [to] = settled;
-
-          if (!!to) {
-            const {alias, id} = await getNodeAlias({lnd, id: to});
-
-            return logger.info({finished_trade_with: nodeName(alias, id)});
-          }
-
-          return cbk();
-        });
-
-        sub.on('failure', failure => logger.error({failure}));
-
-        sub.on('settled', ({to}) => settled.push(to));
-
-        sub.on('trade', async ({to}) => {
-          const {alias, id} = await getNodeAlias({lnd, id: to});
-
-          return logger.info({make_trade_invoice_for: nodeName(alias, id)});
-        });
-
-        // Show the trade details blob
-        return logger.info({waiting_for_trade_request_to: openTrade.trade});
+          uris: (getIdentity.uris || []),
+        },
+        cbk);
       }],
 
       // Finalize the trade with an encrypted secret and an invoice
       finalize: [
         'askForDescription',
+        'askForExpiration',
         'askForNodeId',
         'askForPrice',
         'askForSecret',
-        ({askForDescription, askForNodeId, askForPrice, askForSecret}, cbk) =>
+        ({
+          askForDescription,
+          askForExpiration,
+          askForNodeId,
+          askForPrice,
+          askForSecret,
+        },
+        cbk) =>
       {
         // Exit early when there is no node to finalize the trade to
         if (!askForNodeId.id) {
@@ -256,6 +287,7 @@ module.exports = ({ask, lnd, logger}, cbk) => {
         return finalizeTradeSecret({
           lnd,
           description: askForDescription.description,
+          expires_at: futureDate(daysAsMs(askForExpiration.days)),
           secret: askForSecret.secret,
           to: askForNodeId.id,
           tokens: asNumber(askForPrice.tokens),

@@ -27,7 +27,6 @@ const log = () => {};
 const maturity = 100;
 const size = 2;
 const slow = 5000;
-const sumOf = arr => arr.reduce((sum, n) => sum + n, 0);
 const times = 2000;
 const {toOutputScript} = address;
 const weightAsVBytes = n => Math.ceil(n / 4);

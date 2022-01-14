@@ -1,6 +1,7 @@
 const EventEmitter = require('events');
 const {randomBytes} = require('crypto');
 
+const {getInvoice} = require('ln-service');
 const {subscribeToInvoice} = require('ln-service');
 
 const acceptTrade = require('./accept_trade');
@@ -11,22 +12,35 @@ const {serviceTypeRequestTrades} = require('./../service_types');
 const {serviceTypeReceiveTrades} = require('./../service_types');
 
 const descRecord = description => ({type: '2', value: description});
+const events = ['details', 'end', 'failure', 'settled', 'trade'];
 const findIdRecord = records => records.find(n => n.type === '0');
 const findRequestIdRecord = records => records.find(n => n.type === '1');
+const hashHexLength = 64;
 const idBackType = '0';
 const idRecord = id => ({type: '1', value: id});
-const makeEphemeralTradeId = () => randomBytes(32).toString('hex');
+const msRemainingToTime = time => time - Date.now();
 const postOpenTradeTimeoutMs = 1000 * 30;
+const sumOf = arr => arr.reduce((sum, n) => sum + n, 0);
 const tradeSecretType = '1';
 const utf8AsHex = utf8 => Buffer.from(utf8).toString('hex');
 
 /** Service requests for an open trade
 
+  The maximum expiration date is three weeks
+
   {
     description: <Trade Description String>
+    expires_at: <Trade Expires At ISO 8601 Date String>
+    id: <Trade Id Hex String>
     lnd: <Authenticated LND API Object>
     secret: <Secret Payload String>
     tokens: <Tokens Number>
+  }
+
+  // Return details
+  @event 'details'
+  {
+    to: <Public Key Id Hex String>
   }
 
   // Service ended
@@ -35,12 +49,6 @@ const utf8AsHex = utf8 => Buffer.from(utf8).toString('hex');
   // Encountered a failure
   @event 'failure'
   [<Failure Code Number>, <Failure Code String>]
-
-  // Return details
-  @event 'details'
-  {
-    to: <Public Key Id Hex String>
-  }
 
   // Received payment
   @event 'settled'
@@ -57,18 +65,66 @@ const utf8AsHex = utf8 => Buffer.from(utf8).toString('hex');
   @returns
   <Service Event Emitter Object>
 */
-module.exports = ({description, lnd, secret, tokens}) => {
+module.exports = args => {
+  if (!args.description) {
+    throw new Error('ExpectedTradeDescriptionToServiceTradeRequests');
+  }
+
+  if (!args.id) {
+    throw new Error('ExpectedTradeIdToServiceTradeRequests');
+  }
+
+  if (args.id.length !== hashHexLength) {
+    throw new Error('ExpectedShorterRequestIdValueToServiceTradeRequests');
+  }
+
+  if (!args.lnd) {
+    throw new Error('ExpectedAuthenticatedLndToServiceTradeRequests');
+  }
+
+  if (!args.secret) {
+    throw new Error('ExpectedSecretToEncryptToServiceTradeRequests');
+  }
+
+  if (!args.tokens) {
+    throw new Error('ExpectedTokensPriceForTradeToServiceTradeRequests');
+  }
+
   const emitter = new EventEmitter();
 
   const holds = [];
-  const id = makeEphemeralTradeId();
-  const service = servicePeerRequests({lnd});
+  const service = servicePeerRequests({lnd: args.lnd});
+
+  // Stop the service when there are no more listeners
+  emitter.on('removeListener', () => {
+    // Exit early when there are still listeners on an event
+    if (!!sumOf(events.map(n => emitter.listenerCount(n)))) {
+      return;
+    }
+
+    return service.stop({});
+  });
+
+  const sub = subscribeToInvoice({id: args.id, lnd: args.lnd});
+
+  sub.on('invoice_updated', invoice => {
+    if (!invoice.is_canceled) {
+      return;
+    }
+
+    holds.forEach(n => n.sub.removeAllListeners());
+
+    return service.stop({});
+  });
 
   // Notify when the service ends
   service.end(() => emitter.emit('end', {}));
 
   // Basic trade description
-  const basicTradeRecords = [idRecord(id), descRecord(utf8AsHex(description))];
+  const basicTradeRecords = [
+    idRecord(args.id),
+    descRecord(utf8AsHex(args.description)),
+  ];
 
   // Wait for a request for the open trade
   service.request({type: serviceTypeRequestTrades}, (req, res) => {
@@ -76,7 +132,7 @@ module.exports = ({description, lnd, secret, tokens}) => {
     const requestTradeId = findIdRecord(req.records);
 
     // Exit early when the trade requested is unrelated
-    if (!!requestTradeId && requestTradeId.value !== id) {
+    if (!!requestTradeId && requestTradeId.value !== args.id) {
       return;
     }
 
@@ -87,6 +143,13 @@ module.exports = ({description, lnd, secret, tokens}) => {
       return emitter.emit('failure', [400, 'ExpectedRequestTradeOrRequestId']);
     }
 
+    // Exit early when the trade is expired
+    if (args.expires_at < new Date().toISOString()) {
+      service.stop({});
+
+      return;
+    }
+
     // Exit early and ping peer with trade when this is an open ended query
     if (!requestTradeId) {
       emitter.emit('details', {to: req.from});
@@ -95,25 +158,31 @@ module.exports = ({description, lnd, secret, tokens}) => {
 
       const records = [].concat(basicTradeRecords).concat(reqIdRecord);
 
-      // Ping the node with trade details
-      return makePeerRequest({
-        lnd,
-        records,
-        timeout: postOpenTradeTimeoutMs,
-        to: req.from,
-        type: serviceTypeReceiveTrades,
-      },
-      err => {
-        if (!!err) {
-          failure([503, 'FailedToDeliverTradeInfo']);
-
-          return emitter.emit(
-            'failure',
-            [503, 'FailedToDeliverTradeInfo', {err}]
-          );
+      return getInvoice({id: args.id, lnd: args.lnd}, (err, res) => {
+        if (!!err || !!res.is_canceled) {
+          return;
         }
 
-        return success({});
+        // Ping the node with trade details
+        return makePeerRequest({
+          records,
+          lnd: args.lnd,
+          timeout: postOpenTradeTimeoutMs,
+          to: req.from,
+          type: serviceTypeReceiveTrades,
+        },
+        err => {
+          if (!!err) {
+            failure([503, 'FailedToDeliverTradeInfo']);
+
+            return emitter.emit(
+              'failure',
+              [503, 'FailedToDeliverTradeInfo', {err}]
+            );
+          }
+
+          return success({});
+        });
       });
     }
 
@@ -122,12 +191,13 @@ module.exports = ({description, lnd, secret, tokens}) => {
 
     // Create a trade secret for the requesting peer and return that
     return finalizeTradeSecret({
-      description,
-      lnd,
-      secret,
-      tokens,
+      description: args.description,
+      expires_at: args.expires_at,
       is_hold: true,
+      lnd: args.lnd,
+      secret: args.secret,
       to: req.from,
+      tokens: args.tokens,
     },
     (err, res) => {
       if (!!err) {
@@ -140,7 +210,7 @@ module.exports = ({description, lnd, secret, tokens}) => {
       const record = {type: tradeSecretType, value: res.trade};
 
       // Add hold invoice to set of held invoices, only one should settle
-      const sub = subscribeToInvoice({lnd, id: res.id});
+      const sub = subscribeToInvoice({id: res.id, lnd: args.lnd});
 
       // Add sub to list of holds
       holds.push({sub, id: res.id});
@@ -160,8 +230,9 @@ module.exports = ({description, lnd, secret, tokens}) => {
 
         // Settle the held invoice with the preimage
         return acceptTrade({
-          lnd,
           cancel: holds.filter(n => n.id !== updated.id).map(n => n.id),
+          id: args.id,
+          lnd: args.lnd,
           secret: res.secret,
         },
         err => {
