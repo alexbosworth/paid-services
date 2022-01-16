@@ -37,7 +37,7 @@
     "url": "https://github.com/alexbosworth/paid-services.git"
   },
   "scripts": {
-    "integration-tests": "tap --branches=1 --functions=1 --lines=1 --statements=1 -t 120 test/integration/*.js",
+    "integration-tests": "tap --branches=1 --functions=1 --lines=1 --statements=1 -t 180 test/integration/*.js",
     "test": "tap --branches=1 --functions=1 --lines=1 --statements=1 -t 60 test/actions/*.js test/capacity/*.js test/client/*.js test/config/*.js test/p2p/*.js test/records/*.js test/respond/*.js test/server/*.js test/server/*.js test/services/*.js test/trades/*.js"
   },
   "version": "3.6.0"

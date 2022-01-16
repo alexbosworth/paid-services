@@ -13,7 +13,7 @@ const dummySignature = Buffer.alloc(74);
 const dummyTokens = 0;
 const dummyVout = 0;
 const hexAsBuffer = hex => Buffer.from(hex, 'hex');
-const increaseBuffer = 300;
+const increaseBuffer = 250;
 const {max} = Math;
 const weightAsVBytes = weight => weight / 4;
 
@@ -24,7 +24,7 @@ const weightAsVBytes = weight => weight / 4;
     commit_transaction_fee: <Commit Transaction Fee Tokens Number>
     commit_transaction_weight: <Commit Transaction Weight Units Number>
     decrease: [{
-      output: <Output Script Hex String>
+      [output]: <Output Script Hex String>
       tokens: <Spend Value to Chain Address Tokens Number>
     }]
     [increase]: <Add Funds Tokens Number>
@@ -51,15 +51,11 @@ module.exports = args => {
 
   // Add the decreases as outputs
   args.decrease.forEach(({output, tokens}) => {
-    return tx.addOutput(hexAsBuffer(output), tokens);
+    return tx.addOutput(hexAsBuffer(output || dummyP2wsh), tokens);
   });
 
   // Add an output to represent the new channel output
   tx.addOutput(dummyP2wsh, args.capacity);
-
-  args.decrease.forEach(({output}) => {
-    return tx.addOutput(hexAsBuffer(output), dummyTokens);
-  });
 
   // Add an input to represent the old channel input
   tx.addInput(dummyHash, dummyVout);

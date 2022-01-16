@@ -1,3 +1,4 @@
+const {addPeer} = require('ln-service');
 const {address} = require('bitcoinjs-lib');
 const asyncAuto = require('async/auto');
 const asyncMap = require('async/map');
@@ -25,8 +26,10 @@ const id = Buffer.alloc(32).toString('hex');
 const interval = 10;
 const logger = {error: () => {}, info: () => {}};
 const maturity = 100;
-const size = 2;
+const size = 3;
 const slow = 3000;
+const splitCapacity = 200000;
+const sumOf = arr => arr.reduce((sum, n) => sum + n, 0);
 const times = 2000;
 const {toOutputScript} = address;
 const weightAsVBytes = n => Math.ceil(n / 4);
@@ -35,7 +38,7 @@ const weightAsVBytes = n => Math.ceil(n / 4);
 test(`Decrease capacity replacement`, async ({end, equal, strictSame}) => {
   const {kill, nodes} = await spawnLightningCluster({size});
 
-  const [control, target] = nodes;
+  const [control, target, remote] = nodes;
 
   const {generate, lnd} = control;
 
@@ -43,6 +46,9 @@ test(`Decrease capacity replacement`, async ({end, equal, strictSame}) => {
 
   // Make some funds
   await generate({count: maturity});
+
+  // Add remote as a peer
+  await addPeer({lnd, public_key: remote.id, socket: remote.socket});
 
   try {
     // Open up a new channel
@@ -85,12 +91,16 @@ test(`Decrease capacity replacement`, async ({end, equal, strictSame}) => {
           lnd,
           logger,
           ask: (args, cbk) => {
+            if (args.name === 'add') {
+              return cbk({add: false});
+            }
+
             if (args.name === 'amount') {
-              return cbk({amount: '200000'});
+              return cbk({amount: splitCapacity});
             }
 
             if (args.name === 'decrease') {
-              return cbk({decrease: 'internal_spend_funds'});
+              return cbk({decrease: 'open_channel'});
             }
 
             if (args.name === 'direction') {
@@ -99,6 +109,10 @@ test(`Decrease capacity replacement`, async ({end, equal, strictSame}) => {
 
             if (args.name === 'internal') {
               return cbk({internal: true});
+            }
+
+            if (args.name === 'key') {
+              return cbk({key: remote.id});
             }
 
             if (args.name === 'ok') {
@@ -172,7 +186,9 @@ test(`Decrease capacity replacement`, async ({end, equal, strictSame}) => {
         async () => {
           const {channels} = await getChannels({lnd, is_active: true});
 
-          const [channel] = channels.filter(n => n.capacity < capacity);
+          const [channel] = channels
+            .filter(n => n.is_private)
+            .filter(n => n.capacity < capacity);
 
           await generate({});
 
@@ -180,7 +196,11 @@ test(`Decrease capacity replacement`, async ({end, equal, strictSame}) => {
             throw new Error('ExpectedChannelActivation');
           }
 
-          equal(channel.is_private, true, 'Channel is changed to private');
+          const channelWithRemote = channels.find(channel => {
+            return channel.partner_public_key === remote.id;
+          });
+
+          equal(channelWithRemote.capacity, splitCapacity, 'Remote created');
 
           {
             const {policies} = await getChannel({lnd, id: channel.id});

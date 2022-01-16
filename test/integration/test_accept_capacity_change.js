@@ -60,15 +60,15 @@ test(`Accept capacity replacement`, async ({end, equal, strictSame}) => {
 
     // Wait for the channel to be active
     const channel = await asyncRetry({interval, times}, async () => {
-      const [channel] = (await getChannels({lnd, is_active: true})).channels;
+      const [channel] = (await getChannels({lnd})).channels;
 
-      if (!!channel) {
+      if (!!channel && !!channel.is_active) {
         return channel;
       }
 
       await generate({});
 
-      throw new Error('ExpectedChannelActivation');
+      throw new Error('ExpectedInitialChannelActivation');
     });
 
     // Find the open tx

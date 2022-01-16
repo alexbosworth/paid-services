@@ -87,6 +87,10 @@ test(`Accept capacity replacement`, async ({end, equal, strictSame}) => {
               return cbk({amount: '0'});
             }
 
+            if (args.name === 'decrease') {
+              return cbk({decrease: 'internal_spend_funds'});
+            }
+
             if (args.name === 'direction') {
               return cbk({direction: 'decrease'});
             }
