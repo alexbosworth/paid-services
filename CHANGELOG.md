@@ -1,5 +1,9 @@
 # Versions
 
+## Version 3.7.0
+
+- `changeChannelCapacity`: Add support for decreasing funds into a new channel
+
 ## Version 3.6.0
 
 - `manageTrades`: Add support for persistent open trades
