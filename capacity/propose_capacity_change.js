@@ -1,16 +1,17 @@
 const asyncAuto = require('async/auto');
-const asyncDoUntil = require('async/doUntil');
+const asyncEach = require('async/each');
 const asyncReflect = require('async/reflect');
 const {broadcastChainTransaction} = require('ln-service');
 const {cancelPendingChannel} = require('ln-service');
 const {deletePendingChannel} = require('ln-service');
 const {fundPendingChannels} = require('ln-service');
-const {getChainTransactions} = require('ln-service');
 const {getChannels} = require('ln-service');
 const {getClosedChannels} = require('ln-service');
 const {getHeight} = require('ln-service');
+const {getPendingChannels} = require('ln-service');
 const {returnResult} = require('asyncjs-util');
 const {signTransaction} = require('ln-service');
+const {subscribeToBlocks} = require('ln-service');
 const {Transaction} = require('bitcoinjs-lib');
 const {transactionAsPsbt} = require('psbt');
 
@@ -22,6 +23,7 @@ const {serviceTypeSignCapacityChange} = require('./../service_types');
 
 const capacityChangeIdType = '0';
 const findSignatureRecord = records => records.find(n => n.type === '1');
+const {fromHex} = Transaction;
 const fuzzHeight = 3;
 const maxSigHexLength = 146;
 const peerRequestTimeoutMs = 1000 * 60 * 10;
@@ -36,9 +38,10 @@ const unsignedTransactionType = '1';
     bitcoinjs_network: <BitcoinJS Network Name String>
     channel: <Channel to Change Standard Format Channel Id String>
     decrease: [{
-      address: <Spend to Chain Address String>
-      output: <Spend to Output Script Hex String>
-      tokens: <Spend Value Number>
+      [address]: <Decrease Address String>
+      [node]: <Create Channel with Node With Public Key Hex String>
+      [output]: <Output Script Hex String>
+      tokens: <Decrease Tokens Number>
     }]
     id: <Capacity Change Request Id Hex String>
     is_private: <Channel is Private Bool>
@@ -110,10 +113,7 @@ module.exports = (args, cbk) => {
         return cbk();
       },
 
-      // Get the starting height
-      getHeight: ['validate', ({}, cbk) => getHeight({lnd: args.lnd}, cbk)],
-
-      // Close the current channal and get the unsigned replacement
+      // Close the current channel and get the unsigned replacement
       getReplacement: ['validate', ({}, cbk) => {
         return getCapacityReplacement({
           add_funds_transaction_id: args.increase_transaction_id,
@@ -132,9 +132,9 @@ module.exports = (args, cbk) => {
         cbk);
       }],
 
-      // Replacement channel outpoint
+      // The replacement channel outpoint will be returned as a result
       replacement: ['getReplacement', ({getReplacement}, cbk) => {
-        args.logger.info({pending_chan_id: getReplacement.pending_channel_id});
+        args.logger.info({proposal_id: getReplacement.pending_channel_id});
 
         return cbk(null, {
           transaction_id: getReplacement.transaction_id,
@@ -165,8 +165,8 @@ module.exports = (args, cbk) => {
         cbk);
       }],
 
-      // Use the unsigned replacement transaction to "fund" the pending channel
-      fundWithReplacement: [
+      // Derive the funding PSBT to use for funding
+      funding: [
         'getReplacement',
         'signAddFunds',
         ({getReplacement, signAddFunds}, cbk) =>
@@ -184,50 +184,31 @@ module.exports = (args, cbk) => {
           witness_script: getReplacement.witness_script,
         });
 
+        return cbk(null, psbt);
+      }],
+
+      // Use the unsigned replacement transaction to "fund" the pending channel
+      fundWithReplacement: [
+        'funding',
+        'getReplacement',
+        ({funding, getReplacement}, cbk) =>
+      {
+        const replacement = getReplacement.unsigned_transaction;
+
+        args.logger.info({funding_with_replacement_tx: replacement});
+
         return fundPendingChannels({
+          funding,
           channels: [getReplacement.pending_channel_id],
-          funding: psbt,
           lnd: args.lnd,
         },
         cbk);
       }],
 
-      //Fund the channel with the 2nd output
-      fundWithChange: [
-        'getReplacement',
-        'signAddFunds',
-        'fundWithReplacement',
-        ({getReplacement, signAddFunds}, cbk) =>
-      {
-        if(!getReplacement.second_pending_channel) {
-          return cbk();
-        }
-        const [addFundsSignature] = signAddFunds.signatures || [];
-
-        const {psbt} = interimReplacementPsbt({
-          increase_public_key: args.increase_key,
-          increase_signature: addFundsSignature,
-          increase_transaction: args.increase_transaction,
-          increase_transaction_vin: getReplacement.add_funds_vin,
-          open_transaction: args.open_transaction,
-          signature: getReplacement.signature,
-          unsigned_transaction: getReplacement.unsigned_transaction,
-          witness_script: getReplacement.witness_script,
-        });
-
-        // Create the commitment transaction with the peer on the replacement
-        return fundPendingChannels({
-          channels: [getReplacement.second_pending_channel.pending[0].id],
-          funding: psbt,
-          lnd: args.lnd,
-        }, cbk);
-      }],
-
       // Send the final go ahead signal now that a proposal is made
       getPeerSignature: [
-        'getReplacement',
         'fundWithReplacement',
-        'fundWithChange',
+        'getReplacement',
         asyncReflect(({getReplacement}, cbk) =>
       {
         return makePeerRequest({
@@ -261,73 +242,86 @@ module.exports = (args, cbk) => {
             return cbk([503, 'ExpectedSignatureRecordFromPeerForChange']);
           }
 
+          args.logger.info({peer_cosigned_capacity_change: true});
+
           return cbk(null, record.value);
         });
       })],
 
-      // Cancel the funding proposal when there is an error
-      cancelFunding: [
+      // Fund the additional other channel opens if present
+      fundAdditionalOpens: [
+        'funding',
         'getPeerSignature',
         'getReplacement',
-        ({getPeerSignature, getReplacement}, cbk) =>
-      {
-        if (!getPeerSignature.error) {
-          return cbk();
-        }
-
-        return cancelPendingChannel({
-          id: getReplacement.pending_channel_id,
-          lnd: args.lnd,
-        },
-        err => {
-          if (!!err) {
-            return cbk([503, 'FailedToCancelPendingChannel', {err}]);
-          }
-
-          // Return the original error
-          return cbk(getPeerSignature.error);
-        });
-      }],
-
-      //Cancel Funding 2nd channel
-      cancelFundingSecondChannel: [
-        'getPeerSignature',
-        'getReplacement',
-        ({getPeerSignature, getReplacement}, cbk) =>
-      {
-        // Exit early when there is no need to cancel
-        if (!getPeerSignature.error || !getReplacement.second_pending_channel) {
-          return cbk();
-        }
-
-        return cancelPendingChannel({
-          id: getReplacement.second_pending_channel.pending[0].id,
-          lnd: args.lnd,
-        },
-        err => {
-          if (!!err) {
-            return cbk([503, 'FailedToCancelPendingSecondChannel', {err}]);
-          }
-
-          // Return the original error
-          return cbk(getPeerSignature.error);
-        });
-      }],
-
-      // Broadcast the new funding transaction using the peer's signature
-      confirmFunding: [
-        'getHeight',
-        'getPeerSignature',
-        'getReplacement',
-        'signAddFunds',
-        ({getHeight, getPeerSignature, getReplacement, signAddFunds}, cbk) =>
+        asyncReflect(({funding, getPeerSignature, getReplacement}, cbk) =>
       {
         // Exit early when there was an error getting the peer signature
         if (!!getPeerSignature.error) {
           return cbk();
         }
 
+        // Exit early when there is nothing else to fund
+        if (!getReplacement.open_pending_ids.length) {
+          return cbk();
+        }
+
+        // Funding for the additional opens is separated for smoother canceling
+        return fundPendingChannels({
+          funding,
+          channels: getReplacement.open_pending_ids,
+          lnd: args.lnd,
+        },
+        cbk);
+      })],
+
+      // Cancel the unfunded channel opens when there is an error
+      cancelFunding: [
+        'getPeerSignature',
+        'getReplacement',
+        ({getPeerSignature, getReplacement}, cbk) =>
+      {
+        // Exit early when there was an error getting the peer signature
+        if (!getPeerSignature.error) {
+          return cbk();
+        }
+
+        const ids = getReplacement.open_pending_ids;
+
+        return asyncEach(ids, asyncReflect((id, cbk) => {
+          return cancelPendingChannel({id, lnd: args.lnd}, cbk);
+        }),
+        cbk);
+      }],
+
+      // Broadcast the new funding transaction using the peer's signature
+      confirmFunding: [
+        'fundAdditionalOpens',
+        'getPeerSignature',
+        'getReplacement',
+        'signAddFunds',
+        ({
+          fundAdditionalOpens,
+          getPeerSignature,
+          getReplacement,
+          signAddFunds,
+        },
+        cbk) =>
+      {
+        // When there is no peer signature, the force close must confirm
+        if (!!getPeerSignature.error) {
+          return cbk(null, {is_success: false});
+        }
+
+        // Do not broadcast a replacement when additional opens fail
+        if (!!fundAdditionalOpens.error) {
+          return cbk(null, {is_success: false});
+        }
+
         const [addFundsSignature] = signAddFunds.signatures || [];
+        const openOutputs = fromHex(args.open_transaction).outs;
+        const txId = fromHex(getReplacement.unsigned_transaction).getId();
+
+        const outScript = openOutputs[args.transaction_vout].script;
 
         // Insert the peer signature to get the final signed funding tx
         const {transaction} = finalizeCapacityReplacement({
@@ -344,77 +338,140 @@ module.exports = (args, cbk) => {
 
         args.logger.info({publishing_new_channel_transaction: transaction});
 
-        return asyncDoUntil(
-          cbk => {
-            // Try and override the force close tx using the replacement
-              return broadcastChainTransaction({
-                transaction,
-                after: getHeight.current_block_height - fuzzHeight,
-                lnd: args.lnd,
-              },
-              cbk);
-          },
-          (broadcast, cbk) => {
-            args.logger.info({waiting_for_confirmation: broadcast.id});
+        // Listen to new blocks to wait for the channel change confirmation
+        const sub = subscribeToBlocks({lnd: args.lnd});
 
-            // Rebroadcast until the transaction is confirmed
-            return getChainTransactions({lnd: args.lnd}, (err, res) => {
-              if (!!err) {
-                return cbk(err);
+        // Fail with error when the blocks subscription is lost
+        sub.on('error', err => {
+          sub.removeAllListeners();
+
+          return cbk([503, 'LostBlockchainSubscription', {err}]);
+        });
+
+        // Publish the new channel transaction when a block is received
+        sub.on('block', async () => {
+          // Broadcast the channel replacement tx
+          try {
+            await broadcastChainTransaction({transaction, lnd: args.lnd});
+
+            args.logger.info({published_new_channel_tx: txId});
+          } catch (err) {
+            args.logger.error({err});
+          }
+
+          // Look for the new channel to see if the change succeeded
+          try {
+            const {channels} = await getChannels({lnd: args.lnd});
+
+            const channel = channels.find(n => n.transaction_id === txId);
+
+            // Replacement is present but not yet active
+            if (!!channel && !channel.is_active) {
+              args.logger.info({waiting_for_channel_to_activate: true});
+            }
+
+            // The new channel confirmed successfully and so the change worked
+            if (!!channel && !!channel.is_active) {
+              sub.removeAllListeners();
+
+              return cbk(null, {is_success: true});
+            }
+          } catch (err) {
+            args.logger.error({err});
+          }
+
+          // Also look for a force closed channel to see if the change failed
+          try {
+            const {channels} = await getClosedChannels({lnd: args.lnd});
+            const chainTip = await getHeight({lnd: args.lnd});
+
+            const currentHeight = chainTip.current_block_height;
+
+            const channel = channels.find(channel => {
+              // The closed channel must have a closed tx id
+              if (!channel.close_transaction_id) {
+                return false;
               }
 
-              const confirmed = res.transactions.filter(n => !!n.is_confirmed);
-
-              // Find the confirmed tx
-              const tx = confirmed.find(tx => tx.id === broadcast.id);
-
-              if (!!tx) {
-                return cbk(null, true);
+              // Only consider channels that are conclusively closed
+              if (currentHeight - channel.close_confirm_height < fuzzHeight) {
+                return false;
               }
 
-              // Find the replacing tx
-              const replacing = confirmed.find(tx => {
-                return tx.id === getReplacement.force_close_tx_id;
-              });
-
-              // Abandon the pending channel if the force close confirms
-              if(!!replacing) {
-                return deletePendingChannel({
-                  lnd: args.lnd,
-                  confirmed_transaction: getReplacement.force_close_tx_id,
-                  pending_transaction: broadcast.id,
-                  pending_transaction_vout: getReplacement.transaction_vout,
-                }),
-                () => {
-                  return cbk([503, 'FailedToDeletePendingChannel']);
-                }
+              // Find close channel matching the channel outpoint
+              if (channel.transaction_id !== args.transaction_id) {
+                return false;
               }
 
-              return getChannels({
-                lnd: args.lnd,
-                partner_public_key: args.partner_public_key,
-              },
-              (err, res) => {
-                if (!!err) {
-                  return cbk(err);
-                }
-
-                const channel = res.channels.find(channel => {
-                  return channel.transaction_id === broadcast.id
-                });
-
-                // Stop broadcasting when a channel shows up
-                if (!!channel) {
-                  return cbk(null, true);
-                }
-
-                // Rebroadcast after a delay
-                return setTimeout(() => cbk(null, false), rebroadcastDelayMs);
-              });
+              return channel.transaction_vout === args.transaction_vout;
             });
+
+            // The old channel force closed and so the change fully failed
+            if (!!channel && channel.close_transaction_id !== txId) {
+              sub.removeAllListeners();
+
+              return cbk(null, {is_success: false});
+            }
+          } catch (err) {
+            args.logger.error({err});
+          }
+
+          return;
+        });
+
+        return;
+      }],
+
+      // Get pending channels to clean up if there was a failure
+      getPending: ['confirmFunding', ({confirmFunding}, cbk) => {
+        // Exit early when there was no failure
+        if (!!confirmFunding.is_success) {
+          return cbk();
+        }
+
+        return getPendingChannels({lnd: args.lnd}, cbk);
+      }],
+
+      // Clean up pending channels that will never confirm
+      cleanPendingChannels: [
+        'confirmFunding',
+        'getPending',
+        'getReplacement',
+        ({confirmFunding, getPending, getReplacement}, cbk) =>
+      {
+        // Exit early when the channel activated
+        if (!!confirmFunding.is_success) {
+          args.logger.info({channel_capacity_changed: true});
+
+          return cbk();
+        }
+
+        const replaceId = fromHex(getReplacement.unsigned_transaction).getId();
+
+        // Collect all the pending channels that depend on the replacement
+        const pending = getPending.pending_channels
+          .filter(n => !!n.is_opening)
+          .filter(n => n.transaction_id === replaceId);
+
+        // Delete the pending channels that can never confirm
+        return asyncEach(pending, (channel, cbk) => {
+          return deletePendingChannel({
+            confirmed_transaction: getReplacement.force_close_tx,
+            lnd: args.lnd,
+            pending_transaction: getReplacement.unsigned_transaction,
+            pending_transaction_vout: channel.transaction_vout,
           },
-          cbk
-        );
+          err => {
+            if (!!err) {
+              args.logger.error({err});
+            }
+
+            return cbk();
+          });
+        },
+        () => {
+          return cbk([503, 'FailedToChangeChannelCapacity']);
+        });
       }],
     },
     returnResult({reject, resolve, of: 'replacement'}, cbk));

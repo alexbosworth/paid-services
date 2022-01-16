@@ -1,20 +1,28 @@
 const {address} = require('bitcoinjs-lib');
 const asyncAuto = require('async/auto');
 const {createChainAddress} = require('ln-service');
-const {getWalletInfo} = require('ln-service');
+const {getIdentity} = require('ln-service');
 const {acceptsChannelOpen} = require('ln-sync');
 const {getNetwork} = require('ln-sync');
 const {networks} = require('bitcoinjs-lib');
 const {returnResult} = require('asyncjs-util');
+
 const proposeChannelOpen = require('./propose_channel_open');
 
+const askForChanSize = max => `Capacity of the new channel? (max: ${max})`;
+const askForSendSize = max => `Amount you want to send out? (max: ${max})`;
 const bufferAsHex = buffer => buffer.toString('hex');
 const dust = 550;
+const {isInteger} = Number;
 const isNumber = n => !isNaN(n);
 const isPublicKey = n => !!n && /^0[2-3][0-9A-F]{64}$/i.test(n);
 const minChannelCapacity = 20000;
+const minSpendTokens = 0;
+const openChannelAction = 'open_channel';
+const spendToExternalAddressAction = 'external_spend_funds';
+const spendToInternalAddressAction = 'internal_spend_funds';
 const {toOutputScript} = address;
-
+const tokensAsBigUnit = tokens => (tokens / 1e8).toFixed(8);
 
 /** Ask for details about a decrease
 
@@ -28,6 +36,7 @@ const {toOutputScript} = address;
   {
     [address]: <Send Funds to Address String>
     is_final: <Decrease is Final Decrease Bool>
+    [node]: <Create Channel with Node With Public Key Hex String>
     [output]: <Output Script Hex String>
     tokens: <Withdraw Tokens Number>
   }
@@ -52,55 +61,55 @@ module.exports = ({ask, lnd, max}, cbk) => {
         return cbk();
       },
 
-      // Ask for the amount to decrease
-      askForAmount: ['validate', ({}, cbk) => {
+      // Select the type of decrease
+      askForDecreaseType: ['validate', ({}, cbk) => {
         return ask({
-          default: '0',
-          name: 'amount',
-          message: `How much do you want to spend out (max: ${max})?`,
-          type: 'input',
-          validate: input => {
-            if (!isNumber(input) || !Number.isInteger(Number(input))) {
-              return false;
-            }
-
-            if (!!Number(input) && Number(input) < dust) {
-              return false;
-            }
-
-            if (!!Number(input) && Number(input) > max) {
-              return `The maximum possible to decrease is ${max}`;
-            }
-
-            return true;
-          },
+          choices: [
+            {
+              name: `Send decreased funds to the internal chain wallet`,
+              value: spendToInternalAddressAction,
+            },
+            {
+              name: `Send decreased funds to an external chain address`,
+              value: spendToExternalAddressAction,
+            },
+            {
+              disabled: max < minChannelCapacity,
+              name: `Spend decreased funds into new channel with another peer`,
+              value: openChannelAction,
+            },
+          ],
+          message: 'How do you want to change the channel capacity?',
+          name: 'decrease',
+          type: 'list',
         },
-        ({amount}) => cbk(null, amount));
+        ({decrease}) => cbk(null, decrease));
       }],
 
-      // Get network name
+      // Get the node identity key to make sure a channel open isn't with self
+      getIdentity: ['validate', ({}, cbk) => getIdentity({lnd}, cbk)],
+
+      // Get network name to validate addresses against
       getNetwork: ['validate', ({}, cbk) => getNetwork({lnd}, cbk)],
 
-      //Ask for public key to open channel with
-
-      // Get the node identity key
-      getIdentity: ['validate', ({}, cbk) => getWalletInfo({lnd}, cbk)],
-
       // Ask for the public key of the node to trade with
-      askForNodeId: ['getIdentity','askForAmount', ({getIdentity, askForAmount}, cbk) => {
-
-        //Exit early if no decrease amount or amount is too low to open a channel
-        if(!askForAmount || askForAmount < minChannelCapacity) {
+      askForNodeId: [
+        'askForDecreaseType',
+        'getIdentity',
+        ({askForDecreaseType, getIdentity}, cbk) =>
+      {
+        // Exit early when not opening a new channel
+        if (askForDecreaseType !== openChannelAction) {
           return cbk();
         }
 
         return ask({
-          name: 'query',
-          message: `Public key of node to open channel with for ${askForAmount}? (optional)`,
+          name: 'key',
+          message: 'Public key of node to open channel with?',
           type: 'input',
           validate: input => {
-            if(!input) {
-              return true;
+            if (!input) {
+              return false;
             }
 
             if (!isPublicKey(input)) {
@@ -114,44 +123,87 @@ module.exports = ({ask, lnd, max}, cbk) => {
             return true;
           },
         },
-        ({query}) => cbk(null, query));
+        ({key}) => cbk(null, key));
       }],
 
-      // Ask if withdrawing to an external address
-      askForExternal: [
-        'askForAmount',
-        'askForNodeId',
-        ({askForAmount, askForNodeId}, cbk) => {
-          //Exit early if there is a pubkey to open channel with
-        if (!Number(askForAmount) || !!askForNodeId) {
+      // Create a decrease address to withdraw funds out to
+      createAddress: ['askForDecreaseType', ({askForDecreaseType}, cbk) => {
+        // Exit early when there is no need to create an internal address
+        if (askForDecreaseType !== spendToInternalAddressAction) {
           return cbk();
         }
+
+        return createChainAddress({lnd}, cbk);
+      }],
+
+      // Ask for the amount to decrease
+      askForAmount: ['askForNodeId', ({askForNodeId}, cbk) => {
         return ask({
-          default: false,
-          name: 'spend',
-          message: `Spend ${askForAmount} to an external address?`,
-          type: 'confirm',
+          default: !askForNodeId ? minSpendTokens : minChannelCapacity,
+          message: !askForNodeId ? askForSendSize(max) : askForChanSize(max),
+          name: 'amount',
+          validate: input => {
+            // A numeric input is required
+            if (!isNumber(input) || !isInteger(Number(input))) {
+              return false;
+            }
+
+            // Zero value is acceptable for a decrease when not opening channel
+            if (!askForNodeId && !Number(input)) {
+              return true;
+            }
+
+            // On-chain values must always be above dust
+            if (!!Number(input) && Number(input) < dust) {
+              return false;
+            }
+
+            // Channel opens must always be above the minimum channel size
+            if (!!askForNodeId && Number(input) < minChannelCapacity) {
+              return `The minimum channel capacity is ${minChannelCapacity}`;
+            }
+
+            // A decrease cannot spend more funds than are available
+            if (!!Number(input) && Number(input) > max) {
+              return `The maximum possible to decrease is ${max}`;
+            }
+
+            return true;
+          },
         },
-        ({spend}) => cbk(null, spend));
+        ({amount}) => cbk(null, Number(amount)));
       }],
 
       // Ask for an external address
       askForAddress: [
         'askForAmount',
-        'askForExternal',
-        'askForNodeId',
-        ({askForAmount, askForExternal}, cbk) =>
+        'askForDecreaseType',
+        'getNetwork',
+        ({askForAmount, askForDecreaseType, getNetwork}, cbk) =>
       {
-        // Exit early when the withdraw address is internal
-        if (askForExternal !== true) {
+        // Exit early when the withdraw address is not external
+        if (askForDecreaseType !== spendToExternalAddressAction) {
           return cbk();
         }
 
         return ask({
           name: 'address',
-          message: `Address to spend ${askForAmount} to?`,
+          message: `Address to spend ${tokensAsBigUnit(askForAmount)} to?`,
           type: 'input',
-          validate: input => !!input,
+          validate: input => {
+            if (!input) {
+              return false;
+            }
+
+            // Make sure that the entered address can be derived to an output
+            try {
+              toOutputScript(input, networks[getNetwork.bitcoinjs]);
+            } catch (err) {
+              return 'Failed to parse address. Try a standard one?';
+            }
+
+            return true;
+          },
         },
         ({address}) => cbk(null, {address}));
       }],
@@ -159,43 +211,44 @@ module.exports = ({ask, lnd, max}, cbk) => {
       // Ask if this is the last output
       askForAddition: [
         'askForAddress',
-        'askForExternal',
-        ({askForExternal, askForNodeId}, cbk) =>
+        'askForAmount',
+        'askForDecreaseType',
+        ({askForAmount, askForDecreaseType}, cbk) =>
       {
-        // Exit early when the spend was to an internal addess or a 2nd node ID
-        if (!askForExternal || !!askForNodeId) {
+        // Exit early and only ask for addition when decrease is a "spend" type
+        if (askForDecreaseType === spendToInternalAddressAction) {
+          return cbk();
+        }
+
+        // Exit early when there are no more funds to spend
+        if (max - askForAmount < dust) {
           return cbk();
         }
 
         return ask({
           default: false,
           name: 'add',
-          message: 'Add another spend to a different address?',
+          message: 'Spend additional funds from the channel capacity?',
           type: 'confirm',
         },
         ({add}) => cbk(null, add));
       }],
 
-      // Create a decrease address to withdraw funds out to
-      createAddress: ['askForExternal', ({askForExternal, askForNodeId}, cbk) => {
-        // Exit early when the withdraw address is external or an external pubkey was entered
-        if (askForExternal !== false || !!askForNodeId) {
+      // Propose a channel open to confirm the peer will accept the channel
+      checkChannelAcceptance: [
+        'askForAmount',
+        'askForNodeId',
+        ({askForAmount, askForNodeId}, cbk) =>
+      {
+        // Exit early if pubkey was not entered
+        if (!askForNodeId) {
           return cbk();
         }
 
-        return createChainAddress({lnd}, cbk);
-      }],
-
-      //Propose channel open
-      checkAccept: ['askForNodeId', ({askForAmount,askForNodeId}, cbk) => {
-        //Exit early if pubkey was not entered
-        if(!askForNodeId) {
-          return cbk();
-        }
         return proposeChannelOpen({
           lnd,
-          public_key: askForNodeId,
-          amount: askForAmount,
+          capacity: askForAmount,
+          id: askForNodeId,
         },
         cbk);
       }],
@@ -205,7 +258,7 @@ module.exports = ({ask, lnd, max}, cbk) => {
         'askForAddition',
         'askForAddress',
         'askForAmount',
-        'checkAccept',
+        'checkChannelAcceptance',
         'createAddress',
         'getNetwork',
         ({
@@ -213,39 +266,35 @@ module.exports = ({ask, lnd, max}, cbk) => {
           askForAddress,
           askForAmount,
           askForNodeId,
-          checkAccept,
+          checkChannelAcceptance,
           createAddress,
           getNetwork,
         },
         cbk) =>
       {
-        if(!!checkAccept && !checkAccept.is_accepted) {
-          return cbk([400, 'ErrorTestingChannelOpenForNewPeer']);
+        // Make sure that a channel proposal didn't fail
+        if (!!checkChannelAcceptance && !checkChannelAcceptance.is_accepted) {
+          return cbk([503, 'RemoteNodeRejectedNewChannelProposal']);
         }
 
-        const {address} = (createAddress || askForAddress || {});
-        // Exit early when not decreasing to an address
-        if (!address && !checkAccept) {
-          return cbk(null, {is_final: true, tokens: Number(askForAmount)});
+        // Exit early when decreasing to a new channel
+        if (!!askForNodeId) {
+          return cbk(null, {
+            is_final: !askForAddition,
+            node: askForNodeId,
+            tokens: askForAmount,
+          });
         }
 
-        // Make sure the address is valid
-      if(!!address) {
-        try {
-          toOutputScript(address, networks[getNetwork.bitcoinjs]);
-        } catch (err) {
-          return cbk([400, 'FailedToParseAddress', {err}]);
-        }
-      }
+        const {address} = (createAddress || askForAddress);
 
-        const output = !!address ? toOutputScript(address, networks[getNetwork.bitcoinjs]) : undefined;
+        const output = toOutputScript(address, networks[getNetwork.bitcoinjs]);
 
         return cbk(null, {
           address,
           is_final: !askForAddition,
-          output: !!output ? bufferAsHex(output) : undefined,
-          public_key: askForNodeId || undefined,
-          tokens: Number(askForAmount),
+          output: bufferAsHex(output),
+          tokens: askForAmount,
         });
       }],
     },

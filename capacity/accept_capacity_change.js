@@ -212,6 +212,8 @@ module.exports = ({channel, from, id, increase, lnd, logger}, cbk) => {
             return failure([503, 'FailedToParseSignChangeRequest']);
           }
 
+          logger.info({closing_and_reopening_channel: true});
+
           // Trigger the replacement flow and sign the unsigned tx
           return getReplacementSignature({
             channel,

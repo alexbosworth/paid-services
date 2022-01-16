@@ -48,8 +48,9 @@ const weightBuffer = 150;
     cltv_delta: <Locktime Delta Number>
     coop_close_address: <Cooperative Close Address String>
     decrease: [{
-      address: <Decrease Address String>
-      output: <Output Script Hex String>
+      [address]: <Decrease Address String>
+      [node]: <Create Channel with Node With Public Key Hex String>
+      [output]: <Output Script Hex String>
       tokens: <Decrease Tokens Number>
     }]
     estimated_capacity: <Estimated Tokens For New Channel Capacity Number>
@@ -172,6 +173,7 @@ module.exports = ({ask, id, lnd}, cbk) => {
           const disabled = [
             !!channel.cooperative_close_address,
             !channel.is_active,
+            !!channel.pending_payments.length,
           ];
 
           return {
@@ -344,7 +346,7 @@ module.exports = ({ask, id, lnd}, cbk) => {
                 return cbk(err);
               }
 
-              if (decreases.find(n => n.address === res.address)) {
+              if (!!res.address && decreases.find(n => n.address === res.address)) {
                 return cbk([400, 'ExpectedUniqueAddressForSpend']);
               }
 
@@ -356,11 +358,8 @@ module.exports = ({ask, id, lnd}, cbk) => {
               return cbk(err);
             }
 
-            const final = decreases
-              .filter(n => !!n.tokens)
-              .map(({address, output, public_key, tokens}) => ({address, output, public_key, tokens}));
-
-            return cbk(null, final);
+            // Only include decreases that spend funds
+            return cbk(null, decreases.filter(n => !!n.tokens));
           }
         );
       }],
@@ -413,10 +412,10 @@ module.exports = ({ask, id, lnd}, cbk) => {
               return type;
             }
 
-            return `${type} (Keep Current Status)`;
+            return `${type} (keep current status)`;
           }),
           default: channel.is_private ? 'Private' : 'Public',
-          message: 'Channel type?',
+          message: 'Replacement channel type?',
           name: 'type',
           type: 'list',
         },

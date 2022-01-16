@@ -1,10 +1,14 @@
+const {address} = require('bitcoinjs-lib');
 const asyncAuto = require('async/auto');
+const asyncEach = require('async/each');
 const {closeChannel} = require('ln-service');
+const {connectPeer} = require('ln-sync');
 const {decodeChanId} = require('bolt07');
 const {getChainFeeRate} = require('ln-service');
 const {getChainTransactions} = require('ln-service');
 const {getHeight} = require('ln-service');
 const {getPendingChannels} = require('ln-service');
+const {networks} = require('bitcoinjs-lib');
 const {openChannels} = require('ln-service');
 const {returnResult} = require('asyncjs-util');
 const {Transaction} = require('bitcoinjs-lib');
@@ -26,6 +30,7 @@ const notFoundIndex = -1;
 const positive = n => Math.max(1, n);
 const slowTarget = 1000;
 const sumOf = arr => arr.reduce((sum, n) => sum + n, 0);
+const {toOutputScript} = address;
 const txIdAsHash = id => Buffer.from(id, 'hex').reverse();
 
 /** Close a channel and get a capacity replacement transaction
@@ -36,7 +41,8 @@ const txIdAsHash = id => Buffer.from(id, 'hex').reverse();
     bitcoinjs_network: <BitcoinJs Network Name String>
     decrease: [{
       address: <Spend to Chain Address String>
-      output: <Spend to Output Script Hex String>
+      [node]: <Node to Open Channel to Public Key Hex String>
+      [output]: <Spend to Output Script Hex String>
       tokens: <Spend Value Number>
     }]
     id: <Original Channel Standard Format Channel Id String>
@@ -51,10 +57,12 @@ const txIdAsHash = id => Buffer.from(id, 'hex').reverse();
   {
     [add_funds_vin]: <Funding Spend Input Index Number>
     capacity: <Replacement Channel Capacity Tokens Number>
+    force_close_tx: <Raw Force Close Transaction Hex String>
+    open_pending_ids: [<Proposed Additional Channel Id String>]
+    pending_channel_id: <Proposed Replacement Channel Pending Id Hex String>
     remote_balance: <Initial Balance for Peer Tokens Number>
     signature: <Signature for Replacement Transaction Hex Encoded String>
     signing_key: <Signing Public Key Hex String>
-    pending_channel_id: <Proposed Channel Pending Id Hex String>
     transaction_id: <Replacement Channel Transaction Id Hex String>
     transaction_vin: <Original Channel Input Index Number>
     transaction_vout: <Replacement Channel Transaction Output Index Number>
@@ -102,24 +110,26 @@ module.exports = (args, cbk) => {
       // Get the current chain height
       getHeight: ['validate', ({}, cbk) => getHeight({lnd: args.lnd}, cbk)],
 
-      // Propose the second new channel to with the change output of decreasing capacity
-      proposeSecondChannel: [
-        'validate',
-        'getHeight',
-        ({}, cbk) =>
-      {
-        const [pubkey] = args.decrease.map(n => n.public_key);
-        const [tokens] = args.decrease.map(n => n.tokens);
+      // Connect to nodes to open channels to
+      connect: ['validate', ({}, cbk) => {
+        return asyncEach(args.decrease.filter(n => !!n.node), (spend, cbk) => {
+          return connectPeer({id: spend.node, lnd: args.lnd}, cbk);
+        },
+        cbk);
+      }],
 
-        if(!pubkey) {
-          return cbk();
+      // Propose any additional channels to nodes
+      openChannels: ['connect', ({}, cbk) => {
+        // Exit early when there are no nodes to propose channels to
+        if (!args.decrease.filter(n => !!n.node).length) {
+          return cbk(null, {pending: []});
         }
+
         return openChannels({
-          channels: [{
-            capacity: tokens,
-            is_private: false,
-            partner_public_key: pubkey,
-          }],
+          channels: args.decrease.filter(n => !!n.node).map(decrease => ({
+            capacity: decrease.tokens,
+            partner_public_key: decrease.node,
+          })),
           is_avoiding_broadcast: true,
           lnd: args.lnd,
         },
@@ -127,7 +137,7 @@ module.exports = (args, cbk) => {
       }],
 
       // Force close the channel in order to get a non-final sequence number
-      channelClose: ['getFeeRate','proposeSecondChannel', ({}, cbk) => {
+      channelClose: ['getFeeRate','openChannels', ({}, cbk) => {
         return closeChannel({
           lnd: args.lnd,
           is_force_close: true,
@@ -302,12 +312,23 @@ module.exports = (args, cbk) => {
       replacementTx: [
         'closeTx',
         'newCapacity',
+        'openChannels',
         'proposeChannel',
-        'proposeSecondChannel',
-        ({closeTx, newCapacity, proposeChannel, proposeSecondChannel}, cbk) =>
+        ({closeTx, newCapacity, openChannels, proposeChannel}, cbk) =>
       {
         // The replacement tx pays to the proposed channel multisig address
         const [{address}] = proposeChannel.pending;
+
+        const network = networks[args.bitcoinjs_network];
+
+        // Map pending channel opens to match the spends
+        const openAsSpends = openChannels.pending.map(({address, tokens}) => ({
+          tokens,
+          output: bufferAsHex(toOutputScript(address, network)),
+        }));
+
+        // Decreases are spends to regular addresses plus channel outputs
+        const decreases = [].concat(args.decrease).concat(openAsSpends);
 
         try {
           const replacement = assembleReplacementTx({
@@ -315,17 +336,16 @@ module.exports = (args, cbk) => {
             add_funds_transaction_vout: args.add_funds_transaction_vout,
             bitcoinjs_network: args.bitcoinjs_network,
             close_transaction: closeTx.transaction,
-            decrease: args.decrease.map(decrease => ({
+            decrease: decreases.filter(n => !!n.output).map(decrease => ({
               output: decrease.output,
-              pubkey: decrease.public_key,
               tokens: decrease.tokens,
             })),
             funding_address: address,
-            second_funding_address: !!proposeSecondChannel ? proposeSecondChannel.pending[0].address : undefined,
             funding_tokens: newCapacity,
             transaction_id: args.transaction_id,
             transaction_vout: args.transaction_vout,
           });
+
           return cbk(null, {
             add_funds_vin: replacement.add_funds_vin,
             transaction: replacement.transaction,
@@ -361,17 +381,17 @@ module.exports = (args, cbk) => {
       proposedReplacement: [
         'closeTx',
         'newCapacity',
+        'openChannels',
         'pendingChannel',
         'proposeChannel',
-        'proposeSecondChannel',
         'replacementTx',
         'signReplacement',
         ({
           closeTx,
           newCapacity,
+          openChannels,
           pendingChannel,
           proposeChannel,
-          proposeSecondChannel,
           replacementTx,
           signReplacement,
         },
@@ -382,12 +402,12 @@ module.exports = (args, cbk) => {
         return cbk(null, {
           add_funds_vin: replacementTx.add_funds_vin,
           capacity: newCapacity,
-          force_close_tx_id: closeTx.id,
+          force_close_tx: closeTx.transaction,
+          open_pending_ids: openChannels.pending.map(n => n.id),
+          pending_channel_id: pending.id,
           remote_balance: pendingChannel.remote_balance,
           signature: signReplacement.signature,
           signing_key: signReplacement.key,
-          pending_channel_id: pending.id,
-          second_pending_channel: proposeSecondChannel || undefined,
           transaction_id: replacementTx.transaction_id,
           transaction_vin: replacementTx.transaction_vin,
           transaction_vout: replacementTx.transaction_vout,
