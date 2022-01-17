@@ -13,6 +13,7 @@ const defaultInvoicesLimit = 100;
 const events = ['details', 'error', 'failure', 'settled', 'trade'];
 const fromNow = date => new Date(date) - new Date();
 const {keys} = Object;
+const sumOf = arr => arr.reduce((sum, n) => sum + n, 0);
 
 /** Service trades represented by anchored invoices
 
@@ -47,6 +48,7 @@ const {keys} = Object;
   // Starting service for trade
   @event 'start'
   {
+    created_at: <Open Trade Created At ISO 8601 Date String>
     description: <Trade Description String>
     expires_at: <Trade Expires at ISO 8601 Date String>
     id: <Trade Id Hex String>
@@ -86,6 +88,7 @@ module.exports = ({lnd}) => {
 
     // Pick up the trade to service
     emitter.emit('start', {
+      created_at: trade.created_at,
       description: trade.description,
       expires_at: trade.expires_at,
       id: trade.id,
@@ -129,6 +132,28 @@ module.exports = ({lnd}) => {
   // Listen for any new invoices that represent anchored trades
   const sub = subscribeToInvoices({lnd});
 
+  // Stop servicing all trades
+  const stopService = () => {
+    // Stop paging in progress
+    paging.token = false;
+
+    // Stop listening to all invoices
+    sub.removeAllListeners();
+
+    // Stop listening to all anchor invoices
+    return keys(listening).forEach(id => listening[id].removeAllListeners());
+  };
+
+  // Stop the service when there are no more listeners
+  emitter.on('removeListener', () => {
+    // Exit early when there are still listeners on an event
+    if (!!sumOf(events.map(n => emitter.listenerCount(n)))) {
+      return;
+    }
+
+    return stopService();
+  });
+
   // Listen for new trades to appear
   sub.on('invoice_updated', invoice => {
     const {trade} = tradeFromInvoice(invoice);
@@ -155,13 +180,13 @@ module.exports = ({lnd}) => {
         if (!!err) {
           emitter.emit(err);
 
-          // Stop listening to all invoices
-          sub.removeAllListeners();
+          // Stop the service
+          return stopService();
+        }
 
-          // Stop listening to all anchor invoices
-          keys(listening).forEach(id => listening[id].removeAllListeners());
-
-          return;
+        // Exit early when paging is already stopped
+        if (paging.token === false) {
+          return cbk();
         }
 
         paging.token = res.next || false;

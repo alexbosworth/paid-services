@@ -3,6 +3,7 @@ const decodeAnchoredTrade = require('./decode_anchored_trade');
 /** Derive open trade details from an invoice
 
   {
+    created_at: <Invoice Created At ISO 8601 Date String>
     description: <Invoice Description String>
     id: <Invoice Id Hex String>
     expires_at: <Invoice Expiration ISO 8601 Date String>
@@ -15,6 +16,7 @@ const decodeAnchoredTrade = require('./decode_anchored_trade');
   @returns
   {
     [trade]: {
+      created_at: <Open Trade Created At ISO 8601 Date String>
       description: <Trade Description String>
       expires_at: <Trade Expires at ISO 8601 Date String>
       id: <Trade Id Hex String>
@@ -41,6 +43,7 @@ module.exports = args => {
 
   return {
     trade: {
+      created_at: args.created_at,
       description: trade.description,
       expires_at: args.expires_at,
       id: args.id,

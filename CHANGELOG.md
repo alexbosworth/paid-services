@@ -1,5 +1,10 @@
 # Versions
 
+## Version 3.8.0
+
+- `encodeTrade`: Add method to encode a trade-secret
+- `serviceAnchoredTrades`: Add method to serve open trade-secrets
+
 ## Version 3.7.0
 
 - `changeChannelCapacity`: Add support for decreasing funds into a new channel
