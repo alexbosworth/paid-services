@@ -1,5 +1,9 @@
 # Versions
 
+## Version 3.9.0
+
+- `decodeTrade`: Add method to decode a trade-secret
+
 ## Version 3.8.0
 
 - `encodeTrade`: Add method to encode a trade-secret

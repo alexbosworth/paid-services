@@ -1,5 +1,6 @@
 const {changeChannelCapacity} = require('./capacity');
 const {confirmServiceUse} = require('./client');
+const {decodeTrade} = require('./trades');
 const {encodeTrade} = require('./trades');
 const {getServiceSchema} = require('./client');
 const {getServicesList} = require('./client');
@@ -16,6 +17,7 @@ const serviceIds = schema.types;
 module.exports = {
   changeChannelCapacity,
   confirmServiceUse,
+  decodeTrade,
   encodeTrade,
   getServiceSchema,
   getServicesList,

@@ -5,6 +5,7 @@ const asyncAuto = require('async/auto');
 const asyncDetect = require('async/detect');
 const asyncDetectSeries = require('async/detectSeries');
 const asyncMap = require('async/map');
+const asyncReflect = require('async/reflect');
 const {getChannel} = require('ln-service');
 const {getNode} = require('ln-service');
 const {getPeers} = require('ln-service');
@@ -206,19 +207,19 @@ module.exports = ({ask, id, identity, lnd, logger, nodes}, cbk) => {
       }],
 
       // Request a specific trade
-      requestTrade: ['to', ({to}, cbk) => {
+      requestTrade: ['to', asyncReflect(({to}, cbk) => {
         // Exit early when this is an open ended trade request with no id
         if (!id) {
           return cbk();
         }
 
         return requestTradeById({id, lnd, to}, cbk);
-      }],
+      })],
 
       // Request an inventory of trades
-      requestTrades: ['to', ({to}, cbk) => {
-        // Exit early when this is a trade request for a specific id
-        if (!!id) {
+      requestTrades: ['requestTrade', 'to', ({requestTrade, to}, cbk) => {
+        // Exit early when there was a successful request for a specific id
+        if (!!requestTrade.value) {
           return cbk();
         }
 
@@ -285,7 +286,7 @@ module.exports = ({ask, id, identity, lnd, logger, nodes}, cbk) => {
         ({requestTrade, requestTrades}, cbk) =>
       {
         // Exit early when the trade was already selected
-        if (!!requestTrade) {
+        if (!!requestTrade.value) {
           return cbk();
         }
 
@@ -331,7 +332,7 @@ module.exports = ({ask, id, identity, lnd, logger, nodes}, cbk) => {
         'requestTrade',
         ({fetchSelectedTrade, requestTrade}, cbk) =>
       {
-        return cbk(null, fetchSelectedTrade || requestTrade);
+        return cbk(null, fetchSelectedTrade || requestTrade.value);
       }],
     },
     returnResult({reject, resolve, of: 'trade'}, cbk));
