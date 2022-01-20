@@ -1,7 +1,9 @@
 const {changeChannelCapacity} = require('./capacity');
 const {confirmServiceUse} = require('./client');
+const {createAnchoredTrade} = require('./trades');
 const {decodeTrade} = require('./trades');
 const {encodeTrade} = require('./trades');
+const {getAnchoredTrade} = require('./trades');
 const {getServiceSchema} = require('./client');
 const {getServicesList} = require('./client');
 const {makePeerRequest} = require('./p2p');
@@ -17,8 +19,10 @@ const serviceIds = schema.types;
 module.exports = {
   changeChannelCapacity,
   confirmServiceUse,
+  createAnchoredTrade,
   decodeTrade,
   encodeTrade,
+  getAnchoredTrade,
   getServiceSchema,
   getServicesList,
   makePeerRequest,

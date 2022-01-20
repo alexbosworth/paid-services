@@ -1,11 +1,10 @@
 const asyncAuto = require('async/auto');
-const {createInvoice} = require('ln-service');
 const {getChannels} = require('ln-service');
 const {getNetwork} = require('ln-sync');
 const {getWalletInfo} = require('ln-service');
 const {returnResult} = require('asyncjs-util');
 
-const encodeAnchoredTrade = require('./encode_anchored_trade');
+const createAnchoredTrade = require('./create_anchored_trade');
 const finalizeTradeSecret = require('./finalize_trade_secret');
 const serviceOpenTrade = require('./service_open_trade');
 
@@ -204,15 +203,11 @@ module.exports = ({ask, lnd, logger}, cbk) => {
           return cbk();
         }
 
-        const {encoded} = encodeAnchoredTrade({
-          description: askForDescription.description,
-          secret: askForSecret.secret,
-        });
-
-        return createInvoice({
+        return createAnchoredTrade({
           lnd,
-          description: encoded,
+          description: askForDescription.description,
           expires_at: futureDate(daysAsMs(askForExpiration.days)),
+          secret: askForSecret.secret,
           tokens: asNumber(askForPrice.tokens),
         },
         cbk);

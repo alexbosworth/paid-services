@@ -1,5 +1,10 @@
 # Versions
 
+## Version 3.10.0
+
+- `createAnchoredTrade`: Add method to create an anchored open trade
+- `getAnchoredTrade`: Add method to get an anchored open trade
+
 ## Version 3.9.1
 
 - `decodeTrade`: Add method to decode a trade-secret
