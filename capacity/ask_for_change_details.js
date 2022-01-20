@@ -97,7 +97,7 @@ module.exports = ({ask, id, lnd, saved_nodes}, cbk) => {
       askForPeer: ['validate', ({}, cbk) => {
         return ask({
           name: 'query',
-          message: 'Public key or alias of peer to change capacity with?',
+          message: 'Public key or alias of peer to change capacity or migrate channel with?',
           type: 'input',
           validate: input => !!input,
         },
@@ -310,6 +310,10 @@ module.exports = ({ask, id, lnd, saved_nodes}, cbk) => {
               name: `Decrease capacity (limit ${channel.max_decrease_tokens})`,
               value: 'decrease',
             },
+            {
+              name: `Migrate channel ${channel.id}to a saved node?`,
+              value: `migrate`,
+            }
           ],
           message: 'How do you want to change the channel capacity?',
           name: 'direction',
@@ -321,11 +325,15 @@ module.exports = ({ask, id, lnd, saved_nodes}, cbk) => {
       //Ask for migration
       askForMigration: ['askForDirection', ({askForDirection}, cbk) => {
         //Exit early if not decrease or no saved nodes
-        if(!saved_nodes.length || askForDirection !== 'decrease') {
+        if(!saved_nodes.length && askForDirection === 'migrate') {
+          return cbk([400, 'ExpectedSavedNodesToMigrateChannel']);
+        }
+
+        if(!saved_nodes.length || askForDirection !== 'migrate') {
           return cbk();
         }
 
-        const node_choices = [{name: 'None', value: undefined}];
+        const node_choices = [];
 
         saved_nodes.forEach(saved_node => {
           node_choices.push({name: saved_node.alias, value: saved_node.public_key});

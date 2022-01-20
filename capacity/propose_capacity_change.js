@@ -26,7 +26,7 @@ const findSignatureRecord = records => records.find(n => n.type === '1');
 const {fromHex} = Transaction;
 const fuzzHeight = 3;
 const maxSigHexLength = 146;
-const peerRequestTimeoutMs = 1000 * 30;
+const peerRequestTimeoutMs = 1000 * 60 * 10;
 const rebroadcastDelayMs = 1000 * 3;
 const {SIGHASH_ALL} = Transaction;
 const transitFamily = 805;

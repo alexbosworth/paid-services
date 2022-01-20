@@ -86,8 +86,8 @@ module.exports = ({from, records}) => {
   const id = idRecord.value;
   const type = typeRecord ? hexAsNumber(typeRecord.value) : undefined;
 
-  // Exit early when there is no decrease or increase
-  if (!decreaseRecord && !increaseRecord) {
+  // Exit early when there is no decrease, increase or migration record
+  if (!decreaseRecord && !increaseRecord && !migrationRecord) {
     return {request: {channel, from, id, type}};
   }
 

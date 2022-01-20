@@ -88,7 +88,6 @@ module.exports = ({ask, delay, lnd, logger, migrate_lnd, saved_nodes}, cbk) => {
         'waitForProposal',
         ({waitForProposal}, cbk) =>
       {
-        // console.log(waitForProposal);
         return asyncDetectSeries(waitForProposal.requests, (request, cbk) => {
           return getNodeAlias({lnd, id: request.from}, (err, res) => {
             if (!!err) {
@@ -110,7 +109,7 @@ module.exports = ({ask, delay, lnd, logger, migrate_lnd, saved_nodes}, cbk) => {
             const changeType = hasType ? ` and make channel ${type}` : '';
             const message = () => {
               if(!!request.migration) {
-                return `${action} with ${peer}${by}${changeType} and migrate channel to ${request.migration}?`
+                return `Migrate channel (${id}) with ${peer} of capacity ${size} to ${request.migration}?`
               } else {
                 return `${action} with ${peer}${by}${changeType}?`;
               }
