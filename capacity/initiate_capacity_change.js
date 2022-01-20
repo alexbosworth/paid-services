@@ -70,7 +70,7 @@ const waitingTimeoutMs = 1000 * 30;
     transaction_vout: <Replacement Channel Transaction Output Index Number>
   }
 */
-module.exports = ({ask, lnd, logger}, cbk) => {
+module.exports = ({ask, lnd, logger, saved_nodes}, cbk) => {
   return new Promise((resolve, reject) => {
     return asyncAuto({
       // Generate a unique identifier for the change
@@ -98,14 +98,25 @@ module.exports = ({ask, lnd, logger}, cbk) => {
 
       // Ask for all the capacity change details
       askForChangeDetails: ['id', 'validate', ({id}, cbk) => {
-        return askForChangeDetails({ask, id, lnd}, cbk);
+        return askForChangeDetails({ask, id, lnd, saved_nodes}, cbk);
+      }],
+
+      //Get saved node lnd
+      getMigrationLnd: ['askForChangeDetails', async ({askForChangeDetails}) => {
+        //Exit early if its not a migration
+        if(!askForChangeDetails.migration_public_key) {
+          return;
+        }
+        const [savedNodeLnd] = saved_nodes.filter(saved_node => saved_node.public_key === askForChangeDetails.migration_public_key);
+
+        return {lnd: savedNodeLnd.lnd, public_key: savedNodeLnd.public_key};
       }],
 
       // Propose the theoretical new channel to the peer to confirm a change
-      checkAccept: ['askForChangeDetails', ({askForChangeDetails}, cbk) => {
+      checkAccept: ['askForChangeDetails', 'getMigrationLnd', ({askForChangeDetails, getMigrationLnd}, cbk) => {
         // Check that a channel open would be accepted
         return acceptsChannelOpen({
-          lnd,
+          lnd: !!getMigrationLnd ? getMigrationLnd.lnd : lnd,
           capacity: askForChangeDetails.estimated_capacity,
           cooperative_close_address: askForChangeDetails.coop_close_address,
           give_tokens: askForChangeDetails.remote_balance,
@@ -396,6 +407,7 @@ module.exports = ({ask, lnd, logger}, cbk) => {
         'askForChangeDetails',
         'confirmAddFunds',
         'getFunding',
+        'getMigrationLnd',
         'getNetwork',
         'getPeerChannels',
         'id',
@@ -403,6 +415,7 @@ module.exports = ({ask, lnd, logger}, cbk) => {
         asyncReflect(({
           askForChangeDetails,
           getFunding,
+          getMigrationLnd,
           getNetwork,
           getPeerChannels,
           id,
@@ -438,6 +451,7 @@ module.exports = ({ask, lnd, logger}, cbk) => {
           increase_transaction_vout: getFunding.vout,
           increase_witness_script: getFunding.script,
           is_private: askForChangeDetails.is_private,
+          migration: getMigrationLnd,
           open_transaction: sendBasicRequest,
           partner_public_key: askForChangeDetails.partner_public_key,
           transaction_id: channel.transaction_id,

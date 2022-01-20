@@ -26,11 +26,12 @@ const findSignatureRecord = records => records.find(n => n.type === '1');
 const {fromHex} = Transaction;
 const fuzzHeight = 3;
 const maxSigHexLength = 146;
-const peerRequestTimeoutMs = 1000 * 60 * 10;
+const peerRequestTimeoutMs = 1000 * 30;
 const rebroadcastDelayMs = 1000 * 3;
 const {SIGHASH_ALL} = Transaction;
 const transitFamily = 805;
 const unsignedTransactionType = '1';
+const migrationRecordType = '6';
 
 /** Propose the capacity change to be accepted
 
@@ -125,6 +126,7 @@ module.exports = (args, cbk) => {
           increase: args.increase,
           is_private: args.is_private,
           lnd: args.lnd,
+          migrate_lnd: !!args.migration ? args.migration.lnd : undefined,
           open_transaction: args.open_transaction,
           transaction_id: args.transaction_id,
           transaction_vout: args.transaction_vout,
@@ -200,7 +202,7 @@ module.exports = (args, cbk) => {
         return fundPendingChannels({
           funding,
           channels: [getReplacement.pending_channel_id],
-          lnd: args.lnd,
+          lnd: !!args.migration ? args.migration.lnd : args.lnd,
         },
         cbk);
       }],
@@ -211,18 +213,24 @@ module.exports = (args, cbk) => {
         'getReplacement',
         asyncReflect(({getReplacement}, cbk) =>
       {
+        const records = [
+          {
+            type: unsignedTransactionType,
+            value: getReplacement.unsigned_transaction,
+          },
+          {
+            type: capacityChangeIdType,
+            value: args.id,
+          },
+        ];
+
+        if(!!args.migration) {
+          records.push({type: migrationRecordType, value: args.migration.public_key});
+        }
+
         return makePeerRequest({
           lnd: args.lnd,
-          records: [
-            {
-              type: unsignedTransactionType,
-              value: getReplacement.unsigned_transaction,
-            },
-            {
-              type: capacityChangeIdType,
-              value: args.id,
-            },
-          ],
+          records: records,
           timeout: peerRequestTimeoutMs,
           to: args.partner_public_key,
           type: serviceTypeSignCapacityChange,

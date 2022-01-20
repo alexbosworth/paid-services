@@ -1,10 +1,13 @@
 const asyncAuto = require('async/auto');
 const asyncUntil = require('async/until');
+const fs = require('fs');
+const {connectPeer} = require('ln-sync');
 const {findKey} = require('ln-sync');
 const {getChainFeeRate} = require('ln-service');
 const {getChainTransactions} = require('ln-service');
 const {getChannel} = require('ln-service');
 const {getChannels} = require('ln-service');
+const {getIdentity} = require('ln-service');
 const {getPeers} = require('ln-service');
 const {returnResult} = require('asyncjs-util');
 const {sendMessageToPeer} = require('ln-service');
@@ -70,7 +73,7 @@ const weightBuffer = 150;
     transaction_id: <Channel Funding Transaction Id Hex String>
   }
 */
-module.exports = ({ask, id, lnd}, cbk) => {
+module.exports = ({ask, id, lnd, saved_nodes}, cbk) => {
   return new Promise((resolve, reject) => {
     return asyncAuto({
       // Check arguments
@@ -315,11 +318,53 @@ module.exports = ({ask, id, lnd}, cbk) => {
         ({direction}) => cbk(null, direction));
       }],
 
+      //Ask for migration
+      askForMigration: ['askForDirection', ({askForDirection}, cbk) => {
+        //Exit early if not decrease or no saved nodes
+        if(!saved_nodes.length || askForDirection !== 'decrease') {
+          return cbk();
+        }
+
+        const node_choices = [{name: 'None', value: undefined}];
+
+        saved_nodes.forEach(saved_node => {
+          node_choices.push({name: saved_node.alias, value: saved_node.public_key});
+        });
+
+        return ask({
+          choices: node_choices,
+          default: undefined,
+          message: 'Migrate channel to a saved node?',
+          name: 'migration',
+          type: 'list',
+        },
+        ({migration}) => cbk(null, {public_key: migration}));
+
+      }],
+
+      //Add peer from migrating node
+      connect: ['askForMigration', async ({askForMigration, findKey}) => {
+        //Exit early if its there is no migration
+        if(!askForMigration) {
+          return;
+        }
+        const [savedNodeLnd] = saved_nodes.filter(saved_node => saved_node.public_key === askForMigration.public_key);
+
+        try{
+          await connectPeer({id: findKey.public_key, lnd: savedNodeLnd.lnd})
+          return {alias: savedNodeLnd.alias};
+        } catch(err) {
+          return [400, err];
+        }
+      }],
+
       // Ask for how much to decrease
       askForDecrease: [
         'askForDirection',
+        'askForMigration',
         'channel',
-        ({askForDirection, channel}, cbk) =>
+        'connect',
+        ({askForDirection, channel, askForMigration}, cbk) =>
       {
         // Exit early when funds are being added
         if (askForDirection !== 'decrease') {
@@ -468,14 +513,17 @@ module.exports = ({ask, id, lnd}, cbk) => {
         'askForIncrease',
         'askForPublicPrivate',
         'channel',
+        'connect',
         'confirmFeeEstimate',
         'estimateChainFee',
         'getTx',
         ({
           askForDecrease,
           askForIncrease,
+          askForMigration,
           askForPublicPrivate,
           channel,
+          connect,
           confirmFeeEstimate,
           estimateChainFee,
           getTx,
@@ -509,6 +557,7 @@ module.exports = ({ask, id, lnd}, cbk) => {
           channel: channel.id,
           decrease: !!askForDecrease ? sumOfTokens(askForDecrease) : undefined,
           increase: askForIncrease,
+          migration: !!askForMigration ? askForMigration.public_key : undefined,
           type: askForPublicPrivate.is_private ? privateType : publicType,
         });
 
@@ -524,6 +573,7 @@ module.exports = ({ask, id, lnd}, cbk) => {
           id: channel.id,
           increase: askForIncrease,
           is_private: askForPublicPrivate.is_private,
+          migration_public_key: !!askForMigration ? askForMigration.public_key : undefined,
           open_transaction: channel.open_transaction,
           partner_csv_delay: channel.partner_csv_delay,
           partner_public_key: channel.partner_public_key,

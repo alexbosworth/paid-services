@@ -35,7 +35,7 @@ const txIdAsHash = id => Buffer.from(id, 'hex').reverse();
     transaction_vout: <Replacement Transaction Output Index Number>
   }
 */
-module.exports = ({channel, id, lnd, output, unsigned, vout}, cbk) => {
+module.exports = ({channel, id, lnd, output, migration, unsigned, vout}, cbk) => {
   return new Promise((resolve, reject) => {
     return asyncAuto({
       // Check arguments
@@ -164,8 +164,8 @@ module.exports = ({channel, id, lnd, output, unsigned, vout}, cbk) => {
                 return false;
               }
 
-              // The new channel must be from the same peer
-              if (channel.partner_public_key !== pending.partner_public_key) {
+              // The new channel must be from the same peer or the migrating node pubkey
+              if (channel.partner_public_key !== pending.partner_public_key && channel.partner_public_key !== migration) {
                 return false;
               }
 

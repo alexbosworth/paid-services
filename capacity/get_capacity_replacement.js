@@ -302,7 +302,7 @@ module.exports = (args, cbk) => {
             partner_public_key: pendingChannel.partner_public_key,
           }],
           is_avoiding_broadcast: true,
-          lnd: args.lnd,
+          lnd: args.migrate_lnd || args.lnd,
         },
         cbk);
       }],

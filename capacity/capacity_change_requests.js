@@ -77,6 +77,7 @@ module.exports = ({channels, requests}) => {
         from: channel.partner_public_key,
         id: request.id,
         increase: request.increase,
+        migration: request.migration,
         type: type ? request.type : undefined,
       };
     });

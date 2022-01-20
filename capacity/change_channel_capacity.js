@@ -12,6 +12,7 @@ const initiateCapacityChange = require('./initiate_capacity_change');
 
 const describeType = type => !(type & 0) ? 'private' : 'public';
 const interval = 10 * 1000;
+const isArray = Array;
 const peerName = ({alias, id}) => `${alias} ${id.substring(0, 8)}`.trim();
 const times = 6 * 60 * 6;
 const tokensAsBigUnit = tokens => (tokens / 1e8).toFixed(8);
@@ -26,7 +27,8 @@ const waitForCloseInterval = 1000 * 3;
     logger: <Winston Logger Object>
   }
 */
-module.exports = ({ask, delay, lnd, logger}, cbk) => {
+
+module.exports = ({ask, delay, lnd, logger, migrate_lnd, saved_nodes}, cbk) => {
   return new Promise((resolve, reject) => {
     return asyncAuto({
       // Check arguments
@@ -41,6 +43,10 @@ module.exports = ({ask, delay, lnd, logger}, cbk) => {
 
         if (!logger) {
           return cbk([400, 'ExpectedLoggerObjectToChangeCapacity']);
+        }
+
+        if(!isArray(saved_nodes)) {
+          return cbk([400, 'ExpectedArrayOfSavedNodesToChangeCapacity']);
         }
 
         return cbk();
@@ -82,6 +88,7 @@ module.exports = ({ask, delay, lnd, logger}, cbk) => {
         'waitForProposal',
         ({waitForProposal}, cbk) =>
       {
+        // console.log(waitForProposal);
         return asyncDetectSeries(waitForProposal.requests, (request, cbk) => {
           return getNodeAlias({lnd, id: request.from}, (err, res) => {
             if (!!err) {
@@ -101,11 +108,18 @@ module.exports = ({ask, delay, lnd, logger}, cbk) => {
             const type = hasType ? describeType(request.type) : '';
 
             const changeType = hasType ? ` and make channel ${type}` : '';
+            const message = () => {
+              if(!!request.migration) {
+                return `${action} with ${peer}${by}${changeType} and migrate channel to ${request.migration}?`
+              } else {
+                return `${action} with ${peer}${by}${changeType}?`;
+              }
+            }
 
             return ask({
               type: 'confirm',
               name: 'accept',
-              message: `${action} with ${peer}${by}${changeType}?`,
+              message: message(),
             },
             ({accept}) => {
               if (!accept) {
@@ -130,7 +144,6 @@ module.exports = ({ask, delay, lnd, logger}, cbk) => {
         if (!askToSelectChange) {
           return cbk();
         }
-
         return acceptCapacityChange({
           lnd,
           logger,
@@ -138,6 +151,7 @@ module.exports = ({ask, delay, lnd, logger}, cbk) => {
           from: askToSelectChange.from,
           id: askToSelectChange.id,
           increase: askToSelectChange.increase,
+          migration: askToSelectChange.migration,
         },
         cbk);
       }],
@@ -148,7 +162,7 @@ module.exports = ({ask, delay, lnd, logger}, cbk) => {
           return cbk();
         }
 
-        return initiateCapacityChange({ask, lnd, logger}, cbk);
+        return initiateCapacityChange({ask, lnd, logger, migrate_lnd, saved_nodes}, cbk);
       }],
 
       // Reset the channel routing policies

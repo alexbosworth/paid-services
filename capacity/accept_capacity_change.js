@@ -43,7 +43,7 @@ const openTxType = '1';
     transaction_vout: <Replacement Channel Transaction Output Index Number>
   }
 */
-module.exports = ({channel, from, id, increase, lnd, logger}, cbk) => {
+module.exports = ({channel, from, id, increase, lnd, logger, migration}, cbk) => {
   return new Promise((resolve, reject) => {
     return asyncAuto({
       // Check arguments
@@ -218,6 +218,7 @@ module.exports = ({channel, from, id, increase, lnd, logger}, cbk) => {
           return getReplacementSignature({
             channel,
             lnd,
+            migration,
             output,
             id: parameters.id,
             unsigned: parseSignCapacityRequest(parameters).unsigned,
@@ -238,7 +239,6 @@ module.exports = ({channel, from, id, increase, lnd, logger}, cbk) => {
               id: parameters.id,
               signature: res.signature,
             });
-
             // Send the replacement signature for the change request
             success({records});
 

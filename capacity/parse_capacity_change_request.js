@@ -1,8 +1,10 @@
 const {chanFormat} = require('bolt07');
 const {decodeBigSize} = require('bolt01');
+const {decodeTlvRecord} = require('bolt01');
 
 const channelIdHexLength = 16;
 const decodeNumber = encoded => BigInt(decodeBigSize({encoded}).decoded);
+const decodePubkey = encoded => decodeTlvRecord({encoded});
 const defaultRecord = {value: '00'};
 const hexAsNumber = n => Buffer.from(n, 'hex').readUInt8();
 const idHexLength = 64;
@@ -11,6 +13,7 @@ const tooLarge = BigInt(Number.MAX_SAFE_INTEGER);
 const findChannelRecord = records => records.find(n => n.type === '2');
 const findDecreaseRecord = records => records.find(n => n.type === '3');
 const findIncreaseRecord = records => records.find(n => n.type === '4');
+const findMigrationRecord = records => records.find(n => n.type === '6');
 const findRequestIdRecord = records => records.find(n => n.type === '1');
 const findTypeRecord = records => records.find(n => n.type === '5');
 const findVersionRecord = records => records.find(n => n.type === '0');
@@ -71,6 +74,7 @@ module.exports = ({from, records}) => {
 
   const decreaseRecord = findDecreaseRecord(records);
   const increaseRecord = findIncreaseRecord(records);
+  const migrationRecord = findMigrationRecord(records);
   const typeRecord = findTypeRecord(records);
 
   // Exit early when there is a change in both directions
@@ -103,6 +107,7 @@ module.exports = ({from, records}) => {
       type,
       decrease: Number(decrease) || undefined,
       increase: Number(increase) || undefined,
+      migration: !!migrationRecord ? migrationRecord.value : undefined,
     },
   };
 };

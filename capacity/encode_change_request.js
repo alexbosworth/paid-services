@@ -1,10 +1,12 @@
 const {encodeBigSize} = require('bolt01');
+const {encodeTlvRecord} = require('bolt01');
 const {rawChanId} = require('bolt07');
 
 const channelFlagsType = '5';
 const channelIdRecordType = '2';
 const decreaseRecordType = '3';
 const increaseRecordType = '4';
+const migrateRecordType = '6';
 const requestIdRecordType = '1';
 const typeAsHex = type => Buffer.from([type]).toString('hex');
 
@@ -26,7 +28,7 @@ const typeAsHex = type => Buffer.from([type]).toString('hex');
     }]
   }
 */
-module.exports = ({channel, decrease, id, increase, type}) => {
+module.exports = ({channel, decrease, id, increase, migration, type}) => {
   const records = [
     {
       type: requestIdRecordType,
@@ -48,6 +50,14 @@ module.exports = ({channel, decrease, id, increase, type}) => {
       type: decreaseRecordType,
       value: encodeBigSize({number: decrease.toString()}).encoded,
     });
+  }
+  
+  if (!!migration) {
+    // Add a record reflecting the migration of channel
+    records.push({
+      type: migrateRecordType,
+      value: migration,
+    })
   }
 
   if (!!increase) {
