@@ -24,6 +24,7 @@ const txIdAsHash = id => Buffer.from(id, 'hex').reverse();
     id: <Channel Funding Transaction Id Hex String>
     lnd: <Authenticated LND API Object>
     output: <Original Funding Output Script Hex String>
+    to: <Replacement Channel with Peer Public Key Hex String>
     unsigned: <Unsigned Replacement Transaction Hex String>
     vout: <Channel Funding Output Index Number>
   }
@@ -35,7 +36,7 @@ const txIdAsHash = id => Buffer.from(id, 'hex').reverse();
     transaction_vout: <Replacement Transaction Output Index Number>
   }
 */
-module.exports = ({channel, id, lnd, output, unsigned, vout}, cbk) => {
+module.exports = ({channel, id, lnd, output, to, unsigned, vout}, cbk) => {
   return new Promise((resolve, reject) => {
     return asyncAuto({
       // Check arguments
@@ -54,6 +55,10 @@ module.exports = ({channel, id, lnd, output, unsigned, vout}, cbk) => {
 
         if (!output) {
           return cbk([400, 'ExpectedOutputScriptToGetReplacementSignature']);
+        }
+
+        if (!to) {
+          return cbk([400, 'ExpectedChannelToPublicKeyHexString']);
         }
 
         if (!unsigned) {
@@ -164,8 +169,8 @@ module.exports = ({channel, id, lnd, output, unsigned, vout}, cbk) => {
                 return false;
               }
 
-              // The new channel must be from the same peer
-              if (channel.partner_public_key !== pending.partner_public_key) {
+              // The new channel must be from the expected node
+              if (channel.partner_public_key !== to) {
                 return false;
               }
 

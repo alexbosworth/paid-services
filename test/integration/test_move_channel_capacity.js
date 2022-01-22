@@ -1,3 +1,4 @@
+const {addPeer} = require('ln-service');
 const {address} = require('bitcoinjs-lib');
 const asyncAuto = require('async/auto');
 const asyncMap = require('async/map');
@@ -25,17 +26,17 @@ const id = Buffer.alloc(32).toString('hex');
 const interval = 10;
 const log = () => {};
 const maturity = 100;
-const size = 2;
+const size = 3;
 const slow = 5000;
 const times = 2000;
 const {toOutputScript} = address;
 const weightAsVBytes = n => Math.ceil(n / 4);
 
-// A capacity replacement proposal should be counter signed and accepted
-test(`Accept capacity replacement`, async ({end, equal, strictSame}) => {
+// A capacity movement proposal should be counter signed and accepted
+test(`Move channel capacity`, async ({end, equal, strictSame}) => {
   const {kill, nodes} = await spawnLightningCluster({size});
 
-  const [control, target] = nodes;
+  const [control, target, remote] = nodes;
 
   const {generate, lnd} = control;
 
@@ -45,6 +46,13 @@ test(`Accept capacity replacement`, async ({end, equal, strictSame}) => {
   await generate({count: maturity});
 
   try {
+    // Connect remote and target
+    await addPeer({
+      lnd: target.lnd,
+      public_key: remote.id,
+      socket: remote.socket,
+    });
+
     // Open up a new channel
     const channelOpen = await openChannel({
       lnd,
@@ -92,11 +100,15 @@ test(`Accept capacity replacement`, async ({end, equal, strictSame}) => {
             }
 
             if (args.name === 'direction') {
-              return cbk({direction: 'decrease'});
+              return cbk({direction: 'migrate'});
             }
 
             if (args.name === 'ok') {
               return cbk({ok: true});
+            }
+
+            if (args.name === 'migration') {
+              return cbk({migration: 0});
             }
 
             if (args.name === 'proceed') {
@@ -114,7 +126,11 @@ test(`Accept capacity replacement`, async ({end, equal, strictSame}) => {
             throw new Error('UnknownQueryNameForInitiator');
           },
           logger: {error: log, info: log},
-          nodes: [],
+          nodes: [{
+            from: 'from',
+            lnd: remote.lnd,
+            public_key: remote.id,
+          }],
         });
       },
 
@@ -159,7 +175,10 @@ test(`Accept capacity replacement`, async ({end, equal, strictSame}) => {
           interval: slow,
         },
         async () => {
-          const {channels} = await getChannels({lnd, is_active: true});
+          const {channels} = await getChannels({
+            lnd: target.lnd,
+            is_active: true,
+          });
 
           const [channel] = channels.filter(n => n.capacity < capacity);
 
@@ -169,10 +188,13 @@ test(`Accept capacity replacement`, async ({end, equal, strictSame}) => {
             throw new Error('ExpectedChannelActivation');
           }
 
-          equal(channel.is_private, true, 'Channel is private');
+          equal(channel.partner_public_key, remote.id, 'Channel is moved');
 
           {
-            const {policies} = await getChannel({lnd, id: channel.id});
+            const {policies} = await getChannel({
+              lnd: remote.lnd,
+              id: channel.id,
+            });
 
             const noPolicy = policies.find(n => !n.cltv_delta);
 

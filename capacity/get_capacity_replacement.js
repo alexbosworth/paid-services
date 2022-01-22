@@ -49,6 +49,7 @@ const txIdAsHash = id => Buffer.from(id, 'hex').reverse();
     [increase]: <Increase Channel Size Tokens Number>
     [is_private]: <Original Channel Is Private Bool>
     lnd: <Authenticated LND API Object>
+    open_lnd: <Open Channel with LND API Object>
     transaction_id: <Original Funding Transaction Id Hex String>
     transaction_vout: <Original Funding Output Index Number>
   }
@@ -85,6 +86,10 @@ module.exports = (args, cbk) => {
 
         if (!args.lnd) {
           return cbk([400, 'ExpectedLndApiToGetCapacityReplacement']);
+        }
+
+        if (!args.open_lnd) {
+          return cbk([400, 'ExpectedLndToUseToOpenReplacementChannel']);
         }
 
         if (!args.transaction_id) {
@@ -302,7 +307,7 @@ module.exports = (args, cbk) => {
             partner_public_key: pendingChannel.partner_public_key,
           }],
           is_avoiding_broadcast: true,
-          lnd: args.lnd,
+          lnd: args.open_lnd,
         },
         cbk);
       }],

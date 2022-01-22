@@ -1,10 +1,12 @@
 const asyncAuto = require('async/auto');
 const asyncUntil = require('async/until');
+const {connectPeer} = require('ln-sync');
 const {findKey} = require('ln-sync');
 const {getChainFeeRate} = require('ln-service');
 const {getChainTransactions} = require('ln-service');
 const {getChannel} = require('ln-service');
 const {getChannels} = require('ln-service');
+const {getNodeAlias} = require('ln-sync');
 const {getPeers} = require('ln-service');
 const {returnResult} = require('asyncjs-util');
 const {sendMessageToPeer} = require('ln-service');
@@ -16,6 +18,7 @@ const feeForReplacement = require('./fee_for_replacement');
 const {ceil} = Math;
 const dust = 550;
 const dustBuffer = 750;
+const {isArray} = Array;
 const isNumber = n => !isNaN(n);
 const largeChannelsBit = 19;
 const maxSats = 21e6 * 1e8;
@@ -40,6 +43,11 @@ const weightBuffer = 150;
     ask: <Ask Function>
     id: <Request Identifier Hex String>
     lnd: <Authenticated LND API Object>
+    nodes: [{
+      lnd: <Potential Move Node LND API Object>
+      node_name: <Potential Move Node Name String>
+      public_key: <Potential Move Node Public Key Hex String>
+    }]
   }
 
   @returns via cbk or Promise
@@ -59,6 +67,8 @@ const weightBuffer = 150;
     id: <Standard Format Channel Id String>
     increase: <Channel Capacity Increase Tokens Number>
     is_private: <Channel is Private Bool>
+    [open_from]: <Open Replacement Channel From Node with Public Key String>
+    open_lnd: <Open Replacement Channel with LND API Object>
     [open_transaction]: <Channel Open Transaction Hex String>
     partner_csv_delay: <Peer CSV Delay Number>
     partner_public_key: <Node to Ask For Capacity Change Public Key Hex String>
@@ -70,7 +80,7 @@ const weightBuffer = 150;
     transaction_id: <Channel Funding Transaction Id Hex String>
   }
 */
-module.exports = ({ask, id, lnd}, cbk) => {
+module.exports = ({ask, id, lnd, nodes}, cbk) => {
   return new Promise((resolve, reject) => {
     return asyncAuto({
       // Check arguments
@@ -85,6 +95,10 @@ module.exports = ({ask, id, lnd}, cbk) => {
 
         if (!lnd) {
           return cbk([400, 'ExpectedLndToAskForChangeDetails']);
+        }
+
+        if (!isArray(nodes)) {
+          return cbk([400, 'ExpectedArrayOfPotentialMoveNodesToAskForChange']);
         }
 
         return cbk();
@@ -112,7 +126,7 @@ module.exports = ({ask, id, lnd}, cbk) => {
         return getChainFeeRate({lnd, confirmation_target: slowTarget}, cbk);
       }],
 
-      // Find the public key or alias entered
+      // Find the node with the public key or alias entered
       findKey: [
         'askForPeer',
         'getChannels',
@@ -124,6 +138,11 @@ module.exports = ({ask, id, lnd}, cbk) => {
           query: askForPeer,
         },
         cbk);
+      }],
+
+      // Get the alias of the peer
+      getAlias: ['findKey', ({findKey}, cbk) => {
+        return getNodeAlias({lnd, id: findKey.public_key}, cbk);
       }],
 
       // Send a test message to the selected peer to confirm they are connected
@@ -190,7 +209,7 @@ module.exports = ({ask, id, lnd}, cbk) => {
         return ask({
           choices,
           loop: false,
-          message: 'Channel to change capacity?',
+          message: 'Channel to change?',
           name: 'id',
           type: 'list',
         },
@@ -294,25 +313,82 @@ module.exports = ({ask, id, lnd}, cbk) => {
       }],
 
       // Choose whether to add or remove coins
-      askForDirection: ['channel', ({channel}, cbk) => {
+      askForDirection: ['channel', 'getAlias', ({channel, getAlias}, cbk) => {
+        const {alias} = getAlias;
+
+        const choices = [
+          {
+            disabled: !channel.max_increase_tokens,
+            name: `Increase capacity (currently ${channel.capacity})`,
+            value: 'increase',
+          },
+          {
+            disabled: !channel.max_decrease_tokens,
+            name: `Decrease capacity (limit ${channel.max_decrease_tokens})`,
+            value: 'decrease',
+          },
+        ];
+
+        if (!!nodes.filter(n => n.public_key !== getAlias.id).length) {
+          choices.push({
+            disabled: !channel.max_decrease_tokens,
+            name: `Move the channel with ${alias} to another of your nodes?`,
+            value: 'migrate',
+          });
+        }
+
         return ask({
-          choices: [
-            {
-              disabled: !channel.max_increase_tokens,
-              name: `Increase capacity (currently ${channel.capacity})`,
-              value: 'increase',
-            },
-            {
-              disabled: !channel.max_decrease_tokens,
-              name: `Decrease capacity (limit ${channel.max_decrease_tokens})`,
-              value: 'decrease',
-            },
-          ],
+          choices,
           message: 'How do you want to change the channel capacity?',
           name: 'direction',
           type: 'list',
         },
         ({direction}) => cbk(null, direction));
+      }],
+
+      // Ask for migration
+      askForMigration: [
+        'askForDirection',
+        'channel',
+        ({askForDirection, channel}, cbk) =>
+      {
+        // Exit early if not decrease or no saved nodes
+        if (askForDirection !== 'migrate') {
+          return cbk();
+        }
+
+        const peer = channel.partner_public_key;
+
+        const potentialNodes = nodes.filter(n => n.public_key !== peer);
+
+        return ask({
+          choices: potentialNodes.map((node, i) => ({
+            name: `${node.node_name} ${node.public_key}`,
+            value: i,
+          })),
+          message: 'Move channel to?',
+          name: 'migration',
+          type: 'list',
+        },
+        ({migration}) => cbk(null, potentialNodes[migration]));
+      }],
+
+      // Add peer from migrating node
+      connect: [
+        'askForMigration',
+        'findKey',
+        ({askForMigration, findKey}, cbk) =>
+      {
+        // Exit early if its there is no migration
+        if (!askForMigration) {
+          return cbk();
+        }
+
+        return connectPeer({
+          id: findKey.public_key,
+          lnd: askForMigration.lnd,
+        },
+        cbk);
       }],
 
       // Ask for how much to decrease
@@ -400,6 +476,7 @@ module.exports = ({ask, id, lnd}, cbk) => {
       askForPublicPrivate: [
         'askForDecrease',
         'askForIncrease',
+        'askForMigration',
         'channel',
         ({channel}, cbk) =>
       {
@@ -452,12 +529,10 @@ module.exports = ({ask, id, lnd}, cbk) => {
       {
         const {fee} = estimateChainFee;
 
-        const pay = `Pay estimated on-chain channel replacement fee: ${fee}`;
-
         return ask({
           type: 'confirm',
           name: 'proceed',
-          message: `${pay} for capacity change?`,
+          message: `Pay estimated channel replacement chain-fee: ${fee}?`,
         },
         ({proceed}) => cbk(null, proceed));
       }],
@@ -466,16 +541,20 @@ module.exports = ({ask, id, lnd}, cbk) => {
       details: [
         'askForDecrease',
         'askForIncrease',
+        'askForMigration',
         'askForPublicPrivate',
         'channel',
+        'connect',
         'confirmFeeEstimate',
         'estimateChainFee',
         'getTx',
         ({
           askForDecrease,
           askForIncrease,
+          askForMigration,
           askForPublicPrivate,
           channel,
+          connect,
           confirmFeeEstimate,
           estimateChainFee,
           getTx,
@@ -509,6 +588,7 @@ module.exports = ({ask, id, lnd}, cbk) => {
           channel: channel.id,
           decrease: !!askForDecrease ? sumOfTokens(askForDecrease) : undefined,
           increase: askForIncrease,
+          to: !!askForMigration ? askForMigration.public_key : undefined,
           type: askForPublicPrivate.is_private ? privateType : publicType,
         });
 
@@ -524,6 +604,8 @@ module.exports = ({ask, id, lnd}, cbk) => {
           id: channel.id,
           increase: askForIncrease,
           is_private: askForPublicPrivate.is_private,
+          open_from: !!askForMigration ? askForMigration.public_key : null,
+          open_lnd: !!askForMigration ? askForMigration.lnd : lnd,
           open_transaction: channel.open_transaction,
           partner_csv_delay: channel.partner_csv_delay,
           partner_public_key: channel.partner_public_key,

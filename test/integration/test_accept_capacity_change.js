@@ -105,6 +105,7 @@ test(`Accept capacity replacement`, async ({end, equal, strictSame}) => {
           bitcoinjs_network: (await getNetwork({lnd})).bitcoinjs,
           channel: channel.id,
           decrease: [],
+          open_lnd: lnd,
           open_transaction: tx.transaction,
           partner_public_key: target.id,
           transaction_id: channel.transaction_id,
@@ -123,6 +124,7 @@ test(`Accept capacity replacement`, async ({end, equal, strictSame}) => {
           channel: channel.id,
           from: control.id,
           lnd: target.lnd,
+          to: control.id,
         });
       },
 

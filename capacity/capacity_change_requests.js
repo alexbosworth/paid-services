@@ -29,6 +29,7 @@ const privateAsType = isPrivate => isPrivate ? 1 : 0;
       from: <From Node Public Key Id Hex String>
       id: <Change Request Id Hex String>
       [increase]: <Add Capacity Tokens Number>
+      [to]: <Switch Channel to Node with Identity Public Key Hex String>
       [type]: <Change Channel Channel Type Flags Number>
     }]
   }
@@ -77,6 +78,7 @@ module.exports = ({channels, requests}) => {
         from: channel.partner_public_key,
         id: request.id,
         increase: request.increase,
+        to: request.to,
         type: type ? request.type : undefined,
       };
     });
