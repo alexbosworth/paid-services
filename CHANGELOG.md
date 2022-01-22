@@ -1,5 +1,9 @@
 # Versions
 
+## Version 3.11.0
+
+- `changeChannelCapacity`: Add `nodes` to allow moving channel to another node
+
 ## Version 3.10.0
 
 - `createAnchoredTrade`: Add method to create an anchored open trade

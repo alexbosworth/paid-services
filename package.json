@@ -12,7 +12,7 @@
     "bolt01": "1.2.3",
     "bolt07": "1.8.0",
     "invoices": "2.0.3",
-    "ln-service": "53.5.0",
+    "ln-service": "53.5.1",
     "ln-sync": "3.7.0"
   },
   "description": "Lightning Paid Services library",
@@ -40,5 +40,5 @@
     "integration-tests": "tap -j 2 --branches=1 --functions=1 --lines=1 --statements=1 -t 180 test/integration/*.js",
     "test": "tap --branches=1 --functions=1 --lines=1 --statements=1 -t 60 test/actions/*.js test/capacity/*.js test/client/*.js test/config/*.js test/p2p/*.js test/records/*.js test/respond/*.js test/server/*.js test/server/*.js test/services/*.js test/trades/*.js"
   },
-  "version": "3.10.0"
+  "version": "3.11.0"
 }

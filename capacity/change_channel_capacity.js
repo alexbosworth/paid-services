@@ -21,7 +21,7 @@ const times = 6 * 60 * 6;
     [delay]: <Wait Time For Incoming Capacity Requests Milliseconds Number>
     lnd: <Authenticated LND API Object>
     logger: <Winston Logger Object>
-    nodes: [{
+    [nodes]: [{
       lnd: <Authenticated LND API Object>
       named: <Node Named String.
       public_key: <Node Identity Public Key Hex String>
@@ -45,7 +45,7 @@ module.exports = ({ask, delay, lnd, logger, nodes}, cbk) => {
           return cbk([400, 'ExpectedLoggerObjectToChangeCapacity']);
         }
 
-        if (!isArray(nodes)) {
+        if (!!nodes && !isArray(nodes)) {
           return cbk([400, 'ExpectedArrayOfControlledNodesToChangeCapacity']);
         }
 
@@ -145,7 +145,9 @@ module.exports = ({ask, delay, lnd, logger, nodes}, cbk) => {
           ask,
           lnd,
           logger,
-          nodes: nodes.filter(n => n.public_key !== getIdentity.public_key),
+          nodes: (nodes || []).filter(node => {
+            return node.public_key !== getIdentity.public_key;
+          }),
         },
         cbk);
       }],
