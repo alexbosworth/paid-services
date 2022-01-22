@@ -32,6 +32,7 @@ const openTxType = '1';
     [increase]: <Increase Tokens Number>
     lnd: <Authenticated LND API Object>
     logger: <Winston Logger Object>
+    to: <Expect Channel from Public Key Hex String>
   }
 
   @returns via cbk or Promise
@@ -43,7 +44,7 @@ const openTxType = '1';
     transaction_vout: <Replacement Channel Transaction Output Index Number>
   }
 */
-module.exports = ({channel, from, id, increase, lnd, logger, migration}, cbk) => {
+module.exports = ({channel, from, id, increase, lnd, logger, to}, cbk) => {
   return new Promise((resolve, reject) => {
     return asyncAuto({
       // Check arguments
@@ -66,6 +67,10 @@ module.exports = ({channel, from, id, increase, lnd, logger, migration}, cbk) =>
 
         if (!logger) {
           return cbk([400, 'ExpectedLoggerObjectToAcceptCapacityChange']);
+        }
+
+        if (!to) {
+          return cbk([400, 'ExpectedToPublicKeyToAcceptCapacityChange']);
         }
 
         return cbk();
@@ -218,8 +223,8 @@ module.exports = ({channel, from, id, increase, lnd, logger, migration}, cbk) =>
           return getReplacementSignature({
             channel,
             lnd,
-            migration,
             output,
+            to,
             id: parameters.id,
             unsigned: parseSignCapacityRequest(parameters).unsigned,
             vout: parameters.vout,
@@ -239,6 +244,7 @@ module.exports = ({channel, from, id, increase, lnd, logger, migration}, cbk) =>
               id: parameters.id,
               signature: res.signature,
             });
+
             // Send the replacement signature for the change request
             success({records});
 

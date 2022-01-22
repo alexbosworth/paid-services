@@ -116,6 +116,7 @@ test(`Accept capacity replacement`, async ({end, equal, strictSame}) => {
 
             throw new Error('UnexpectedQueryNameForProposingSide');
           },
+          nodes: [],
         });
       },
 
@@ -146,6 +147,7 @@ test(`Accept capacity replacement`, async ({end, equal, strictSame}) => {
             throw new Error('UnexpectedQueryNameForAcceptingSide');
           },
           lnd: target.lnd,
+          nodes: [],
         });
       }],
 

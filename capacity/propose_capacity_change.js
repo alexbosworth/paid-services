@@ -31,7 +31,6 @@ const rebroadcastDelayMs = 1000 * 3;
 const {SIGHASH_ALL} = Transaction;
 const transitFamily = 805;
 const unsignedTransactionType = '1';
-const migrationRecordType = '6';
 
 /** Propose the capacity change to be accepted
 
@@ -54,6 +53,7 @@ const migrationRecordType = '6';
     [increase_witness_script]: <Increase Funds Witness Script Hex String>
     lnd: <Authenticated LND API Object>
     logger: <Winston Logger Object>
+    open_lnd: <Open Replacement Channel Using LND API Object>
     open_transaction: <Original Channel Funding Transaction Hex String>
     partner_public_key: <Peer Public Key Hex Encoded String>
     transaction_id: <Original Channel Transaction Id Hex String>
@@ -95,6 +95,10 @@ module.exports = (args, cbk) => {
           return cbk([400, 'ExpectedWinstonLoggerToProposeCapacityChange']);
         }
 
+        if (!args.open_lnd) {
+          return cbk([400, 'ExpectedOpenLndApiToProposeCapacityChange']);
+        }
+
         if (!args.open_transaction) {
           return cbk([400, 'ExpectedChannelOpenTxToProposeCapacityChange']);
         }
@@ -126,7 +130,7 @@ module.exports = (args, cbk) => {
           increase: args.increase,
           is_private: args.is_private,
           lnd: args.lnd,
-          migrate_lnd: !!args.migration ? args.migration.lnd : undefined,
+          open_lnd: args.open_lnd,
           open_transaction: args.open_transaction,
           transaction_id: args.transaction_id,
           transaction_vout: args.transaction_vout,
@@ -202,7 +206,7 @@ module.exports = (args, cbk) => {
         return fundPendingChannels({
           funding,
           channels: [getReplacement.pending_channel_id],
-          lnd: !!args.migration ? args.migration.lnd : args.lnd,
+          lnd: args.open_lnd,
         },
         cbk);
       }],
@@ -213,24 +217,18 @@ module.exports = (args, cbk) => {
         'getReplacement',
         asyncReflect(({getReplacement}, cbk) =>
       {
-        const records = [
-          {
-            type: unsignedTransactionType,
-            value: getReplacement.unsigned_transaction,
-          },
-          {
-            type: capacityChangeIdType,
-            value: args.id,
-          },
-        ];
-
-        if(!!args.migration) {
-          records.push({type: migrationRecordType, value: args.migration.public_key});
-        }
-
         return makePeerRequest({
           lnd: args.lnd,
-          records: records,
+          records: [
+            {
+              type: unsignedTransactionType,
+              value: getReplacement.unsigned_transaction,
+            },
+            {
+              type: capacityChangeIdType,
+              value: args.id,
+            },
+          ],
           timeout: peerRequestTimeoutMs,
           to: args.partner_public_key,
           type: serviceTypeSignCapacityChange,
@@ -369,7 +367,7 @@ module.exports = (args, cbk) => {
 
           // Look for the new channel to see if the change succeeded
           try {
-            const {channels} = await getChannels({lnd: args.lnd});
+            const {channels} = await getChannels({lnd: args.open_lnd});
 
             const channel = channels.find(n => n.transaction_id === txId);
 

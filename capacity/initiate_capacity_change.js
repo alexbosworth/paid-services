@@ -36,6 +36,7 @@ const familyTemporary = 805;
 const {fromHex} = Transaction;
 const hexAsBuffer = hex => Buffer.from(hex, 'hex');
 const idRecordType = '0';
+const {isArray} = Array;
 const makeId = () => randomBytes(32).toString('hex');
 const messageFrequencyMs = 3000;
 const minimumAddTokens = 20000;
@@ -59,6 +60,11 @@ const waitingTimeoutMs = 1000 * 30;
     ask: <Ask Function>
     lnd: <Authenticated LND API Object>
     logger: <Winston Logger Object>
+    nodes: [{
+      lnd: <Potential Move Node LND API Object>
+      node_name: <Potential Move Node Name String>
+      public_key: <Potential Move Node Public Key Hex String>
+    }]
   }
 
   @returns via cbk or Promise
@@ -66,11 +72,12 @@ const waitingTimeoutMs = 1000 * 30;
     base_fee_mtokens: <Forwarding Base Fee Millitokens String>
     cltv_delta: <Forwarding CLTV Delta Number>
     fee_rate: <Forwarding Parts Per Million Fee Rate Number>
+    open_lnd: <Channel Open LND API Object>
     transaction_id: <Replacement Channel Transaction Id Hex String> 
     transaction_vout: <Replacement Channel Transaction Output Index Number>
   }
 */
-module.exports = ({ask, lnd, logger, saved_nodes}, cbk) => {
+module.exports = ({ask, lnd, logger, nodes}, cbk) => {
   return new Promise((resolve, reject) => {
     return asyncAuto({
       // Generate a unique identifier for the change
@@ -90,6 +97,10 @@ module.exports = ({ask, lnd, logger, saved_nodes}, cbk) => {
           return cbk([400, 'ExpectedLoggerObjectToInitiateCapacityChange']);
         }
 
+        if (!isArray(nodes)) {
+          return cbk([400, 'ExpectedArrayOfCandidateMoveNodesToInitiate']);
+        }
+
         return cbk();
       },
 
@@ -98,29 +109,18 @@ module.exports = ({ask, lnd, logger, saved_nodes}, cbk) => {
 
       // Ask for all the capacity change details
       askForChangeDetails: ['id', 'validate', ({id}, cbk) => {
-        return askForChangeDetails({ask, id, lnd, saved_nodes}, cbk);
-      }],
-
-      //Get saved node lnd
-      getMigrationLnd: ['askForChangeDetails', async ({askForChangeDetails}) => {
-        //Exit early if its not a migration
-        if(!askForChangeDetails.migration_public_key) {
-          return;
-        }
-        const [savedNodeLnd] = saved_nodes.filter(saved_node => saved_node.public_key === askForChangeDetails.migration_public_key);
-
-        return {lnd: savedNodeLnd.lnd, public_key: savedNodeLnd.public_key};
+        return askForChangeDetails({ask, id, lnd, nodes}, cbk);
       }],
 
       // Propose the theoretical new channel to the peer to confirm a change
-      checkAccept: ['askForChangeDetails', 'getMigrationLnd', ({askForChangeDetails, getMigrationLnd}, cbk) => {
+      checkAccept: ['askForChangeDetails', ({askForChangeDetails}, cbk) => {
         // Check that a channel open would be accepted
         return acceptsChannelOpen({
-          lnd: !!getMigrationLnd ? getMigrationLnd.lnd : lnd,
           capacity: askForChangeDetails.estimated_capacity,
           cooperative_close_address: askForChangeDetails.coop_close_address,
           give_tokens: askForChangeDetails.remote_balance,
           is_private: askForChangeDetails.is_private,
+          lnd: askForChangeDetails.open_lnd,
           min_htlc_mtokens: askForChangeDetails.min_htlc_mtokens,
           partner_csv_delay: askForChangeDetails.partner_csv_delay,
           partner_public_key: askForChangeDetails.partner_public_key,
@@ -407,7 +407,6 @@ module.exports = ({ask, lnd, logger, saved_nodes}, cbk) => {
         'askForChangeDetails',
         'confirmAddFunds',
         'getFunding',
-        'getMigrationLnd',
         'getNetwork',
         'getPeerChannels',
         'id',
@@ -451,7 +450,7 @@ module.exports = ({ask, lnd, logger, saved_nodes}, cbk) => {
           increase_transaction_vout: getFunding.vout,
           increase_witness_script: getFunding.script,
           is_private: askForChangeDetails.is_private,
-          migration: getMigrationLnd,
+          open_lnd: askForChangeDetails.open_lnd,
           open_transaction: sendBasicRequest,
           partner_public_key: askForChangeDetails.partner_public_key,
           transaction_id: channel.transaction_id,
@@ -477,6 +476,8 @@ module.exports = ({ask, lnd, logger, saved_nodes}, cbk) => {
           base_fee_mtokens: askForChangeDetails.base_fee_mtokens,
           cltv_delta: askForChangeDetails.cltv_delta,
           fee_rate: askForChangeDetails.fee_rate,
+          open_from: askForChangeDetails.open_from || undefined,
+          open_lnd: askForChangeDetails.open_lnd,
           transaction_id: proposeChange.value.transaction_id,
           transaction_vout: proposeChange.value.transaction_vout,
         });

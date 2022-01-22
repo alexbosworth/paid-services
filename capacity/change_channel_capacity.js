@@ -2,21 +2,17 @@ const asyncAuto = require('async/auto');
 const asyncDetectSeries = require('async/detectSeries');
 const asyncRetry = require('async/retry');
 const {getIdentity} = require('ln-service');
-const {getNodeAlias} = require('ln-sync');
 const {returnResult} = require('asyncjs-util');
 const {updateChannelFee} = require('ln-sync');
 
 const acceptCapacityChange = require('./accept_capacity_change');
+const askToSelectChange = require('./ask_to_select_change');
 const getCapacityChangeRequests = require('./get_capacity_change_requests');
 const initiateCapacityChange = require('./initiate_capacity_change');
 
-const describeType = type => !(type & 0) ? 'private' : 'public';
-const interval = 10 * 1000;
-const isArray = Array;
-const peerName = ({alias, id}) => `${alias} ${id.substring(0, 8)}`.trim();
+const interval = 1000 * 10;
+const {isArray} = Array;
 const times = 6 * 60 * 6;
-const tokensAsBigUnit = tokens => (tokens / 1e8).toFixed(8);
-const waitForCloseInterval = 1000 * 3;
 
 /** Change a channel's capacity
 
@@ -25,10 +21,14 @@ const waitForCloseInterval = 1000 * 3;
     [delay]: <Wait Time For Incoming Capacity Requests Milliseconds Number>
     lnd: <Authenticated LND API Object>
     logger: <Winston Logger Object>
+    nodes: [{
+      lnd: <Authenticated LND API Object>
+      named: <Node Named String.
+      public_key: <Node Identity Public Key Hex String>
+    }]
   }
 */
-
-module.exports = ({ask, delay, lnd, logger, migrate_lnd, saved_nodes}, cbk) => {
+module.exports = ({ask, delay, lnd, logger, nodes}, cbk) => {
   return new Promise((resolve, reject) => {
     return asyncAuto({
       // Check arguments
@@ -45,8 +45,8 @@ module.exports = ({ask, delay, lnd, logger, migrate_lnd, saved_nodes}, cbk) => {
           return cbk([400, 'ExpectedLoggerObjectToChangeCapacity']);
         }
 
-        if(!isArray(saved_nodes)) {
-          return cbk([400, 'ExpectedArrayOfSavedNodesToChangeCapacity']);
+        if (!isArray(nodes)) {
+          return cbk([400, 'ExpectedArrayOfControlledNodesToChangeCapacity']);
         }
 
         return cbk();
@@ -89,49 +89,24 @@ module.exports = ({ask, delay, lnd, logger, migrate_lnd, saved_nodes}, cbk) => {
         ({waitForProposal}, cbk) =>
       {
         return asyncDetectSeries(waitForProposal.requests, (request, cbk) => {
-          return getNodeAlias({lnd, id: request.from}, (err, res) => {
+          return askToSelectChange({
+            ask,
+            lnd,
+            address: request.address,
+            capacity: request.capacity,
+            channel: request.channel,
+            decrease: request.decrease,
+            from_id: request.from,
+            increase: request.increase,
+            to_id: request.to,
+            type: request.type,
+          },
+          (err, res) => {
             if (!!err) {
               return cbk(err);
             }
 
-            const change = !!request.increase ? 'Increase' : 'Decrease';
-            const delta = request.decrease || request.increase;
-            const hasType = request.type !== undefined;
-            const id = request.channel;
-            const peer = peerName(res);
-            const size = tokensAsBigUnit(request.capacity);
-
-
-            const action = `${change} capacity ${size} channel ${id}`;
-            const by = !!delta ? ` by ${tokensAsBigUnit(delta)}` : '';
-            const type = hasType ? describeType(request.type) : '';
-
-            const changeType = hasType ? ` and make channel ${type}` : '';
-            const message = () => {
-              if(!!request.migration) {
-                return `Migrate channel (${id}) with ${peer} of capacity ${size} to ${request.migration}?`
-              } else {
-                return `${action} with ${peer}${by}${changeType}?`;
-              }
-            }
-
-            return ask({
-              type: 'confirm',
-              name: 'accept',
-              message: message(),
-            },
-            ({accept}) => {
-              if (!accept) {
-                return cbk(null, false);
-              }
-
-              // Fail changing when cooperative_close_address is set
-              if (!!request.address && !!request.increase) {
-                return cbk([400, 'ChannelHasLockedCoopCloseAddressSet']);
-              }
-
-              return cbk(null, true);
-            });
+            return cbk(null, res.is_selected);
           });
         },
         cbk);
@@ -143,6 +118,7 @@ module.exports = ({ask, delay, lnd, logger, migrate_lnd, saved_nodes}, cbk) => {
         if (!askToSelectChange) {
           return cbk();
         }
+
         return acceptCapacityChange({
           lnd,
           logger,
@@ -150,18 +126,28 @@ module.exports = ({ask, delay, lnd, logger, migrate_lnd, saved_nodes}, cbk) => {
           from: askToSelectChange.from,
           id: askToSelectChange.id,
           increase: askToSelectChange.increase,
-          migration: askToSelectChange.migration,
+          to: askToSelectChange.to || askToSelectChange.from,
         },
         cbk);
       }],
 
       // Initiate a capacity change
-      initiateChange: ['askToSelectChange', ({askToSelectChange}, cbk) => {
+      initiateChange: [
+        'askToSelectChange',
+        'getIdentity',
+        ({askToSelectChange, getIdentity}, cbk) =>
+      {
         if (!!askToSelectChange) {
           return cbk();
         }
 
-        return initiateCapacityChange({ask, lnd, logger, migrate_lnd, saved_nodes}, cbk);
+        return initiateCapacityChange({
+          ask,
+          lnd,
+          logger,
+          nodes: nodes.filter(n => n.public_key !== getIdentity.public_key),
+        },
+        cbk);
       }],
 
       // Reset the channel routing policies
@@ -177,11 +163,11 @@ module.exports = ({ask, delay, lnd, logger, migrate_lnd, saved_nodes}, cbk) => {
 
         return asyncRetry({interval, times}, cbk => {
           return updateChannelFee({
-            lnd,
             base_fee_mtokens: policy.base_fee_mtokens,
             cltv_delta: policy.cltv_delta,
             fee_rate: policy.fee_rate,
-            from: getIdentity.public_key,
+            from: policy.open_from || getIdentity.public_key,
+            lnd: policy.open_lnd || lnd,
             transaction_id: policy.transaction_id,
             transaction_vout: policy.transaction_vout,
           },
