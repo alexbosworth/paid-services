@@ -1,6 +1,6 @@
 # Versions
 
-## Version 3.11.1
+## Version 3.11.3
 
 - `changeChannelCapacity`: Add `nodes` to allow moving channel to another node
 

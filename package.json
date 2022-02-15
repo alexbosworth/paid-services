@@ -11,9 +11,11 @@
     "asyncjs-util": "1.2.8",
     "bolt01": "1.2.3",
     "bolt07": "1.8.0",
+    "ecpair": "2.0.1",
     "invoices": "2.0.4",
     "ln-service": "53.9.0",
-    "ln-sync": "3.10.1"
+    "ln-sync": "3.10.1",
+    "tiny-secp256k1": "2.2.0"
   },
   "description": "Lightning Paid Services library",
   "devDependencies": {
@@ -40,5 +42,5 @@
     "integration-tests": "tap -j 2 --branches=1 --functions=1 --lines=1 --statements=1 -t 180 test/integration/*.js",
     "test": "tap --branches=1 --functions=1 --lines=1 --statements=1 -t 60 test/actions/*.js test/capacity/*.js test/client/*.js test/config/*.js test/p2p/*.js test/records/*.js test/respond/*.js test/server/*.js test/server/*.js test/services/*.js test/trades/*.js"
   },
-  "version": "3.11.1"
+  "version": "3.11.3"
 }

@@ -12,8 +12,8 @@ const {getPendingChannels} = require('ln-service');
 const {returnResult} = require('asyncjs-util');
 const {signTransaction} = require('ln-service');
 const {subscribeToBlocks} = require('ln-service');
+const tinysecp = require('tiny-secp256k1');
 const {Transaction} = require('bitcoinjs-lib');
-const {transactionAsPsbt} = require('psbt');
 
 const finalizeCapacityReplacement = require('./finalize_capacity_replacement');
 const getCapacityReplacement = require('./get_capacity_replacement');
@@ -69,6 +69,9 @@ const unsignedTransactionType = '1';
 module.exports = (args, cbk) => {
   return new Promise((resolve, reject) => {
     return asyncAuto({
+      // Import ECPair library
+      ecp: async () => (await import('ecpair')).ECPairFactory(tinysecp),
+
       // Check arguments
       validate: cbk => {
         if (!args.bitcoinjs_network) {
@@ -173,13 +176,15 @@ module.exports = (args, cbk) => {
 
       // Derive the funding PSBT to use for funding
       funding: [
+        'ecp',
         'getReplacement',
         'signAddFunds',
-        ({getReplacement, signAddFunds}, cbk) =>
+        ({ecp, getReplacement, signAddFunds}, cbk) =>
       {
         const [addFundsSignature] = signAddFunds.signatures || [];
 
         const {psbt} = interimReplacementPsbt({
+          ecp,
           increase_public_key: args.increase_key,
           increase_signature: addFundsSignature,
           increase_transaction: args.increase_transaction,

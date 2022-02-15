@@ -7,6 +7,7 @@ const {fromHex} = Transaction;
 /** Generate a dummy PSBT to allow for setting up the channel funding
 
   {
+    ecp: <ECPair Object>
     [increase_transaction]: <Increase Funds Transaction Hex String>
     open_transaction: <Original Channel Funding Transaction Hex String>
     signature: <Hex Encoded Signature String>
@@ -49,6 +50,7 @@ module.exports = args => {
   }
 
   const {psbt} = transactionAsPsbt({
+    ecp: args.ecp,
     spending: spending.filter(n => !!n),
     transaction: replacement.toHex(),
   });
