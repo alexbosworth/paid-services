@@ -46,12 +46,14 @@ test(`Accept capacity replacement`, async ({end, equal, strictSame}) => {
 
   try {
     // Open up a new channel
-    const channelOpen = await openChannel({
-      lnd,
-      is_private: true,
-      local_tokens: capacity,
-      partner_public_key: target.id,
-      partner_socket: target.socket,
+    const channelOpen = await asyncRetry({interval, times}, async () => {
+      return await openChannel({
+        lnd,
+        is_private: true,
+        local_tokens: capacity,
+        partner_public_key: target.id,
+        partner_socket: target.socket,
+      });
     });
 
     // Wait for the channel to be active

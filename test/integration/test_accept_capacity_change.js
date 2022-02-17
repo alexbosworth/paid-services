@@ -6,6 +6,7 @@ const {broadcastChainTransaction} = require('ln-service');
 const {closeChannel} = require('ln-service');
 const {createChainAddress} = require('ln-service');
 const {getChainTransactions} = require('ln-service');
+const {getChannel} = require('ln-service');
 const {getChannels} = require('ln-service');
 const {getNetwork} = require('ln-sync');
 const {networks} = require('bitcoinjs-lib');
@@ -51,18 +52,30 @@ test(`Accept capacity replacement`, async ({end, equal, strictSame}) => {
 
   try {
     // Open up a new channel
-    const channelOpen = await openChannel({
-      lnd,
-      local_tokens: capacity,
-      partner_public_key: target.id,
-      partner_socket: target.socket,
+    const channelOpen = await asyncRetry({interval, times}, async () => {
+      return await openChannel({
+        lnd,
+        local_tokens: capacity,
+        partner_public_key: target.id,
+        partner_socket: target.socket,
+      });
     });
 
     // Wait for the channel to be active
     const channel = await asyncRetry({interval, times}, async () => {
       const [channel] = (await getChannels({lnd})).channels;
 
-      if (!!channel && !!channel.is_active) {
+      if (!channel) {
+        await generate({});
+
+        throw new Error('ExpectedInitialChannelActivation');
+      }
+
+      const {policies} = await getChannel({lnd, id: channel.id});
+
+      const [missingCltv] = policies.filter(n => !n.cltv_delta);
+
+      if (!!channel && !!channel.is_active && !missingCltv) {
         return channel;
       }
 

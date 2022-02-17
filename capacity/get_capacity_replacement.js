@@ -293,8 +293,22 @@ module.exports = (args, cbk) => {
         return cbk(null, newCapacity);
       }],
 
+      // Make sure that we are still connected to the original peer
+      confirmConnection: [
+        'newCapacity',
+        'pendingChannel',
+        ({pendingChannel}, cbk) =>
+      {
+        return connectPeer({
+          id: pendingChannel.partner_public_key,
+          lnd: args.open_lnd,
+        },
+        cbk);
+      }],
+
       // Propose the new channel to replace the existing one
       proposeChannel: [
+        'confirmConnection',
         'newCapacity',
         'pendingChannel',
         ({newCapacity, pendingChannel}, cbk) =>

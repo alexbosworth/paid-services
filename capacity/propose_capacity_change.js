@@ -351,12 +351,24 @@ module.exports = (args, cbk) => {
 
         // Listen to new blocks to wait for the channel change confirmation
         const sub = subscribeToBlocks({lnd: args.lnd});
+        let isFinished = false;
+
+        // Avoid multiple callbacks
+        const done = (err, res) => {
+          sub.removeAllListeners();
+
+          if (isFinished) {
+            return;
+          }
+
+          isFinished = true;
+
+          return cbk(err, res);
+        };
 
         // Fail with error when the blocks subscription is lost
         sub.on('error', err => {
-          sub.removeAllListeners();
-
-          return cbk([503, 'LostBlockchainSubscription', {err}]);
+          return done([503, 'LostBlockchainSubscription', {err}]);
         });
 
         // Publish the new channel transaction when a block is received
@@ -383,9 +395,7 @@ module.exports = (args, cbk) => {
 
             // The new channel confirmed successfully and so the change worked
             if (!!channel && !!channel.is_active) {
-              sub.removeAllListeners();
-
-              return cbk(null, {is_success: true});
+              return done(null, {is_success: true});
             }
           } catch (err) {
             args.logger.error({err});
@@ -419,9 +429,7 @@ module.exports = (args, cbk) => {
 
             // The old channel force closed and so the change fully failed
             if (!!channel && channel.close_transaction_id !== txId) {
-              sub.removeAllListeners();
-
-              return cbk(null, {is_success: false});
+              return done(null, {is_success: false});
             }
           } catch (err) {
             args.logger.error({err});
