@@ -1,5 +1,9 @@
 # Versions
 
+## Version 3.12.0
+
+- `balancedOpenRequest`: Add method to derive balanced open proposal details
+
 ## Version 3.11.4
 
 - `changeChannelCapacity`: Add `nodes` to allow moving channel to another node

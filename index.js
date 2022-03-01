@@ -1,3 +1,4 @@
+const {balancedOpenRequest} = require('./balanced');
 const {changeChannelCapacity} = require('./capacity');
 const {confirmServiceUse} = require('./client');
 const {createAnchoredTrade} = require('./trades');
@@ -17,6 +18,7 @@ const {servicePeerRequests} = require('./p2p');
 const serviceIds = schema.types;
 
 module.exports = {
+  balancedOpenRequest,
   changeChannelCapacity,
   confirmServiceUse,
   createAnchoredTrade,
