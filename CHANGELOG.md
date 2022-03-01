@@ -1,6 +1,6 @@
 # Versions
 
-## Version 3.12.0
+## Version 3.12.1
 
 - `balancedOpenRequest`: Add method to derive balanced open proposal details
 

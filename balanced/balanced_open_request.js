@@ -143,13 +143,15 @@ module.exports = args => {
   }
 
   return {
-    accept_request: request,
-    capacity: parseHexNumber(channelCapacity.value),
-    fee_rate: parseHexNumber(fundingFeeRate.value),
-    partner_public_key: destination,
-    proposed_at: args.confirmed_at,
-    remote_multisig_key: remoteMultiSigKey.value,
-    remote_tx_id: remoteTxId.value,
-    remote_tx_vout: parseHexNumber(remoteTxVout.value),
+    proposal: {
+      accept_request: request,
+      capacity: parseHexNumber(channelCapacity.value),
+      fee_rate: parseHexNumber(fundingFeeRate.value),
+      partner_public_key: destination,
+      proposed_at: args.confirmed_at,
+      remote_multisig_key: remoteMultiSigKey.value,
+      remote_tx_id: remoteTxId.value,
+      remote_tx_vout: parseHexNumber(remoteTxVout.value),
+    },
   };
 };
