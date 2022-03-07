@@ -140,7 +140,7 @@ module.exports = (args, cbk) => {
         });
 
         // Show the trade details blob
-        return args.logger.info({
+        args.logger.info({
           waiting_for_trade_request_to: openTrade.trade,
         });
 
