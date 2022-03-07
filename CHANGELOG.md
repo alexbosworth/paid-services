@@ -1,5 +1,9 @@
 # Versions
 
+## Version 3.12.2
+
+- `serviceOpenTrade`: Fix regtest network support
+
 ## Version 3.12.1
 
 - `balancedOpenRequest`: Add method to derive balanced open proposal details
