@@ -25,7 +25,7 @@ module.exports = ({network}) => {
     return {};
 
   case regtestNetwork:
-    return {value: regestNetworkType};
+    return {value: regtestNetworkType};
 
   case testnetNetwork:
     return {value: testnetNetworkType};
