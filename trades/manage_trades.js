@@ -8,6 +8,7 @@ const {getNetwork} = require('ln-sync');
 const {getNodeAlias} = require('ln-sync');
 const {returnResult} = require('asyncjs-util');
 
+const createChannelSale = require('./create_channel_sale');
 const createTrade = require('./create_trade');
 const encodeTrade = require('./encode_trade');
 const manageTrade = require('./manage_trade');
@@ -15,11 +16,13 @@ const serviceAnchoredTrades = require('./service_anchored_trades');
 const serviceOpenTrade = require('./service_open_trade');
 const tradeFromInvoice = require('./trade_from_invoice');
 
+const buyAction = 'buy';
 const cancelAction = 'cancel-';
 const createAction = 'create';
 const decodeAction = 'decode';
 const defaultInvoicesLimit = 100;
 const listAction = 'list';
+const sellAction = 'sell';
 const serveAction = 'serve';
 const serveTradeAction = 'serve-trade-';
 const tokensAsBigUnit = tokens => (tokens / 1e8).toFixed(8);
@@ -36,13 +39,17 @@ const viewAction = 'view';
 
   @returns via cbk or Promise
 */
-module.exports = ({ask, lnd, logger, separator}, cbk) => {
+module.exports = ({ask, balance, lnd, logger, separator}, cbk) => {
   return new Promise((resolve, reject) => {
     return asyncAuto({
       // Check arguments
       validate: cbk => {
         if (!ask) {
           return cbk([400, 'ExpectedAskFunctionToManageTrades']);
+        }
+
+        if (balance === undefined) {
+          return cbk([400, 'ExpectedChainBalanceToManageTrades']);
         }
 
         if (!lnd) {
@@ -66,6 +73,10 @@ module.exports = ({ask, lnd, logger, separator}, cbk) => {
       select: ['validate', ({}, cbk) => {
         return ask({
           choices: [
+            separator(),
+            {name: 'Buy Channel', value: buyAction},
+            {name: 'Sell Channel', value: sellAction},
+            separator(),
             {name: 'Create Trade', value: createAction},
             {name: 'Decode Trade', value: decodeAction},
             separator(),
@@ -113,11 +124,11 @@ module.exports = ({ask, lnd, logger, separator}, cbk) => {
       // View an existing trade
       view: ['checkSigner', 'select', ({checkSigner, select}, cbk) => {
         // Exit early when not decoding a trade
-        if (select.action !== decodeAction) {
+        if (select.action !== decodeAction && select.action !== buyAction) {
           return cbk();
         }
 
-        return manageTrade({ask, lnd, logger}, cbk)
+        return manageTrade({ask, lnd, logger, action: select.action}, cbk)
       }],
 
       // Get open trades
@@ -288,6 +299,23 @@ module.exports = ({ask, lnd, logger, separator}, cbk) => {
 
           return cbk(err);
         });
+      }],
+
+      // Sell a channel
+      sellChannel: ['select', ({select}, cbk) => {
+        // Exit early when not selling a channel
+        if (select.action !== sellAction) {
+          return cbk();
+        }
+
+        return createChannelSale({
+          balance,
+          ask,
+          lnd,
+          logger,
+          action: select.action,
+        },
+        cbk);
       }],
     },
     returnResult({reject, resolve}, cbk));

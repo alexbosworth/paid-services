@@ -3,11 +3,14 @@ const {randomBytes} = require('crypto');
 
 const {getInvoice} = require('ln-service');
 const {subscribeToInvoice} = require('ln-service');
+const {acceptsChannelOpen} = require('ln-sync');
 
 const acceptTrade = require('./accept_trade');
 const finalizeTradeSecret = require('./finalize_trade_secret');
 const {makePeerRequest} = require('./../p2p');
 const {servicePeerRequests} = require('./../p2p');
+const {serviceTypeReceiveChannelSale} = require('./../service_types');
+const {serviceTypeRequestChannelSale} = require('./../service_types');
 const {serviceTypeRequestTrades} = require('./../service_types');
 const {serviceTypeReceiveTrades} = require('./../service_types');
 
@@ -126,8 +129,10 @@ module.exports = args => {
     descRecord(utf8AsHex(args.description)),
   ];
 
+  const requestType = !!args.action ? serviceTypeRequestChannelSale : serviceTypeRequestTrades;
+
   // Wait for a request for the open trade
-  service.request({type: serviceTypeRequestTrades}, (req, res) => {
+  service.request({type: requestType}, (req, res) => {
     const {failure, success} = res;
     const requestTradeId = findIdRecord(req.records);
 
@@ -163,13 +168,15 @@ module.exports = args => {
           return;
         }
 
+        const receiveType = !!args.action ? serviceTypeReceiveChannelSale : serviceTypeReceiveTrades;
+
         // Ping the node with trade details
         return makePeerRequest({
           records,
           lnd: args.lnd,
           timeout: postOpenTradeTimeoutMs,
           to: req.from,
-          type: serviceTypeReceiveTrades,
+          type: receiveType,
         },
         err => {
           if (!!err) {
@@ -188,6 +195,19 @@ module.exports = args => {
 
     // Make a finalized trade secret for the peer
     emitter.emit('trade', ({to: req.from}));
+
+    if (!!args.action) {
+      acceptsChannelOpen({
+        capacity: args.capacity,
+        lnd: args.lnd,
+        partner_public_key: req.from,  
+      },
+      err => {
+        if (!!err) {
+          return failure([503, 'FailedToAcceptChannelOpen', err]);
+        }
+      });
+      }
 
     // Create a trade secret for the requesting peer and return that
     return finalizeTradeSecret({

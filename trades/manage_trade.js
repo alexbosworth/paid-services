@@ -28,11 +28,15 @@ const tokensAsBigUnit = tokens => (tokens / 1e8).toFixed(8);
 
   @returns via cbk or Promise
 */
-module.exports = ({ask, lnd, logger}, cbk) => {
+module.exports = ({action, ask, lnd, logger}, cbk) => {
   return new Promise((resolve, reject) => {
     return asyncAuto({
       // Check arguments
       validate: cbk => {
+        if (!action) {
+          return cbk([400, 'ExpectedActionTypeToManageTrade']);
+        }
+
         if (!ask) {
           return cbk([400, 'ExpectedAskFunctionToManageTrade']);
         }
@@ -90,6 +94,7 @@ module.exports = ({ask, lnd, logger}, cbk) => {
 
         // Get the trade details interactively
         return findTrade({
+          action,
           ask,
           lnd,
           logger,

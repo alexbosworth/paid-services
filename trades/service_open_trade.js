@@ -3,6 +3,7 @@ const {getNodeAlias} = require('ln-sync');
 const {returnResult} = require('asyncjs-util');
 
 const encodeOpenTrade = require('./encode_open_trade');
+const openChannel = require('./open_channel');
 const serviceTradeRequests = require('./service_trade_requests');
 
 const asNumber = n => parseFloat(n, 10);
@@ -102,6 +103,8 @@ module.exports = (args, cbk) => {
         args.logger.info({trade_expiry: new Date(args.expires_at)});
 
         const sub = serviceTradeRequests({
+          action: args.action,
+          capacity: args.capacity,
           description: args.description,
           expires_at: args.expires_at,
           id: args.id,
@@ -154,6 +157,16 @@ module.exports = (args, cbk) => {
               args.logger.info({trade_ended: true});
 
               return cbk();
+            }
+
+            if (!!args.action) {
+              const transactionId = await openChannel({
+                lnd: args.lnd,
+                id: to,
+                tokens: args.capacity,
+              });
+              
+              args.logger.info({channel_opened: transactionId});
             }
 
             const {alias, id} = await getNodeAlias({id: to, lnd: args.lnd});

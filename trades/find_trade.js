@@ -15,9 +15,12 @@ const decodeBasicTrade = require('./decode_basic_trade');
 const {makePeerRequest} = require('./../p2p');
 const requestTradeById = require('./request_trade_by_id');
 const {servicePeerRequests} = require('./../p2p');
+const {serviceTypeReceiveChannelSale} = require('./../service_types');
+const {serviceTypeRequestChannelSale} = require('./../service_types');
 const {serviceTypeReceiveTrades} = require('./../service_types');
 const {serviceTypeRequestTrades} = require('./../service_types');
 
+const buyAction = 'buy';
 const findBasicRecord = records => records.find(n => n.type === '1');
 const findIdRecord = records => records.find(n => n.type === '0');
 const {isArray} = Array;
@@ -55,11 +58,15 @@ const waitForTradesMs = 1000 * 5;
     trade: <Encoded Trade String>
   }
 */
-module.exports = ({ask, id, identity, lnd, logger, nodes}, cbk) => {
+module.exports = ({action, ask, id, identity, lnd, logger, nodes}, cbk) => {
   return new Promise((resolve, reject) => {
     return asyncAuto({
       // Check arguments
       validate: cbk => {
+        if (!action) {
+          return cbk([400, 'ExpectedActionTypeToFindTrade']);
+        }
+
         if (!ask) {
           return cbk([400, 'ExpectedAskMethodToFindTrade']);
         }
@@ -213,7 +220,7 @@ module.exports = ({ask, id, identity, lnd, logger, nodes}, cbk) => {
           return cbk();
         }
 
-        return requestTradeById({id, lnd, to}, cbk);
+        return requestTradeById({action, id, lnd, to}, cbk);
       })],
 
       // Request an inventory of trades
@@ -235,7 +242,9 @@ module.exports = ({ask, id, identity, lnd, logger, nodes}, cbk) => {
         };
 
         // Listen for trades
-        service.request({type: serviceTypeReceiveTrades}, (req, res) => {
+        const receiveType = action === buyAction ? serviceTypeReceiveChannelSale : serviceTypeReceiveTrades;
+
+        service.request({type: receiveType}, (req, res) => {
           const requestIdRecord = findIdRecord(req.records);
 
           // Exit early when this is a request for something else
@@ -262,13 +271,15 @@ module.exports = ({ask, id, identity, lnd, logger, nodes}, cbk) => {
 
         logger.info({requesting_trade_details: true});
 
+        const requestType = action === buyAction ? serviceTypeRequestChannelSale : serviceTypeRequestTrades;
+
         // Once connected, ask for the trade details
         return makePeerRequest({
           lnd,
           to,
           records: [{type: tradesRequestIdType, value: requestId}],
           timeout: requestTradesTimeoutMs,
-          type: serviceTypeRequestTrades,
+          type: requestType,
         },
         (err, res) => {
           if (!!err) {
@@ -323,7 +334,7 @@ module.exports = ({ask, id, identity, lnd, logger, nodes}, cbk) => {
           return cbk();
         }
 
-        return requestTradeById({lnd, to, id: selectTrade.id}, cbk);
+        return requestTradeById({action, lnd, to, id: selectTrade.id}, cbk);
       }],
 
       // Final trade details

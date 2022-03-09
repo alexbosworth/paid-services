@@ -4,8 +4,10 @@ const {returnResult} = require('asyncjs-util');
 const decodeTrade = require('./decode_trade');
 const {makePeerRequest} = require('./../p2p');
 
+const buyAction = 'buy';
 const findTradeRecord = records => records.find(n => n.type === '1');
 const requestTradeTimeoutMs = 1000 * 30;
+const {serviceTypeRequestChannelSale} = require('./../service_types');
 const {serviceTypeRequestTrades} = require('./../service_types');
 const tradeIdRecordType = '0';
 
@@ -25,11 +27,15 @@ const tradeIdRecordType = '0';
     trade: <Encoded Trade Record String>
   }
 */
-module.exports = ({id, lnd, to}, cbk) => {
+module.exports = ({action, id, lnd, to}, cbk) => {
   return new Promise((resolve, reject) => {
     return asyncAuto({
       // Check arguments
       validate: cbk => {
+        if (!action) {
+          return cbk([400, 'ExpectedActionTypeToRequestTradeById']);
+        }
+
         if (!id) {
           return cbk([400, 'ExpectedTradeIdentifierToRequestTradeById']);
         }
@@ -44,15 +50,17 @@ module.exports = ({id, lnd, to}, cbk) => {
 
         return cbk();
       },
-
+      
       // Get trade
       getTrade: ['validate', ({}, cbk) => {
+        const requestType = action === buyAction ? serviceTypeRequestChannelSale : serviceTypeRequestTrades;
+
         return makePeerRequest({
           lnd,
           to,
           records: [{type: tradeIdRecordType, value: id}],
           timeout: requestTradeTimeoutMs,
-          type: serviceTypeRequestTrades,
+          type: requestType,
         },
         (err, res) => {
           if (!!err) {

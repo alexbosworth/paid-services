@@ -20,7 +20,7 @@ module.exports = ({request}) => {
     throw new Error('ExpectedPaymentRequestToDeriveNetworkRecord');
   }
 
-  if (request.startsWith(defaultNetwork)) {
+  if (request.startsWith(defaultNetwork) && !request.startsWith(regtestNetwork)) {
     return {};
   }
 

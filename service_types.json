@@ -3,6 +3,8 @@
   "serviceTypeChangeCapacity": "8050001",
   "serviceTypeReceiveTrades": "8050006",
   "serviceTypeRequestTrades": "8050005",
+  "serviceTypeReceiveChannelSale": "8050008",
+  "serviceTypeRequestChannelSale": "8050007",
   "serviceTypeSignCapacityChange": "8050004",
   "serviceTypeWaitOnConfirmation": "8050003",
   "types": {
@@ -11,6 +13,8 @@
     "8050003": "serviceTypeWaitOnConfirmation",
     "8050004": "serviceTypeSignCapacityChange",
     "8050005": "serviceTypeRequestTrades",
-    "8050006": "serviceTypeReceiveTrades"
+    "8050006": "serviceTypeReceiveTrades",
+    "8050007": "serviceTypeRequestChannelSale",
+    "8050008": "serviceTypeReceiveChannelSale"
   }
 }
