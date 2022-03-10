@@ -5,6 +5,7 @@ const {getNetwork} = require('ln-sync');
 const {getChainFeeRate} = require('ln-service');
 const {getChannels} = require('ln-service');
 const {getWalletInfo} = require('ln-service');
+const {signMessage} = require('ln-service');
 const {randomBytes} = require('crypto');
 const createAnchoredTrade = require('./create_anchored_trade');
 const serviceOpenTrade = require('./service_open_trade');
@@ -20,7 +21,7 @@ const slowTarget = 1000;
 const saleCost = (amount, rate) => (amount * rate / 1000000).toFixed(0);
 const saleSecret = randomBytes(48).toString('hex');
 const sellAction = 'sell';
-const tradeDescription = (alias, capacity) => `channel-sale:${alias}--${capacity}`;
+const tradeDescription = (alias, capacity) => `channelsale:${alias}-${capacity}`;
 
 
 

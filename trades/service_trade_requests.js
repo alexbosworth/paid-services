@@ -23,6 +23,7 @@ const idBackType = '0';
 const idRecord = id => ({type: '1', value: id});
 const msRemainingToTime = time => time - Date.now();
 const postOpenTradeTimeoutMs = 1000 * 30;
+const sellAction = 'sell';
 const sumOf = arr => arr.reduce((sum, n) => sum + n, 0);
 const tradeSecretType = '1';
 const utf8AsHex = utf8 => Buffer.from(utf8).toString('hex');
@@ -168,7 +169,7 @@ module.exports = args => {
           return;
         }
 
-        const receiveType = !!args.action ? serviceTypeReceiveChannelSale : serviceTypeReceiveTrades;
+        const receiveType = args.action === sellAction ? serviceTypeReceiveChannelSale : serviceTypeReceiveTrades;
 
         // Ping the node with trade details
         return makePeerRequest({
@@ -196,7 +197,7 @@ module.exports = args => {
     // Make a finalized trade secret for the peer
     emitter.emit('trade', ({to: req.from}));
 
-    if (!!args.action) {
+    if (args.action === sellAction) {
       acceptsChannelOpen({
         capacity: args.capacity,
         lnd: args.lnd,
@@ -250,9 +251,13 @@ module.exports = args => {
 
         // Settle the held invoice with the preimage
         return acceptTrade({
+          action: args.action,
+          capacity: args.capacity,
           cancel: holds.filter(n => n.id !== updated.id).map(n => n.id),
           id: args.id,
           lnd: args.lnd,
+          logger: args.logger,
+          partner_public_key: req.from,
           secret: res.secret,
         },
         err => {
