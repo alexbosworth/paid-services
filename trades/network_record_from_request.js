@@ -1,7 +1,9 @@
-const defaultNetwork = 'lnbc';
-const regtestNetwork = 'lnbcrt';
+const {parsePaymentRequest} = require('ln-service');
+
+const defaultNetwork = 'bitcoin';
+const regtestNetwork = 'regtest';
 const regtestNetworkType = '02';
-const testnetNetwork = 'lntb';
+const testnetNetwork = 'testnet';
 const testnetNetworkType = '01';
 
 /** Derive a network record name from a payment request
@@ -20,17 +22,25 @@ module.exports = ({request}) => {
     throw new Error('ExpectedPaymentRequestToDeriveNetworkRecord');
   }
 
-  if (request.startsWith(defaultNetwork) && !request.startsWith(regtestNetwork)) {
-    return {};
+  try {
+    const {network} = parsePaymentRequest({request});
+
+    if (network === defaultNetwork) {
+      return {};
+    }
+  
+    if (network === regtestNetwork) {
+      return {value: regtestNetworkType};
+    }
+  
+    if (network === testnetNetwork) {
+      return {value: testnetNetworkType};
+    }
+  
+    throw new Error('UnknownNetworkToDeriveNetworkRecordFor');
+
+  } catch (err) {
+    throw new Error('FailedToParsePaymentRequestToDeriveNetworkRecord');
   }
 
-  if (request.startsWith(regtestNetwork)) {
-    return {value: regtestNetworkType};
-  }
-
-  if (request.startsWith(testnetNetwork)) {
-    return {value: testnetNetworkType};
-  }
-
-  throw new Error('UnknownNetworkToDeriveNetworkRecordFor');
 };

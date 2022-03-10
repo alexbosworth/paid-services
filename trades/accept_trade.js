@@ -19,28 +19,28 @@ const sellAction = 'sell';
 
   @returns via cbk or Promise
 */
-module.exports = ({action, cancel, capacity, id, lnd, logger, partner_public_key, secret}, cbk) => {
+module.exports = (args, cbk) => {
   return new Promise((resolve, reject) => {
     return asyncAuto({
       // Check arguments
       validate: cbk => {
-        if (!isArray(cancel)) {
+        if (!isArray(args.cancel)) {
           return cbk([400, 'ExpectedArrayOfIdsToCancelToAcceptTrade']);
         }
 
-        if (!id) {
+        if (!args.id) {
           return cbk([400, 'ExpectedAnchorTradeIdToAcceptTrade']);
         }
 
-        if (!lnd) {
+        if (!args.lnd) {
           return cbk([400, 'ExpectedAuthenticatedLndToAcceptTrade']);
         }
 
-        if (!logger) {
+        if (!args.logger) {
           return cbk([400, 'ExpectedLoggerToAcceptTrade']);
         }
 
-        if (!secret) {
+        if (!args.secret) {
           return cbk([400, 'ExpectedSettlementPreimageToAcceptTrade']);
         }
 
@@ -48,34 +48,34 @@ module.exports = ({action, cancel, capacity, id, lnd, logger, partner_public_key
       },
 
       // Fetch the anchor invoice to make sure it's still open
-      getAnchor: ['validate', ({}, cbk) => getInvoice({id, lnd}, cbk)],
+      getAnchor: ['validate', ({}, cbk) => getInvoice({id: args.id, lnd: args.lnd}, cbk)],
 
       // Cancel alternative invoices so that only one resolves as settled
       cancel: ['getAnchor', ({}, cbk) => {
-        return asyncEach([].concat(cancel).concat(id), (id, cbk) => {
-          return cancelHodlInvoice({id, lnd}, cbk);
+        return asyncEach([].concat(args.cancel).concat(args.id), (id, cbk) => {
+          return cancelHodlInvoice({id, lnd: args.lnd}, cbk);
         },
         cbk);
       }],
 
       // Settle the held invoice with the preimage
-      settle: ['cancel', ({}, cbk) => settleHodlInvoice({lnd, secret}, cbk)],
+      settle: ['cancel', ({}, cbk) => settleHodlInvoice({lnd: args.lnd, secret: args.secret}, cbk)],
 
       // Open the channel
       openChannel: ['settle', ({}, cbk) => {
-        if (action !== sellAction) {
+        if (args.action !== sellAction) {
           return cbk();
         }
           openChannel({
-            lnd,
-            id: partner_public_key,
-            tokens: capacity,
+            id: args.partner_public_key,
+            lnd: args.lnd,
+            tokens: args.capacity,
           },
           (err, res) => {
             if (!!err) {
               return cbk(err);
             }
-            logger.info({channel_opened: res});
+            args.logger.info({channel_opened: res});
             return cbk();
           },
           cbk);

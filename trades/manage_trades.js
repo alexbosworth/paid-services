@@ -39,7 +39,7 @@ const viewAction = 'view';
 
   @returns via cbk or Promise
 */
-module.exports = ({ask, balance, lnd, logger, separator}, cbk) => {
+module.exports = ({ask, balance, experimental, lnd, logger, separator}, cbk) => {
   return new Promise((resolve, reject) => {
     return asyncAuto({
       // Check arguments
@@ -74,11 +74,11 @@ module.exports = ({ask, balance, lnd, logger, separator}, cbk) => {
         return ask({
           choices: [
             separator(),
-            {name: 'Buy Channel', value: buyAction},
-            {name: 'Sell Channel', value: sellAction},
-            separator(),
             {name: 'Create Trade', value: createAction},
             {name: 'Decode Trade', value: decodeAction},
+            separator(),
+            {name: 'Buy Channel (experimental)', value: buyAction, disabled: !experimental},
+            {name: 'Sell Channel (experimental)', value: sellAction, disabled: !experimental},
             separator(),
             {name: 'Open Trades', value: listAction},
             {name: 'Serve Trades', value: serveAction},

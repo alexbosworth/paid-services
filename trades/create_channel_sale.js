@@ -10,21 +10,26 @@ const {randomBytes} = require('crypto');
 const createAnchoredTrade = require('./create_anchored_trade');
 const serviceOpenTrade = require('./service_open_trade');
 
-// const serviceChannelSale = require('../sales/service_channel_sale');
-
 const asNumber = n => parseFloat(n, 10);
-const defaultExpirationDays = 1;
 const daysAsMs = days => Number(days) * 1000 * 60 * 60 * 24;
+const defaultExpirationDays = 1;
 const futureDate = ms => new Date(Date.now() + ms).toISOString();
 const isNumber = n => !isNaN(n);
-const slowTarget = 1000;
 const saleCost = (amount, rate) => (amount * rate / 1000000).toFixed(0);
 const saleSecret = randomBytes(48).toString('hex');
-const sellAction = 'sell';
 const tradeDescription = (alias, capacity) => `channelsale:${alias}-${capacity}`;
 
+/** Create a new channel sale
+  {
+    action: <Ask function action>
+    ask: <Ask function>
+    balance: <Total available onchain confirmed balance in satoshis>
+    lnd: <Authenticated LND API Object>
+    logger: <Winston Logger Object>
+  }
 
-
+  @returns via cbk or Promise
+*/
 module.exports = ({action, balance, ask, lnd, logger}, cbk) => {
   return new Promise((resolve, reject) => {
     return asyncAuto({
@@ -34,12 +39,12 @@ module.exports = ({action, balance, ask, lnd, logger}, cbk) => {
           return cbk([400, 'ExpectedActionTypeToCreateChannelSale']);
         }
 
-        if (balance === undefined) {
-          return cbk([400, 'ExpectedOnChainBalanceToCreateChannelSale']);
-        }
-
         if (!ask) {
           return cbk([400, 'ExpectedAskFunctionToCreateChannelSale']);
+        }
+
+        if (balance === undefined) {
+          return cbk([400, 'ExpectedOnChainBalanceToCreateChannelSale']);
         }
 
         if (!lnd) {
@@ -103,7 +108,7 @@ module.exports = ({action, balance, ask, lnd, logger}, cbk) => {
       // Ask for rate
       askForRate: ['validate', 'askForAmount', ({}, cbk) => {
         return ask({
-          message: 'Rate to charge in ppm?',
+          message: 'Price of channel (in ppm)?',
           name: 'rate',
           type: 'input',
           validate: input => {
@@ -111,7 +116,7 @@ module.exports = ({action, balance, ask, lnd, logger}, cbk) => {
               return false;
             }
 
-            // The connect code should be entirely numeric, not an API key
+            // Price of sale should be numeric
             if (!isNumber(input)) {
               return `Expected numeric fee rate for sale`;
             }
@@ -217,21 +222,7 @@ module.exports = ({action, balance, ask, lnd, logger}, cbk) => {
         },
         cbk);
       }],
-
-      // Encode channel sale
-      result: [
-        'askForAmount',
-        'askForExpiration',
-        'createAnchor',
-        'getIdentity',
-        'askForRate',
-        'validate',
-        ({}, cbk) => {
-          return cbk();
-        }],
-
-
     },
-    returnResult({reject, resolve, of: 'result'}, cbk));
+    returnResult({reject, resolve}, cbk));
   });
 };

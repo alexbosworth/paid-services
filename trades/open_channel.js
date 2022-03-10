@@ -1,24 +1,35 @@
 const asyncAuto = require('async/auto');
 const {returnResult} = require('asyncjs-util');
-
 const {getPeers} = require('ln-service');
 const {getChainFeeRate} = require('ln-service');
 const {openChannel} = require('ln-service');
 
 const slowConf = 144;
 
+/** Opens channel on invoice payment
+  {
+    id: <Partner Public Key>
+    lnd: <Authenticated LND API Object>
+    tokens: <Capacity of channel open>
+  }
 
+  @returns via cbk or Promise
+  {
+  transaction_id: <Funding Transaction Id String>
+  transaction_vout: <Funding Transaction Output Index Number>
+  }
+*/
 module.exports = (args, cbk) => {
   return new Promise((resolve, reject) => {
     return asyncAuto({
       // Check arguments
       validate: cbk => {
-        if (!args.lnd) {
-          return cbk([400, 'ExpectedLndObjectToOpenNewChannel']);
-        }
-
         if (!args.id) {
           return cbk([400, 'ExpectedPartnerPublicKeyToOpenNewChannel']);
+        }
+
+        if (!args.lnd) {
+          return cbk([400, 'ExpectedLndObjectToOpenNewChannel']);
         }
 
         if (!args.tokens) {
