@@ -71,7 +71,7 @@ module.exports = (args, cbk) => {
       },
 
       // Get low fee rate
-      calculateOpenFee: ['validate', ({}, cbk) => {
+      calculateSalePrice: ['validate', ({}, cbk) => {
         if (args.action !== sellAction) {
           return cbk(null, {});
         }
@@ -104,7 +104,7 @@ module.exports = (args, cbk) => {
       }],
 
       // Create the invoice to purchase the unlocking secret
-      createInvoice: ['encrypt', 'calculateOpenFee', ({encrypt, calculateOpenFee}, cbk) => {
+      createInvoice: ['encrypt', 'calculateSalePrice', ({encrypt, calculateSalePrice}, cbk) => {
         // Exit early when this is a hold invoice
         if (!!args.is_hold) {
           return createHodlInvoice({
@@ -113,7 +113,7 @@ module.exports = (args, cbk) => {
             id: bufferAsHex(sha256(hexAsBuffer(encrypt.payment_secret))),
             lnd: args.lnd,
             secret: encrypt.payment_secret,
-            tokens: calculateOpenFee.totalSaleCost || args.tokens,
+            tokens: calculateSalePrice.totalSaleCost || args.tokens,
           },
           cbk);
         }
