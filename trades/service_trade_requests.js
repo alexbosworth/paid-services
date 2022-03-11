@@ -33,10 +33,12 @@ const utf8AsHex = utf8 => Buffer.from(utf8).toString('hex');
   The maximum expiration date is three weeks
 
   {
+    action: <Ask function action>
     description: <Trade Description String>
     expires_at: <Trade Expires At ISO 8601 Date String>
     id: <Trade Id Hex String>
     lnd: <Authenticated LND API Object>
+    logger: <Winston Logger Object>
     secret: <Secret Payload String>
     tokens: <Tokens Number>
   }
@@ -212,10 +214,12 @@ module.exports = args => {
 
     // Create a trade secret for the requesting peer and return that
     return finalizeTradeSecret({
+      action: args.action,
       description: args.description,
       expires_at: args.expires_at,
       is_hold: true,
       lnd: args.lnd,
+      logger: args.logger,
       secret: args.secret,
       to: req.from,
       tokens: args.tokens,

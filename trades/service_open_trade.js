@@ -14,6 +14,8 @@ const uriAsSocket = n => n.substring(67);
 /** Service an individual trade
 
   {
+    action: <Ask function action>
+    capacity: <Capacity of channel open in satoshis>
     channels: [{
       id: <Standard Format Channel Id String>
       partner_public_key: <Node Public Key Hex String>

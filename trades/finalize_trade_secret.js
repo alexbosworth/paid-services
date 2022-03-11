@@ -3,6 +3,7 @@ const {createHash} = require('crypto');
 const asyncAuto = require('async/auto');
 const {createHodlInvoice} = require('ln-service');
 const {createInvoice} = require('ln-service');
+const {getChainFeeRate} = require('ln-service');
 const {returnResult} = require('asyncjs-util');
 
 const encodeTradeSecret = require('./encode_trade_secret');
@@ -10,16 +11,21 @@ const encryptTradeSecret = require('./encrypt_trade_secret');
 
 const bufferAsHex = buffer => buffer.toString('hex');
 const hexAsBuffer = hex => Buffer.from(hex, 'hex');
+const openSizeVbytes = 250; 
 const sha256 = preimage => createHash('sha256').update(preimage).digest();
+const sellAction = 'sell';
+const slowConf = 144;
 const utf8AsHex = utf8 => Buffer.from(utf8, 'utf8').toString('hex');
 
 /** Create a trade secret for a node
 
   {
+    action: <Ask function action>
     description: <Trade Description String>
     expires_at: <Trade Expires At ISO 8601 Date String>
     is_hold: <Create Hold Invoice Bool>
     lnd: <Authenticated LND API Object>
+    logger: <Winston Logger Object>
     secret: <Clear Secret String>
     to: <To Public Key Hex Encoded String>
     tokens: <Price Tokens Number>
@@ -64,6 +70,29 @@ module.exports = (args, cbk) => {
         return cbk();
       },
 
+      // Get low fee rate
+      calculateOpenFee: ['validate', ({}, cbk) => {
+        if (args.action !== sellAction) {
+          return cbk(null, {});
+        }
+        getChainFeeRate({
+          confirmation_target: slowConf,
+          lnd: args.lnd,
+        },
+        (err, res) => {
+          if (!!err) {
+            return cbk(err);
+          }
+
+          const totalSaleCost = (res.tokens_per_vbyte * openSizeVbytes) + args.tokens;
+
+          args.logger.info({total_channel_sale_cost: totalSaleCost});
+
+          return cbk(null, {totalSaleCost});
+        },
+        cbk);
+      }],
+
       // Encrypt the secret data
       encrypt: ['validate', ({}, cbk) => {
         return encryptTradeSecret({
@@ -75,7 +104,7 @@ module.exports = (args, cbk) => {
       }],
 
       // Create the invoice to purchase the unlocking secret
-      createInvoice: ['encrypt', ({encrypt}, cbk) => {
+      createInvoice: ['encrypt', 'calculateOpenFee', ({encrypt, calculateOpenFee}, cbk) => {
         // Exit early when this is a hold invoice
         if (!!args.is_hold) {
           return createHodlInvoice({
@@ -84,7 +113,7 @@ module.exports = (args, cbk) => {
             id: bufferAsHex(sha256(hexAsBuffer(encrypt.payment_secret))),
             lnd: args.lnd,
             secret: encrypt.payment_secret,
-            tokens: args.tokens,
+            tokens: calculateOpenFee.totalSaleCost || args.tokens,
           },
           cbk);
         }
