@@ -1,5 +1,9 @@
 # Versions
 
+## Version 3.13.0
+
+- `manageTrades`: Add support for experimental channel trades
+
 ## Version 3.12.2
 
 - `serviceOpenTrade`: Fix regtest network support
