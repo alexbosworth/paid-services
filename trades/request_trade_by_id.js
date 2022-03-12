@@ -4,7 +4,7 @@ const {returnResult} = require('asyncjs-util');
 const decodeTrade = require('./decode_trade');
 const {makePeerRequest} = require('./../p2p');
 
-const buyAction = 'buy';
+const buyChannelAction = 'buy';
 const findTradeRecord = records => records.find(n => n.type === '1');
 const requestTradeTimeoutMs = 1000 * 30;
 const {serviceTypeRequestChannelSale} = require('./../service_types');
@@ -14,6 +14,7 @@ const tradeIdRecordType = '0';
 /** Request a specific trade by its id
 
   {
+    action: <Purchase Action String>
     id: <Trade Identifier Hex String>
     lnd: <Authenticated LND API Object>
     to: <Make Request To Public Key Hex Encoded String>
@@ -50,11 +51,18 @@ module.exports = ({action, id, lnd, to}, cbk) => {
 
         return cbk();
       },
-      
-      // Get trade
-      getTrade: ['validate', ({}, cbk) => {
-        const requestType = action === buyAction ? serviceTypeRequestChannelSale : serviceTypeRequestTrades;
 
+      // Derive request type
+      requestType: ['validate', ({}, cbk) => {
+        if (action === buyChannelAction) {
+          return cbk(null, serviceTypeRequestChannelSale);
+        }
+
+        return cbk(null, serviceTypeRequestTrades);
+      }],
+
+      // Get trade
+      getTrade: ['requestType', ({requestType}, cbk) => {
         return makePeerRequest({
           lnd,
           to,

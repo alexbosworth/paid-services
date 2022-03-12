@@ -4,7 +4,9 @@ const {cancelHodlInvoice} = require('ln-service');
 const {getInvoice} = require('ln-service');
 const {returnResult} = require('asyncjs-util');
 const {settleHodlInvoice} = require('ln-service');
+
 const openChannel = require('./open_channel');
+
 const {isArray} = Array;
 const sellAction = 'sell';
 
@@ -48,7 +50,9 @@ module.exports = (args, cbk) => {
       },
 
       // Fetch the anchor invoice to make sure it's still open
-      getAnchor: ['validate', ({}, cbk) => getInvoice({id: args.id, lnd: args.lnd}, cbk)],
+      getAnchor: ['validate', ({}, cbk) => {
+        return getInvoice({id: args.id, lnd: args.lnd}, cbk);
+      }],
 
       // Cancel alternative invoices so that only one resolves as settled
       cancel: ['getAnchor', ({}, cbk) => {
@@ -59,27 +63,33 @@ module.exports = (args, cbk) => {
       }],
 
       // Settle the held invoice with the preimage
-      settle: ['cancel', ({}, cbk) => settleHodlInvoice({lnd: args.lnd, secret: args.secret}, cbk)],
+      settle: ['cancel', ({}, cbk) => {
+        return settleHodlInvoice({lnd: args.lnd, secret: args.secret}, cbk);
+      }],
 
       // Open the channel
       openChannel: ['settle', ({}, cbk) => {
+        // Exit early when the channel action is not a sell action
         if (args.action !== sellAction) {
           return cbk();
         }
-          openChannel({
-            id: args.partner_public_key,
-            lnd: args.lnd,
-            tokens: args.capacity,
-          },
-          (err, res) => {
-            if (!!err) {
-              return cbk(err);
-            }
-            args.logger.info({channel_opened: res});
-            return cbk();
-          },
-          cbk);
-      }]
+
+        return openChannel({
+          id: args.partner_public_key,
+          lnd: args.lnd,
+          tokens: args.capacity,
+        },
+        (err, res) => {
+          if (!!err) {
+            return cbk(err);
+          }
+
+          args.logger.info({channel_opened: res});
+
+          return cbk();
+        },
+        cbk);
+      }],
     },
     returnResult({reject, resolve}, cbk));
   });

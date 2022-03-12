@@ -20,7 +20,7 @@ const {serviceTypeRequestChannelSale} = require('./../service_types');
 const {serviceTypeReceiveTrades} = require('./../service_types');
 const {serviceTypeRequestTrades} = require('./../service_types');
 
-const buyAction = 'buy';
+const buyChannelAction = 'buy';
 const findBasicRecord = records => records.find(n => n.type === '1');
 const findIdRecord = records => records.find(n => n.type === '0');
 const {isArray} = Array;
@@ -167,6 +167,26 @@ module.exports = ({action, ask, id, identity, lnd, logger, nodes}, cbk) => {
       // Get the list of connected peers
       getPeers: ['validate', ({}, cbk) => getPeers({lnd}, cbk)],
 
+      // Determine the receive type to listen for
+      receiveType: ['validate', ({}, cbk) => {
+        // Exit early when the action is to buy a channel
+        if (action === buyChannelAction) {
+          return cbk(null, serviceTypeReceiveChannelSale);
+        }
+
+        return cbk(null, serviceTypeReceiveTrades);
+      }],
+
+      // Determine the request type to send
+      requestType: ['validate', ({}, cbk) => {
+        // Exit early when the action is to buy a channel
+        if (action === buyChannelAction) {
+          return cbk(null, serviceTypeRequestChannelSale);
+        }
+
+        return cbk(null, serviceTypeRequestTrades);
+      }],
+
       // Try and connect to a node in order to do p2p messaging
       connect: ['getNodes', 'getPeers', ({getNodes, getPeers}, cbk) => {
         const connected = getPeers.peers.map(n => n.public_key);
@@ -224,7 +244,13 @@ module.exports = ({action, ask, id, identity, lnd, logger, nodes}, cbk) => {
       })],
 
       // Request an inventory of trades
-      requestTrades: ['requestTrade', 'to', ({requestTrade, to}, cbk) => {
+      requestTrades: [
+        'receiveType',
+        'requestTrade',
+        'requestType',
+        'to',
+        ({receiveType, requestTrade, requestType, to}, cbk) =>
+      {
         // Exit early when there was a successful request for a specific id
         if (!!requestTrade.value) {
           return cbk();
@@ -240,9 +266,6 @@ module.exports = ({action, ask, id, identity, lnd, logger, nodes}, cbk) => {
 
           return !!err ? cbk(err) : cbk(null, {trades});
         };
-
-        // Listen for trades
-        const receiveType = action === buyAction ? serviceTypeReceiveChannelSale : serviceTypeReceiveTrades;
 
         service.request({type: receiveType}, (req, res) => {
           const requestIdRecord = findIdRecord(req.records);
@@ -270,8 +293,6 @@ module.exports = ({action, ask, id, identity, lnd, logger, nodes}, cbk) => {
         });
 
         logger.info({requesting_trade_details: true});
-
-        const requestType = action === buyAction ? serviceTypeRequestChannelSale : serviceTypeRequestTrades;
 
         // Once connected, ask for the trade details
         return makePeerRequest({

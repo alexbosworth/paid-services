@@ -1,9 +1,9 @@
 const EventEmitter = require('events');
 const {randomBytes} = require('crypto');
 
+const {acceptsChannelOpen} = require('ln-sync');
 const {getInvoice} = require('ln-service');
 const {subscribeToInvoice} = require('ln-service');
-const {acceptsChannelOpen} = require('ln-sync');
 
 const acceptTrade = require('./accept_trade');
 const finalizeTradeSecret = require('./finalize_trade_secret');
@@ -33,7 +33,7 @@ const utf8AsHex = utf8 => Buffer.from(utf8).toString('hex');
   The maximum expiration date is three weeks
 
   {
-    action: <Ask function action>
+    action: <Trade Action String>
     description: <Trade Description String>
     expires_at: <Trade Expires At ISO 8601 Date String>
     id: <Trade Id Hex String>
@@ -132,7 +132,9 @@ module.exports = args => {
     descRecord(utf8AsHex(args.description)),
   ];
 
-  const requestType = !!args.action ? serviceTypeRequestChannelSale : serviceTypeRequestTrades;
+  const requestType = !!args.action ?
+    serviceTypeRequestChannelSale :
+    serviceTypeRequestTrades;
 
   // Wait for a request for the open trade
   service.request({type: requestType}, (req, res) => {
@@ -171,7 +173,9 @@ module.exports = args => {
           return;
         }
 
-        const receiveType = args.action === sellAction ? serviceTypeReceiveChannelSale : serviceTypeReceiveTrades;
+        const receiveType = args.action === sellAction ?
+          serviceTypeReceiveChannelSale :
+          serviceTypeReceiveTrades;
 
         // Ping the node with trade details
         return makePeerRequest({
@@ -198,19 +202,6 @@ module.exports = args => {
 
     // Make a finalized trade secret for the peer
     emitter.emit('trade', ({to: req.from}));
-
-    if (args.action === sellAction) {
-      acceptsChannelOpen({
-        capacity: args.capacity,
-        lnd: args.lnd,
-        partner_public_key: req.from,  
-      },
-      err => {
-        if (!!err) {
-          return failure([503, 'FailedToAcceptChannelOpen', err]);
-        }
-      });
-      }
 
     // Create a trade secret for the requesting peer and return that
     return finalizeTradeSecret({
@@ -274,6 +265,23 @@ module.exports = args => {
           return emitter.emit('end', {});
         });
       });
+
+      // Exit early on channel sale, confirming acceptance
+      if (args.action === sellAction) {
+        return acceptsChannelOpen({
+          capacity: args.capacity,
+          lnd: args.lnd,
+          partner_public_key: req.from,
+        },
+        err => {
+          if (!!err) {
+            return failure([503, 'FailedToAcceptChannelOpen', {err}]);
+          }
+
+          // Return details about the trade
+          return success({records: [record]});
+        });
+      }
 
       // Return details about the trade
       return success({records: [record]});

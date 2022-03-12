@@ -2,6 +2,7 @@ const asyncAuto = require('async/auto');
 const asyncUntil = require('async/until');
 const {cancelHodlInvoice} = require('ln-service');
 const {diffieHellmanComputeSecret} = require('ln-service');
+const {getChainBalance} = require('ln-service');
 const {getIdentity} = require('ln-service');
 const {getInvoices} = require('ln-service');
 const {getNetwork} = require('ln-sync');
@@ -32,6 +33,7 @@ const viewAction = 'view';
 
   {
     ask: <Ask Function>
+    experimental: <Experiment Mode Bool>
     lnd: <Authenticated LND API Object>
     logger: <Winston Logger Object>
     separator: <Create Separator Function>
@@ -39,17 +41,13 @@ const viewAction = 'view';
 
   @returns via cbk or Promise
 */
-module.exports = ({ask, balance, experimental, lnd, logger, separator}, cbk) => {
+module.exports = ({ask, experimental, lnd, logger, separator}, cbk) => {
   return new Promise((resolve, reject) => {
     return asyncAuto({
       // Check arguments
       validate: cbk => {
         if (!ask) {
           return cbk([400, 'ExpectedAskFunctionToManageTrades']);
-        }
-
-        if (balance === undefined) {
-          return cbk([400, 'ExpectedChainBalanceToManageTrades']);
         }
 
         if (!lnd) {
@@ -77,12 +75,21 @@ module.exports = ({ask, balance, experimental, lnd, logger, separator}, cbk) => 
             {name: 'Create Trade', value: createAction},
             {name: 'Decode Trade', value: decodeAction},
             separator(),
-            {name: 'Buy Channel (experimental)', value: buyAction, disabled: !experimental},
-            {name: 'Sell Channel (experimental)', value: sellAction, disabled: !experimental},
+            {
+              name: 'Buy Channel (experimental)',
+              value: buyAction,
+              disabled: !experimental,
+            },
+            {
+              name: 'Sell Channel (experimental)',
+              value: sellAction,
+              disabled: !experimental,
+            },
             separator(),
             {name: 'Open Trades', value: listAction},
             {name: 'Serve Trades', value: serveAction},
           ],
+          loop: false,
           message: 'Trade?',
           name: 'action',
           type: 'list',
@@ -308,14 +315,20 @@ module.exports = ({ask, balance, experimental, lnd, logger, separator}, cbk) => 
           return cbk();
         }
 
-        return createChannelSale({
-          balance,
-          ask,
-          lnd,
-          logger,
-          action: select.action,
-        },
-        cbk);
+        return getChainBalance({lnd}, (err, res) => {
+          if (!!err) {
+            return cbk(err);
+          }
+
+          return createChannelSale({
+            ask,
+            lnd,
+            logger,
+            action: select.action,
+            balance: res.chain_balance,
+          },
+          cbk);
+        });
       }],
     },
     returnResult({reject, resolve}, cbk));

@@ -1,38 +1,38 @@
 const asyncAuto = require('async/auto');
-const {returnResult} = require('asyncjs-util');
 const {getPeers} = require('ln-service');
 const {getChainFeeRate} = require('ln-service');
 const {openChannel} = require('ln-service');
+const {returnResult} = require('asyncjs-util');
 
 const slowConf = 144;
 
 /** Opens channel on invoice payment
   {
-    id: <Partner Public Key>
+    id: <Partner Public Key Hex String>
     lnd: <Authenticated LND API Object>
-    tokens: <Capacity of channel open>
+    tokens: <Capacity of Channel To Open Tokens Number>
   }
 
   @returns via cbk or Promise
   {
-  transaction_id: <Funding Transaction Id String>
-  transaction_vout: <Funding Transaction Output Index Number>
+    transaction_id: <Funding Transaction Id String>
+    transaction_vout: <Funding Transaction Output Index Number>
   }
 */
-module.exports = (args, cbk) => {
+module.exports = ({id, lnd, tokens}, cbk) => {
   return new Promise((resolve, reject) => {
     return asyncAuto({
       // Check arguments
       validate: cbk => {
-        if (!args.id) {
+        if (!id) {
           return cbk([400, 'ExpectedPartnerPublicKeyToOpenNewChannel']);
         }
 
-        if (!args.lnd) {
+        if (!lnd) {
           return cbk([400, 'ExpectedLndObjectToOpenNewChannel']);
         }
 
-        if (!args.tokens) {
+        if (!tokens) {
           return cbk([400, 'ExpectedCapacityToOpenNewChannel']);
         }
 
@@ -41,41 +41,19 @@ module.exports = (args, cbk) => {
 
       // Get low fee rate
       getSlowFee: ['validate', ({}, cbk) => {
-        return getChainFeeRate({
-          confirmation_target: slowConf,
-          lnd: args.lnd,
-        },
-        cbk);
-      }],
-
-      getSocket: ['validate', ({}, cbk) => {
-        return getPeers(
-          {
-            lnd: args.lnd,
-          }, 
-          (err, res) => {
-            const peer = res.peers.find(n => n.public_key === args.id);
-            return cbk(null, {socket: peer.socket});
-          });
+        return getChainFeeRate({lnd, confirmation_target: slowConf}, cbk);
       }],
 
       // Select a peer and open a channel
-      openChannel: [
-        'getSlowFee',
-        'getSocket',
-        'validate',
-        ({getSlowFee, getSocket}, cbk) =>
-      {
+      openChannel: ['getSlowFee', ({getSlowFee}, cbk) => {
         return openChannel({
+          lnd,
           chain_fee_rate: getSlowFee.tokens_per_vbyte,
-          lnd: args.lnd,
-          local_tokens: args.tokens,
-          partner_public_key: args.id,
-          partner_socket: getSocket.socket
+          local_tokens: tokens,
+          partner_public_key: id,
         },
         cbk);
       }],
-
     },
     returnResult({reject, resolve, of: 'openChannel'}, cbk));
   });

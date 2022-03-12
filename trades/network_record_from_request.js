@@ -28,19 +28,18 @@ module.exports = ({request}) => {
     if (network === defaultNetwork) {
       return {};
     }
-  
+
     if (network === regtestNetwork) {
       return {value: regtestNetworkType};
     }
-  
+
     if (network === testnetNetwork) {
       return {value: testnetNetworkType};
     }
-  
+
     throw new Error('UnknownNetworkToDeriveNetworkRecordFor');
 
   } catch (err) {
     throw new Error('FailedToParsePaymentRequestToDeriveNetworkRecord');
   }
-
 };

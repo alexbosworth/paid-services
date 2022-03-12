@@ -21,6 +21,7 @@ const tokensAsBigUnit = tokens => (tokens / 1e8).toFixed(8);
 /** Manage an individual trade
 
   {
+    action: <Action Type String>
     ask: <Ask Function>
     lnd: <Authenticated LND API Object>
     logger: <Winston Logger Object>

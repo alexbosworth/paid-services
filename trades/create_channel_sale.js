@@ -1,12 +1,14 @@
+const {randomBytes} = require('crypto');
+
 const asyncAuto = require('async/auto');
 const asyncReflect = require('async/reflect');
-const {returnResult} = require('asyncjs-util');
-const {getNetwork} = require('ln-sync');
 const {getChainFeeRate} = require('ln-service');
 const {getChannels} = require('ln-service');
+const {getNetwork} = require('ln-sync');
 const {getWalletInfo} = require('ln-service');
 const {signMessage} = require('ln-service');
-const {randomBytes} = require('crypto');
+const {returnResult} = require('asyncjs-util');
+
 const createAnchoredTrade = require('./create_anchored_trade');
 const serviceOpenTrade = require('./service_open_trade');
 
@@ -15,22 +17,24 @@ const daysAsMs = days => Number(days) * 1000 * 60 * 60 * 24;
 const defaultExpirationDays = 1;
 const futureDate = ms => new Date(Date.now() + ms).toISOString();
 const isNumber = n => !isNaN(n);
+const query = 'How much would you like to sell?';
 const saleCost = (amount, rate) => (amount * rate / 1000000).toFixed(0);
 const saleSecret = randomBytes(48).toString('hex');
-const tradeDescription = (alias, capacity) => `channelsale:${alias}-${capacity}`;
+const tradeDescription = (alias, tokens) => `channelsale:${alias}-${tokens}`;
 
 /** Create a new channel sale
+
   {
-    action: <Ask function action>
-    ask: <Ask function>
-    balance: <Total available onchain confirmed balance in satoshis>
+    action: <Channel Sale Action String>
+    ask: <Ask Function>
+    balance: <Total Available Chain Confirmed Balance Tokens Number>
     lnd: <Authenticated LND API Object>
     logger: <Winston Logger Object>
   }
 
   @returns via cbk or Promise
 */
-module.exports = ({action, balance, ask, lnd, logger}, cbk) => {
+module.exports = ({action, ask, balance, lnd, logger}, cbk) => {
   return new Promise((resolve, reject) => {
     return asyncAuto({
       // Check arguments
@@ -58,25 +62,21 @@ module.exports = ({action, balance, ask, lnd, logger}, cbk) => {
         return cbk();
       },
 
-      //Get Identiy
-      getIdentity: ['validate', ({}, cbk) => {
-        return getWalletInfo({lnd}, cbk);
-      }],
-
       // Get the public channels to use for an open trade
       getChannels: ['validate', ({}, cbk) => {
         return getChannels({lnd, is_public: true}, cbk);
       }],
 
-      // Get the network name to use for an open trade
-      getNetwork: ['validate', ({}, cbk) => {
-        return getNetwork({lnd}, cbk);
-      }],
+      // Get self identity, including alias
+      getIdentity: ['validate', ({}, cbk) => getWalletInfo({lnd}, cbk)],
 
-      // Ask for sale amount 
+      // Get the network name to use for an open trade
+      getNetwork: ['validate', ({}, cbk) => getNetwork({lnd}, cbk)],
+
+      // Ask for sale amount
       askForAmount: ['validate', ({}, cbk) => {
         return ask({
-          message: `How much would you like to sell? (Available balance: ${balance})`,
+          message: `${query} (Available balance: ${balance})`,
           name: 'amount',
           type: 'input',
           validate: input => {
@@ -84,13 +84,13 @@ module.exports = ({action, balance, ask, lnd, logger}, cbk) => {
               return false;
             }
 
-            // The connect code should be entirely numeric, not an API key
+            // The token amount should be numeric
             if (!isNumber(input)) {
-              return `Expected numeric amount for sale`;
+              return 'Expected numeric amount for sale';
             }
 
             if (input > balance) {
-              return `Sale amount must be less than available balance`;
+              return 'Sale amount cannot be more than available balance';
             }
 
             return true;
@@ -98,16 +98,17 @@ module.exports = ({action, balance, ask, lnd, logger}, cbk) => {
         },
         (err, result) => {
           if (!!err) {
-            return cbk([503, 'UnexpectedErrorAskingForSaleAmount', err]);
+            return cbk([503, 'UnexpectedErrorAskingForSaleAmount', {err}]);
           }
 
           return cbk(null, result);
         });
       }],
 
-      // Ask for rate
-      askForRate: ['validate', 'askForAmount', ({}, cbk) => {
+      // Ask for the rate
+      askForRate: ['askForAmount', ({}, cbk) => {
         return ask({
+          default: '1',
           message: 'Price of channel (in ppm)?',
           name: 'rate',
           type: 'input',
@@ -118,7 +119,7 @@ module.exports = ({action, balance, ask, lnd, logger}, cbk) => {
 
             // Price of sale should be numeric
             if (!isNumber(input)) {
-              return `Expected numeric fee rate for sale`;
+              return 'Expected numeric fee rate for sale';
             }
 
             return true;
@@ -131,16 +132,6 @@ module.exports = ({action, balance, ask, lnd, logger}, cbk) => {
 
           return cbk(null, result);
         });
-      }],
-
-      // Calculate sale cost
-      saleCost: ['askForAmount', 'askForRate', ({askForRate, askForAmount}, cbk) => {
-        const {amount} = askForAmount;
-        const {rate} = askForRate;
-
-        const cost = saleCost(amount, rate);
-
-        return cbk(null, cost);
       }],
 
       // Ask for the expiration of the channel sale
@@ -160,25 +151,37 @@ module.exports = ({action, balance, ask, lnd, logger}, cbk) => {
         cbk);
       }],
 
+      // Calculate sale cost
+      saleCost: [
+        'askForAmount',
+        'askForRate',
+        ({askForRate, askForAmount}, cbk) =>
+      {
+        return cbk(null, saleCost(askForAmount.amount, askForRate.rate));
+      }],
+
+      // Description of sale
+      description: [
+        'askForAmount',
+        'getIdentity',
+        ({askForAmount, getIdentity}, cbk) =>
+      {
+        const alias = getIdentity.alias || getIdentity.public_key;
+
+        return cbk(null, tradeDescription(alias, askForAmount.amount));
+      }],
+
       // Create an anchor invoice for the channel sale
       createAnchor: [
-        'askForAmount',
         'askForExpiration',
         'askForRate',
-        'getIdentity',
+        'description',
         'saleCost',
-        ({
-          askForAmount,
-          askForExpiration,
-          askForRate,
-          getIdentity,
-          saleCost,
-        },
-        cbk) =>
+        ({askForExpiration, description, saleCost}, cbk) =>
       {
         return createAnchoredTrade({
+          description,
           lnd,
-          description: tradeDescription(getIdentity.alias, askForAmount.amount),
           expires_at: futureDate(daysAsMs(askForExpiration.days)),
           secret: saleSecret,
           tokens: asNumber(saleCost),
@@ -191,6 +194,7 @@ module.exports = ({action, balance, ask, lnd, logger}, cbk) => {
         'askForAmount',
         'askForExpiration',
         'createAnchor',
+        'description',
         'getChannels',
         'getNetwork',
         'getIdentity',
@@ -198,6 +202,7 @@ module.exports = ({action, balance, ask, lnd, logger}, cbk) => {
           askForAmount,
           askForExpiration,
           createAnchor,
+          description,
           getChannels,
           getNetwork,
           getIdentity,
@@ -207,11 +212,11 @@ module.exports = ({action, balance, ask, lnd, logger}, cbk) => {
       {
         return serviceOpenTrade({
           action,
+          description,
           lnd,
           logger,
           capacity: askForAmount.amount,
           channels: getChannels.channels,
-          description: tradeDescription(getIdentity.alias, askForAmount.amount),
           expires_at: futureDate(daysAsMs(askForExpiration.days)),
           id: createAnchor.id,
           network: getNetwork.network,

@@ -10,17 +10,18 @@ const encodeTradeSecret = require('./encode_trade_secret');
 const encryptTradeSecret = require('./encrypt_trade_secret');
 
 const bufferAsHex = buffer => buffer.toString('hex');
+const {ceil} = Math;
 const hexAsBuffer = hex => Buffer.from(hex, 'hex');
-const openSizeVbytes = 250; 
-const sha256 = preimage => createHash('sha256').update(preimage).digest();
+const openSizeVbytes = 250;
 const sellAction = 'sell';
+const sha256 = preimage => createHash('sha256').update(preimage).digest();
 const slowConf = 144;
 const utf8AsHex = utf8 => Buffer.from(utf8, 'utf8').toString('hex');
 
 /** Create a trade secret for a node
 
   {
-    action: <Ask function action>
+    action: <Trade Action String>
     description: <Trade Description String>
     expires_at: <Trade Expires At ISO 8601 Date String>
     is_hold: <Create Hold Invoice Bool>
@@ -70,12 +71,15 @@ module.exports = (args, cbk) => {
         return cbk();
       },
 
-      // Get low fee rate
-      calculateSalePrice: ['validate', ({}, cbk) => {
+      // Calculate dynamic sale price for channel sales
+      salePrice: ['validate', ({}, cbk) => {
+        // Exit early when this is not a channel sale
         if (args.action !== sellAction) {
           return cbk(null, {});
         }
-        getChainFeeRate({
+
+        // Get a chain fee rate to dynamically price vs the chain cost
+        return getChainFeeRate({
           confirmation_target: slowConf,
           lnd: args.lnd,
         },
@@ -84,11 +88,13 @@ module.exports = (args, cbk) => {
             return cbk(err);
           }
 
-          const totalSaleCost = (res.tokens_per_vbyte * openSizeVbytes) + args.tokens;
+          const chainSurcharge = ceil(res.tokens_per_vbyte * openSizeVbytes);
 
-          args.logger.info({total_channel_sale_cost: totalSaleCost});
+          const price = chainSurcharge + args.tokens;
 
-          return cbk(null, {totalSaleCost});
+          args.logger.info({total_channel_sale_cost: price});
+
+          return cbk(null, {price});
         },
         cbk);
       }],
@@ -104,7 +110,7 @@ module.exports = (args, cbk) => {
       }],
 
       // Create the invoice to purchase the unlocking secret
-      createInvoice: ['encrypt', 'calculateSalePrice', ({encrypt, calculateSalePrice}, cbk) => {
+      createInvoice: ['encrypt', 'salePrice', ({encrypt, salePrice}, cbk) => {
         // Exit early when this is a hold invoice
         if (!!args.is_hold) {
           return createHodlInvoice({
@@ -113,7 +119,7 @@ module.exports = (args, cbk) => {
             id: bufferAsHex(sha256(hexAsBuffer(encrypt.payment_secret))),
             lnd: args.lnd,
             secret: encrypt.payment_secret,
-            tokens: calculateSalePrice.totalSaleCost || args.tokens,
+            tokens: salePrice.price || args.tokens,
           },
           cbk);
         }
