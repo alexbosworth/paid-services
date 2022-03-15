@@ -178,15 +178,17 @@ module.exports = ({action, ask, balance, lnd, logger, request}, cbk) => {
         const fiat = parseFiat(rate);
         const fiatPrice = parseFiatPrice(rate);
 
+        //Get fiat conversion rate to use for sale
         getPrices({
           request,
           from: defaultFiatRateProvider,
-          symbols: [].concat(fiat),
+          symbols: [fiat],
         },
         (err, res) => {
           if (!!err) {
             return cbk([503, 'UnexpectedErrorGettingFiatPriceToCreateChannelSale', err]);
           }
+          // Convert fiat price to satoshis
           const [{rate}] = res.tickers;
           const cost = conversion(fiatPrice, rate);
 
