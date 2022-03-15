@@ -7,6 +7,7 @@
     "url": "https://github.com/alexbosworth/paid-services/issues"
   },
   "dependencies": {
+    "@alexbosworth/fiat": "1.0.1",
     "async": "3.2.3",
     "asyncjs-util": "1.2.8",
     "bolt01": "1.2.3",

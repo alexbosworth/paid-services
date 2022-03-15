@@ -5,6 +5,7 @@ const asyncReflect = require('async/reflect');
 const {getChainFeeRate} = require('ln-service');
 const {getChannels} = require('ln-service');
 const {getNetwork} = require('ln-sync');
+const {getPrices} = require('@alexbosworth/fiat');
 const {getWalletInfo} = require('ln-service');
 const {signMessage} = require('ln-service');
 const {returnResult} = require('asyncjs-util');
@@ -13,11 +14,17 @@ const createAnchoredTrade = require('./create_anchored_trade');
 const serviceOpenTrade = require('./service_open_trade');
 
 const asNumber = n => parseFloat(n, 10);
+const conversion = (fiatPrice, rate) => ((fiatPrice * 100000000) / (rate / 100)).toFixed(0);
 const daysAsMs = days => Number(days) * 1000 * 60 * 60 * 24;
 const defaultExpirationDays = 1;
+const defaultFiatRateProvider = 'coingecko';
 const futureDate = ms => new Date(Date.now() + ms).toISOString();
+const hasFiat = n => /(aud|cad|eur|gbp|inr|jpy|usd)/gim.test(n);
 const isNumber = n => !isNaN(n);
+const parseFiat = n => n.split('*')[1];
+const parseFiatPrice = n => Number(n.split('*')[0]);
 const query = 'How much would you like to sell?';
+const removeSpaces = s => s.replace(/\s/g, '');
 const saleCost = (amount, rate) => (amount * rate / 1000000).toFixed(0);
 const saleSecret = randomBytes(48).toString('hex');
 const tradeDescription = (alias, tokens) => `channelsale:${alias}-${tokens}`;
@@ -34,7 +41,7 @@ const tradeDescription = (alias, tokens) => `channelsale:${alias}-${tokens}`;
 
   @returns via cbk or Promise
 */
-module.exports = ({action, ask, balance, lnd, logger}, cbk) => {
+module.exports = ({action, ask, balance, lnd, logger, request}, cbk) => {
   return new Promise((resolve, reject) => {
     return asyncAuto({
       // Check arguments
@@ -57,6 +64,10 @@ module.exports = ({action, ask, balance, lnd, logger}, cbk) => {
 
         if (!logger) {
           return cbk([400, 'ExpectedLoggerToCreateChannelSale']);
+        }
+
+        if (!request) {
+          return cbk([400, 'ExpectedRequestFunctionToCreateChannelSale']);
         }
 
         return cbk();
@@ -109,7 +120,7 @@ module.exports = ({action, ask, balance, lnd, logger}, cbk) => {
       askForRate: ['askForAmount', ({}, cbk) => {
         return ask({
           default: '1',
-          message: 'Price of channel (in ppm)?',
+          message: 'Price of channel in fiat or ppm? (Example: 25*USD or 2000)',
           name: 'rate',
           type: 'input',
           validate: input => {
@@ -117,9 +128,9 @@ module.exports = ({action, ask, balance, lnd, logger}, cbk) => {
               return false;
             }
 
-            // Price of sale should be numeric
-            if (!isNumber(input)) {
-              return 'Expected numeric fee rate for sale';
+            // Price of sale should be in fiat or numeric ppm
+            if (!hasFiat(input) && !isNumber(input)) {
+              return 'Expected fiat or numeric ppm fee rate for sale';
             }
 
             return true;
@@ -151,12 +162,54 @@ module.exports = ({action, ask, balance, lnd, logger}, cbk) => {
         cbk);
       }],
 
+      // Get the current price of BTC-Fiat
+      fiatSaleCost: [
+        'askForAmount', 
+        'askForRate', 
+        'askForExpiration', 
+      ({askForRate}, cbk) => {
+        // Exit early when no fiat is referenced
+        if (!hasFiat(askForRate.rate)) {
+          return cbk();
+        }
+        const rate = removeSpaces(askForRate.rate);
+        const fiat = parseFiat(rate);
+        const fiatPrice = parseFiatPrice(rate);
+
+        getPrices({
+          request,
+          from: defaultFiatRateProvider,
+          symbols: [].concat(fiat),
+        },
+        (err, res) => {
+          if (!!err) {
+            return cbk([503, 'UnexpectedErrorGettingFiatPriceToCreateChannelSale', err]);
+          }
+          const [{rate}] = res.tickers;
+          const cost = conversion(fiatPrice, rate);
+
+          if (!isNumber(cost)) {
+            return cbk([400, 'ErrorConvertingFiatToSatoshisToCreateChannelSale']);
+          }
+          logger.info({fiat_to_satoshis: cost});
+
+          return cbk(null, cost);
+        },
+        cbk);
+      }],
+
       // Calculate sale cost
       saleCost: [
         'askForAmount',
         'askForRate',
-        ({askForRate, askForAmount}, cbk) =>
-      {
+        'fiatSaleCost',
+        ({askForRate, askForAmount, fiatSaleCost}, cbk) =>
+      { 
+        //Exit early if fiat is specified
+        if (!!fiatSaleCost) {
+          return cbk();
+        }
+
         return cbk(null, saleCost(askForAmount.amount, askForRate.rate));
       }],
 
@@ -176,15 +229,22 @@ module.exports = ({action, ask, balance, lnd, logger}, cbk) => {
         'askForExpiration',
         'askForRate',
         'description',
+        'fiatSaleCost',
         'saleCost',
-        ({askForExpiration, description, saleCost}, cbk) =>
+        ({
+          askForExpiration, 
+          description, 
+          fiatSaleCost, 
+          saleCost
+        }, 
+        cbk) =>
       {
         return createAnchoredTrade({
           description,
           lnd,
           expires_at: futureDate(daysAsMs(askForExpiration.days)),
           secret: saleSecret,
-          tokens: asNumber(saleCost),
+          tokens: asNumber(saleCost) || fiatSaleCost,
         },
         cbk);
       }],
@@ -195,6 +255,7 @@ module.exports = ({action, ask, balance, lnd, logger}, cbk) => {
         'askForExpiration',
         'createAnchor',
         'description',
+        'fiatSaleCost',
         'getChannels',
         'getNetwork',
         'getIdentity',
@@ -203,6 +264,7 @@ module.exports = ({action, ask, balance, lnd, logger}, cbk) => {
           askForExpiration,
           createAnchor,
           description,
+          fiatSaleCost,
           getChannels,
           getNetwork,
           getIdentity,
@@ -222,7 +284,7 @@ module.exports = ({action, ask, balance, lnd, logger}, cbk) => {
           network: getNetwork.network,
           public_key: getIdentity.public_key,
           secret: saleSecret,
-          tokens: asNumber(saleCost),
+          tokens: asNumber(saleCost) || fiatSaleCost,
           uris: (getIdentity.uris || []),
         },
         cbk);
