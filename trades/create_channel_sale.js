@@ -162,16 +162,18 @@ module.exports = ({action, ask, balance, lnd, logger, request}, cbk) => {
         cbk);
       }],
 
-      // Get the current price of BTC-Fiat
-      fiatSaleCost: [
-        'askForAmount', 
-        'askForRate', 
-        'askForExpiration', 
-      ({askForRate}, cbk) => {
+      // Calculate sale cost
+      saleCost: [
+        'askForAmount',
+        'askForExpiration',
+        'askForRate',
+        ({askForRate, askForAmount}, cbk) =>
+      { 
         // Exit early when no fiat is referenced
         if (!hasFiat(askForRate.rate)) {
-          return cbk();
+          return cbk(null, saleCost(askForAmount.amount, askForRate.rate));
         }
+
         const rate = removeSpaces(askForRate.rate);
         const fiat = parseFiat(rate);
         const fiatPrice = parseFiatPrice(rate);
@@ -198,21 +200,6 @@ module.exports = ({action, ask, balance, lnd, logger, request}, cbk) => {
         cbk);
       }],
 
-      // Calculate sale cost
-      saleCost: [
-        'askForAmount',
-        'askForRate',
-        'fiatSaleCost',
-        ({askForRate, askForAmount, fiatSaleCost}, cbk) =>
-      { 
-        //Exit early if fiat is specified
-        if (!!fiatSaleCost) {
-          return cbk();
-        }
-
-        return cbk(null, saleCost(askForAmount.amount, askForRate.rate));
-      }],
-
       // Description of sale
       description: [
         'askForAmount',
@@ -229,12 +216,10 @@ module.exports = ({action, ask, balance, lnd, logger, request}, cbk) => {
         'askForExpiration',
         'askForRate',
         'description',
-        'fiatSaleCost',
         'saleCost',
         ({
           askForExpiration, 
           description, 
-          fiatSaleCost, 
           saleCost
         }, 
         cbk) =>
@@ -244,7 +229,7 @@ module.exports = ({action, ask, balance, lnd, logger, request}, cbk) => {
           lnd,
           expires_at: futureDate(daysAsMs(askForExpiration.days)),
           secret: saleSecret,
-          tokens: asNumber(saleCost) || fiatSaleCost,
+          tokens: asNumber(saleCost),
         },
         cbk);
       }],
@@ -255,7 +240,6 @@ module.exports = ({action, ask, balance, lnd, logger, request}, cbk) => {
         'askForExpiration',
         'createAnchor',
         'description',
-        'fiatSaleCost',
         'getChannels',
         'getNetwork',
         'getIdentity',
@@ -264,7 +248,6 @@ module.exports = ({action, ask, balance, lnd, logger, request}, cbk) => {
           askForExpiration,
           createAnchor,
           description,
-          fiatSaleCost,
           getChannels,
           getNetwork,
           getIdentity,
@@ -284,7 +267,7 @@ module.exports = ({action, ask, balance, lnd, logger, request}, cbk) => {
           network: getNetwork.network,
           public_key: getIdentity.public_key,
           secret: saleSecret,
-          tokens: asNumber(saleCost) || fiatSaleCost,
+          tokens: asNumber(saleCost),
           uris: (getIdentity.uris || []),
         },
         cbk);
