@@ -41,7 +41,7 @@ const viewAction = 'view';
 
   @returns via cbk or Promise
 */
-module.exports = ({ask, experimental, lnd, logger, separator}, cbk) => {
+module.exports = ({ask, experimental, lnd, logger, request, separator}, cbk) => {
   return new Promise((resolve, reject) => {
     return asyncAuto({
       // Check arguments
@@ -56,6 +56,10 @@ module.exports = ({ask, experimental, lnd, logger, separator}, cbk) => {
 
         if (!logger) {
           return cbk([400, 'ExpectedLoggerToManageTrades']);
+        }
+
+        if (!request) {
+          return cbk([400, 'ExpectedRequestFunctionToManageTrades']);
         }
 
         return cbk();
@@ -324,6 +328,7 @@ module.exports = ({ask, experimental, lnd, logger, separator}, cbk) => {
             ask,
             lnd,
             logger,
+            request,
             action: select.action,
             balance: res.chain_balance,
           },
