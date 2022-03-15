@@ -17,6 +17,7 @@ const asNumber = n => parseFloat(n, 10);
 const conversion = (fiatPrice, rate) => ((fiatPrice * 100000000) / (rate / 100)).toFixed(0);
 const daysAsMs = days => Number(days) * 1000 * 60 * 60 * 24;
 const defaultExpirationDays = 1;
+const defaultFiatInvoiceExpiryMs = 30 * 60 * 1000;
 const defaultFiatRateProvider = 'coingecko';
 const futureDate = ms => new Date(Date.now() + ms).toISOString();
 const hasFiat = n => /(aud|cad|eur|gbp|inr|jpy|usd)/gim.test(n);
@@ -146,7 +147,12 @@ module.exports = ({action, ask, balance, lnd, logger, request}, cbk) => {
       }],
 
       // Ask for the expiration of the channel sale
-      askForExpiration: ['askForRate', ({}, cbk) => {
+      askForExpiration: ['askForRate', ({askForRate}, cbk) => {
+        // Exit early when using fiat
+        if (!!hasFiat(askForRate.rate)) {
+          return cbk(null, {});
+        }
+
         return ask({
           default: defaultExpirationDays,
           name: 'days',
@@ -178,7 +184,7 @@ module.exports = ({action, ask, balance, lnd, logger, request}, cbk) => {
         const fiat = parseFiat(rate);
         const fiatPrice = parseFiatPrice(rate);
 
-        //Get fiat conversion rate to use for sale
+        // Get fiat conversion rate to use for sale
         getPrices({
           request,
           from: defaultFiatRateProvider,
@@ -226,10 +232,12 @@ module.exports = ({action, ask, balance, lnd, logger, request}, cbk) => {
         }, 
         cbk) =>
       {
+        const expiry = !!askForExpiration.days ? futureDate(daysAsMs(askForExpiration.days)) : futureDate(defaultFiatInvoiceExpiryMs);
+
         return createAnchoredTrade({
           description,
           lnd,
-          expires_at: futureDate(daysAsMs(askForExpiration.days)),
+          expires_at: expiry,
           secret: saleSecret,
           tokens: asNumber(saleCost),
         },
@@ -257,6 +265,8 @@ module.exports = ({action, ask, balance, lnd, logger, request}, cbk) => {
         },
         cbk) =>
       {
+        const expiry = !!askForExpiration.days ? futureDate(daysAsMs(askForExpiration.days)) : futureDate(defaultFiatInvoiceExpiryMs);
+
         return serviceOpenTrade({
           action,
           description,
@@ -264,7 +274,7 @@ module.exports = ({action, ask, balance, lnd, logger, request}, cbk) => {
           logger,
           capacity: askForAmount.amount,
           channels: getChannels.channels,
-          expires_at: futureDate(daysAsMs(askForExpiration.days)),
+          expires_at: expiry,
           id: createAnchor.id,
           network: getNetwork.network,
           public_key: getIdentity.public_key,
