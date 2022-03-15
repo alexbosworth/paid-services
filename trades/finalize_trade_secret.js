@@ -8,9 +8,15 @@ const {returnResult} = require('asyncjs-util');
 
 const encodeTradeSecret = require('./encode_trade_secret');
 const encryptTradeSecret = require('./encrypt_trade_secret');
+const convertFiatToBtc = require('./convert_fiat_to_btc');
 
+const asNumber = n => parseFloat(n, 10);
 const bufferAsHex = buffer => buffer.toString('hex');
 const {ceil} = Math;
+const defaultFiatInvoiceExpiryMs = 30 * 60 * 1000;
+const futureDate = ms => new Date(Date.now() + ms).toISOString();
+
+const hasFiat = n => /(aud|cad|eur|gbp|inr|jpy|usd)/gim.test(n);
 const hexAsBuffer = hex => Buffer.from(hex, 'hex');
 const openSizeVbytes = 250;
 const sellAction = 'sell';
@@ -27,9 +33,10 @@ const utf8AsHex = utf8 => Buffer.from(utf8, 'utf8').toString('hex');
     is_hold: <Create Hold Invoice Bool>
     lnd: <Authenticated LND API Object>
     logger: <Winston Logger Object>
+    request: <Request Function>
     secret: <Clear Secret String>
     to: <To Public Key Hex Encoded String>
-    tokens: <Price Tokens Number>
+    tokens: <Price Tokens Number or Fiat>
   }
 
   @returns via cbk or Promise
@@ -56,6 +63,10 @@ module.exports = (args, cbk) => {
           return cbk([400, 'ExpectedAuthenticatedLndToFinalizeTradeSecret']);
         }
 
+        if (!args.request) {
+          return cbk([400, 'ExpectedRequestFunctionToFinalizeTradeSecret']);
+        }
+
         if (!args.secret) {
           return cbk([400, 'ExpectedSecretValueToFinalizeTradeSecret']);
         }
@@ -71,8 +82,22 @@ module.exports = (args, cbk) => {
         return cbk();
       },
 
+      // Convert fiat to btc
+      validateTokens: ['validate', async ({}) => {
+        // Exit early if fiat is not used
+        if (!hasFiat(args.tokens)) {
+          return {tokens: asNumber(args.tokens)};
+        }
+
+        const tokens = await convertFiatToBtc({fiat_price: args.tokens, request: args.request});
+
+        args.logger.info({fiat_to_satoshis: tokens});
+
+        return {tokens: asNumber(tokens)};
+      }], 
+
       // Calculate dynamic sale price for channel sales
-      salePrice: ['validate', ({}, cbk) => {
+      salePrice: ['validate', 'validateTokens', ({validateTokens}, cbk) => {
         // Exit early when this is not a channel sale
         if (args.action !== sellAction) {
           return cbk(null, {});
@@ -90,7 +115,7 @@ module.exports = (args, cbk) => {
 
           const chainSurcharge = ceil(res.tokens_per_vbyte * openSizeVbytes);
 
-          const price = chainSurcharge + args.tokens;
+          const price = chainSurcharge + validateTokens.tokens;
 
           args.logger.info({total_channel_sale_cost: price});
 
@@ -110,26 +135,33 @@ module.exports = (args, cbk) => {
       }],
 
       // Create the invoice to purchase the unlocking secret
-      createInvoice: ['encrypt', 'salePrice', ({encrypt, salePrice}, cbk) => {
+      createInvoice: [
+        'encrypt', 
+        'salePrice', 
+        'validateTokens', 
+        ({encrypt, salePrice, validateTokens}, cbk) => {
+
+        const expiry = !!hasFiat(args.tokens) ? futureDate(defaultFiatInvoiceExpiryMs) : args.expires_at;
+          
         // Exit early when this is a hold invoice
         if (!!args.is_hold) {
           return createHodlInvoice({
             description: args.description,
-            expires_at: args.expires_at,
+            expires_at: expiry,
             id: bufferAsHex(sha256(hexAsBuffer(encrypt.payment_secret))),
             lnd: args.lnd,
             secret: encrypt.payment_secret,
-            tokens: salePrice.price || args.tokens,
+            tokens: salePrice.price || validateTokens.tokens,
           },
           cbk);
         }
 
         return createInvoice({
           description: args.description,
-          expires_at: args.expires_at,
+          expires_at: expiry,
           lnd: args.lnd,
           secret: encrypt.payment_secret,
-          tokens: args.tokens,
+          tokens: validateTokens.tokens,
         },
         cbk);
       }],

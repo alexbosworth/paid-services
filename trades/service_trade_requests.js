@@ -39,8 +39,9 @@ const utf8AsHex = utf8 => Buffer.from(utf8).toString('hex');
     id: <Trade Id Hex String>
     lnd: <Authenticated LND API Object>
     logger: <Winston Logger Object>
+    request: <Request Function>
     secret: <Secret Payload String>
-    tokens: <Tokens Number>
+    tokens: <Tokens Number or Fiat>
   }
 
   // Return details
@@ -86,6 +87,10 @@ module.exports = args => {
 
   if (!args.lnd) {
     throw new Error('ExpectedAuthenticatedLndToServiceTradeRequests');
+  }
+
+  if (!args.request) {
+    throw new Error('ExpectedRequestFunctionToServiceTradeRequests');
   }
 
   if (!args.secret) {
@@ -211,6 +216,7 @@ module.exports = args => {
       is_hold: true,
       lnd: args.lnd,
       logger: args.logger,
+      request: args.request,
       secret: args.secret,
       to: req.from,
       tokens: args.tokens,
