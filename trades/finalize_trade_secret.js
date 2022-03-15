@@ -63,6 +63,10 @@ module.exports = (args, cbk) => {
           return cbk([400, 'ExpectedAuthenticatedLndToFinalizeTradeSecret']);
         }
 
+        if (!args.logger) {
+          return cbk([400, 'ExpectedWinstonLoggerToFinalizeTradeSecret']);
+        }
+
         if (!args.request) {
           return cbk([400, 'ExpectedRequestFunctionToFinalizeTradeSecret']);
         }

@@ -9,9 +9,9 @@ const {getWalletInfo} = require('ln-service');
 const {signMessage} = require('ln-service');
 const {returnResult} = require('asyncjs-util');
 
+const convertFiatToBtc = require('./convert_fiat_to_btc');
 const createAnchoredTrade = require('./create_anchored_trade');
 const serviceOpenTrade = require('./service_open_trade');
-const convertFiatToBtc = require('./convert_fiat_to_btc');
 
 const asNumber = n => parseFloat(n, 10);
 const daysAsMs = days => Number(days) * 1000 * 60 * 60 * 24;
