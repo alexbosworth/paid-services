@@ -27,6 +27,7 @@ const uriAsSocket = n => n.substring(67);
     logger: <Winston Logger Object>
     network: <Network Name String>
     public_key: <Identity Public Key Hex String>
+    request: <Request Function>
     secret: <Secret to Sell String>
     tokens: <Trade Price Tokens Number>
     uris: [<Node URI String>]
@@ -71,6 +72,10 @@ module.exports = (args, cbk) => {
           return cbk([400, 'ExpectedIdentityPublicKeyToServiceTrade']);
         }
 
+        if (!args.request) {
+          return cbk([400, 'ExpectedRequestFunctionToServiceTrade']);
+        }
+
         if (!args.secret) {
           return cbk([400, 'ExpectedSecretToSellToServiceTrade']);
         }
@@ -111,8 +116,9 @@ module.exports = (args, cbk) => {
           id: args.id,
           lnd: args.lnd,
           logger: args.logger,
+          request: args.request,
           secret: args.secret,
-          tokens: asNumber(args.tokens),
+          tokens: args.tokens,
         });
 
         // Someone asked for trade details

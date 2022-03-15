@@ -117,7 +117,7 @@ module.exports = ({ask, experimental, lnd, logger, request, separator}, cbk) => 
           return cbk();
         }
 
-        return createTrade({ask, lnd, logger}, cbk);
+        return createTrade({ask, lnd, logger, request}, cbk);
       }],
 
       // Trade was created

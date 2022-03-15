@@ -5,27 +5,21 @@ const asyncReflect = require('async/reflect');
 const {getChainFeeRate} = require('ln-service');
 const {getChannels} = require('ln-service');
 const {getNetwork} = require('ln-sync');
-const {getPrices} = require('@alexbosworth/fiat');
 const {getWalletInfo} = require('ln-service');
 const {signMessage} = require('ln-service');
 const {returnResult} = require('asyncjs-util');
 
 const createAnchoredTrade = require('./create_anchored_trade');
 const serviceOpenTrade = require('./service_open_trade');
+const convertFiatToBtc = require('./convert_fiat_to_btc');
 
 const asNumber = n => parseFloat(n, 10);
-const conversion = (fiatPrice, rate) => ((fiatPrice * 100000000) / (rate / 100)).toFixed(0);
 const daysAsMs = days => Number(days) * 1000 * 60 * 60 * 24;
 const defaultExpirationDays = 1;
-const defaultFiatInvoiceExpiryMs = 30 * 60 * 1000;
-const defaultFiatRateProvider = 'coingecko';
 const futureDate = ms => new Date(Date.now() + ms).toISOString();
 const hasFiat = n => /(aud|cad|eur|gbp|inr|jpy|usd)/gim.test(n);
 const isNumber = n => !isNaN(n);
-const parseFiat = n => n.split('*')[1];
-const parseFiatPrice = n => Number(n.split('*')[0]);
 const query = 'How much would you like to sell?';
-const removeSpaces = s => s.replace(/\s/g, '');
 const saleCost = (amount, rate) => (amount * rate / 1000000).toFixed(0);
 const saleSecret = randomBytes(48).toString('hex');
 const tradeDescription = (alias, tokens) => `channelsale:${alias}-${tokens}`;
@@ -38,6 +32,7 @@ const tradeDescription = (alias, tokens) => `channelsale:${alias}-${tokens}`;
     balance: <Total Available Chain Confirmed Balance Tokens Number>
     lnd: <Authenticated LND API Object>
     logger: <Winston Logger Object>
+    request: <Request Function>
   }
 
   @returns via cbk or Promise
@@ -148,11 +143,6 @@ module.exports = ({action, ask, balance, lnd, logger, request}, cbk) => {
 
       // Ask for the expiration of the channel sale
       askForExpiration: ['askForRate', ({askForRate}, cbk) => {
-        // Exit early when using fiat
-        if (!!hasFiat(askForRate.rate)) {
-          return cbk(null, {});
-        }
-
         return ask({
           default: defaultExpirationDays,
           name: 'days',
@@ -173,39 +163,17 @@ module.exports = ({action, ask, balance, lnd, logger, request}, cbk) => {
         'askForAmount',
         'askForExpiration',
         'askForRate',
-        ({askForRate, askForAmount}, cbk) =>
+        async ({askForRate, askForAmount}) =>
       { 
         // Exit early when no fiat is referenced
         if (!hasFiat(askForRate.rate)) {
-          return cbk(null, saleCost(askForAmount.amount, askForRate.rate));
+          return saleCost(askForAmount.amount, askForRate.rate);
         }
 
-        const rate = removeSpaces(askForRate.rate);
-        const fiat = parseFiat(rate);
-        const fiatPrice = parseFiatPrice(rate);
-
         // Get fiat conversion rate to use for sale
-        getPrices({
-          request,
-          from: defaultFiatRateProvider,
-          symbols: [fiat],
-        },
-        (err, res) => {
-          if (!!err) {
-            return cbk([503, 'UnexpectedErrorGettingFiatPriceToCreateChannelSale', err]);
-          }
-          // Convert fiat price to satoshis
-          const [{rate}] = res.tickers;
-          const cost = conversion(fiatPrice, rate);
+        const cost = await convertFiatToBtc({request, fiat_price: askForRate.rate});
 
-          if (!isNumber(cost)) {
-            return cbk([400, 'ErrorConvertingFiatToSatoshisToCreateChannelSale']);
-          }
-          logger.info({fiat_to_satoshis: cost});
-
-          return cbk(null, cost);
-        },
-        cbk);
+        return cost;
       }],
 
       // Description of sale
@@ -232,12 +200,10 @@ module.exports = ({action, ask, balance, lnd, logger, request}, cbk) => {
         }, 
         cbk) =>
       {
-        const expiry = !!askForExpiration.days ? futureDate(daysAsMs(askForExpiration.days)) : futureDate(defaultFiatInvoiceExpiryMs);
-
         return createAnchoredTrade({
           description,
           lnd,
-          expires_at: expiry,
+          expires_at: futureDate(daysAsMs(askForExpiration.days)),
           secret: saleSecret,
           tokens: asNumber(saleCost),
         },
@@ -248,6 +214,7 @@ module.exports = ({action, ask, balance, lnd, logger, request}, cbk) => {
       serviceSaleRequests: [
         'askForAmount',
         'askForExpiration',
+        'askForRate',
         'createAnchor',
         'description',
         'getChannels',
@@ -256,6 +223,7 @@ module.exports = ({action, ask, balance, lnd, logger, request}, cbk) => {
         ({
           askForAmount,
           askForExpiration,
+          askForRate,
           createAnchor,
           description,
           getChannels,
@@ -265,21 +233,22 @@ module.exports = ({action, ask, balance, lnd, logger, request}, cbk) => {
         },
         cbk) =>
       {
-        const expiry = !!askForExpiration.days ? futureDate(daysAsMs(askForExpiration.days)) : futureDate(defaultFiatInvoiceExpiryMs);
+        const tokens = !!hasFiat(askForRate.rate) ? askForRate.rate : asNumber(saleCost);
 
         return serviceOpenTrade({
           action,
           description,
           lnd,
           logger,
+          request,
+          tokens,
           capacity: askForAmount.amount,
           channels: getChannels.channels,
-          expires_at: expiry,
+          expires_at: futureDate(daysAsMs(askForExpiration.days)),
           id: createAnchor.id,
           network: getNetwork.network,
           public_key: getIdentity.public_key,
           secret: saleSecret,
-          tokens: asNumber(saleCost),
           uris: (getIdentity.uris || []),
         },
         cbk);

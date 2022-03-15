@@ -26,6 +26,7 @@ const utf8AsHex = utf8 => Buffer.from(utf8).toString('hex');
     ask: <Ask Function>
     lnd: <Authenticated LND API Object>
     logger: <Winston Logger Object>
+    request: <Request Function>
   }
 
   @returns via cbk or Promise
@@ -33,7 +34,7 @@ const utf8AsHex = utf8 => Buffer.from(utf8).toString('hex');
     trade: <Hex Encoded Trade String>
   }
 */
-module.exports = ({ask, lnd, logger}, cbk) => {
+module.exports = ({ask, lnd, logger, request}, cbk) => {
   return new Promise((resolve, reject) => {
     return asyncAuto({
       // Check arguments
@@ -48,6 +49,10 @@ module.exports = ({ask, lnd, logger}, cbk) => {
 
         if (!logger) {
           return cbk([400, 'ExpectedWinstonLoggerToCreateTrade']);
+        }
+
+        if (!request) {
+          return cbk([400, 'ExpectedRequestFunctionToCreateTrade']);
         }
 
         return cbk();
@@ -245,6 +250,7 @@ module.exports = ({ask, lnd, logger}, cbk) => {
         return serviceOpenTrade({
           lnd,
           logger,
+          request,
           channels: getChannels.channels,
           description: askForDescription.description,
           expires_at: futureDate(daysAsMs(askForExpiration.days)),
