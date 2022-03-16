@@ -1,5 +1,9 @@
 # Versions
 
+## Version 3.13.1
+
+- `acceptTrade`: Fix `logger` to be documented as an arg and optional
+
 ## Version 3.13.0
 
 - `manageTrades`: Add support for experimental channel trades

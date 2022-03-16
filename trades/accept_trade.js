@@ -16,6 +16,7 @@ const sellAction = 'sell';
     cancel: [<Alternative Invoice Id Hex String>]
     id: <Trade Id Hex String>
     lnd: <Authenticated LND API Object>
+    [logger]: <Winston Logger Object>
     secret: <Invoice to Settle Preimage Hex String>
   }
 
@@ -36,10 +37,6 @@ module.exports = (args, cbk) => {
 
         if (!args.lnd) {
           return cbk([400, 'ExpectedAuthenticatedLndToAcceptTrade']);
-        }
-
-        if (!args.logger) {
-          return cbk([400, 'ExpectedLoggerToAcceptTrade']);
         }
 
         if (!args.secret) {
@@ -84,7 +81,9 @@ module.exports = (args, cbk) => {
             return cbk(err);
           }
 
-          args.logger.info({channel_opened: res});
+          if (!!args.logger) {
+            args.logger.info({channel_opened: res});
+          }
 
           return cbk();
         },
