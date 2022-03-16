@@ -16,12 +16,12 @@ const removeSpaces = s => s.replace(/\s/g, '');
 
   @returns
   {
-    cost: Btc in Satoshis
+    cost: <Price of Trade in Satoshis>
   }
 */
 module.exports = async ({fiat_price, request}) => {
   if (!fiat_price) {
-    throw new Error('ExpectedFiatRateToConvertFiatToBtc');
+    throw new Error('ExpectedFiatPriceToConvertFiatToBtc');
   }
 
   if (!request) {
