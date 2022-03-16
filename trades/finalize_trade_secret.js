@@ -15,7 +15,6 @@ const bufferAsHex = buffer => buffer.toString('hex');
 const {ceil} = Math;
 const defaultFiatInvoiceExpiryMs = 30 * 60 * 1000;
 const futureDate = ms => new Date(Date.now() + ms).toISOString();
-
 const hasFiat = n => /(aud|cad|eur|gbp|inr|jpy|usd)/gim.test(n);
 const hexAsBuffer = hex => Buffer.from(hex, 'hex');
 const openSizeVbytes = 250;
