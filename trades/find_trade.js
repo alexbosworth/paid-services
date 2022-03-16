@@ -110,7 +110,7 @@ module.exports = ({action, ask, id, identity, lnd, logger, nodes}, cbk) => {
                 return cbk(null, connect.node);
               }
 
-              const sockets = connect.node.sockets.map(n => n.socket);
+              const sockets = res.sockets.map(n => n.socket);
 
               return cbk(null, {
                 id: connect.node.id,

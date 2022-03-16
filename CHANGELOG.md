@@ -1,6 +1,6 @@
 # Versions
 
-## Version 3.13.1
+## Version 3.13.2
 
 - `acceptTrade`: Fix `logger` to be documented as an arg and optional
 
