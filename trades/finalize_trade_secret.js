@@ -25,7 +25,7 @@ const sellAction = 'sell';
 const sha256 = preimage => createHash('sha256').update(preimage).digest();
 const slowConf = 144;
 const utf8AsHex = utf8 => Buffer.from(utf8, 'utf8').toString('hex');
-
+const anchorPrefix = 'anchor-trade-secret:';
 /** Create a trade secret for a node
 
   {
@@ -102,11 +102,12 @@ module.exports = (args, cbk) => {
         },
         (err, res) => {
           if (!!err) {
-            return cbk([503, 'UnexpectedErrorGettingAnchorInvoice', err]);
+            return cbk([503, 'UnexpectedErrorGettingAnchorInvoice', {err}]);
           }
-          const {request} = res;
 
-          return cbk(null, {request});
+          const {description} = res;
+
+          return cbk(null, {description});
         },
         cbk);
       }],
@@ -114,14 +115,14 @@ module.exports = (args, cbk) => {
       // Parse anchor invoice
       decodeAnchorInvoice: ['getAnchorInvoice', ({getAnchorInvoice}, cbk) => {
         // Exit early when there is no anchor invoice
-        if (!getAnchorInvoice.request) {
+        if (!getAnchorInvoice.description) {
           return cbk(null, {});
         }
 
         try {
-          const {request} = getAnchorInvoice;
-          const requestDetails = parsePaymentRequest({request});
-          const {trade} = decodeAnchoredTrade({encoded: requestDetails.description});
+          const {description} = getAnchorInvoice;
+
+          const {trade} = decodeAnchoredTrade({encoded: description});
   
           return cbk(null, {trade});
         } catch (err) {
@@ -142,6 +143,7 @@ module.exports = (args, cbk) => {
         if (!price) {
           return {price: undefined, tokens: asNumber(args.tokens)};
         }
+
         const tokens = await convertFiatToBtc({fiat_price: price, request: args.request});
 
         args.logger.info({fiat_to_satoshis: tokens});
