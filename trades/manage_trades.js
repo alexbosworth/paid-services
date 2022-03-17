@@ -245,6 +245,7 @@ module.exports = ({ask, experimental, lnd, logger, request, separator}, cbk) => 
         return serviceOpenTrade({
           lnd,
           logger,
+          request,
           channels: [],
           description: trade.description,
           expires_at: trade.expires_at,
@@ -284,7 +285,7 @@ module.exports = ({ask, experimental, lnd, logger, request, separator}, cbk) => 
           return cbk();
         }
 
-        const sub = serviceAnchoredTrades({lnd});
+        const sub = serviceAnchoredTrades({lnd, logger, request});
 
         const {trade} = encodeTrade({
           connect: {

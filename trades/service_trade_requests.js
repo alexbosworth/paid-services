@@ -23,6 +23,7 @@ const idBackType = '0';
 const idRecord = id => ({type: '1', value: id});
 const msRemainingToTime = time => time - Date.now();
 const postOpenTradeTimeoutMs = 1000 * 30;
+const priceRecord = price => ({type: '3', value: price});
 const sellAction = 'sell';
 const sumOf = arr => arr.reduce((sum, n) => sum + n, 0);
 const tradeSecretType = '1';
@@ -39,9 +40,10 @@ const utf8AsHex = utf8 => Buffer.from(utf8).toString('hex');
     id: <Trade Id Hex String>
     lnd: <Authenticated LND API Object>
     logger: <Winston Logger Object>
+    price: <Trade Price String>
     request: <Request Function>
     secret: <Secret Payload String>
-    tokens: <Tokens Number or Fiat>
+    tokens: <Trade Price Tokens Number>
   }
 
   // Return details
@@ -87,6 +89,10 @@ module.exports = args => {
 
   if (!args.lnd) {
     throw new Error('ExpectedAuthenticatedLndToServiceTradeRequests');
+  }
+
+  if (!args.logger) {
+    throw new Error('ExpectedWinstonLoggerObjectToServiceTradeRequests');
   }
 
   if (!args.request) {
@@ -213,6 +219,7 @@ module.exports = args => {
       action: args.action,
       description: args.description,
       expires_at: args.expires_at,
+      id: args.id,
       is_hold: true,
       lnd: args.lnd,
       logger: args.logger,

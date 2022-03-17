@@ -4,6 +4,7 @@ const anchorPrefix = 'anchor-trade-secret:';
 const base64AsHex = base64 => Buffer.from(base64, 'base64').toString('hex');
 const findDescription = records => records.find(n => n.type === '1');
 const findSecret = records => records.find(n => n.type === '0');
+const findPrice = records => records.find(n => n.type === '2');
 const hexAsUtf = n => !n ? '' : Buffer.from(n.value, 'hex').toString('utf8');
 
 /** Decode an anchored trade data blob
@@ -50,6 +51,7 @@ module.exports = ({encoded}) => {
   return {
     trade: {
       description: hexAsUtf(findDescription(records)),
+      price: hexAsUtf(findPrice(records)),
       secret: hexAsUtf(secret),
     },
   };

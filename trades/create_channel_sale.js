@@ -195,6 +195,7 @@ module.exports = ({action, ask, balance, lnd, logger, request}, cbk) => {
         'saleCost',
         ({
           askForExpiration, 
+          askForRate,
           description, 
           saleCost
         }, 
@@ -204,6 +205,7 @@ module.exports = ({action, ask, balance, lnd, logger, request}, cbk) => {
           description,
           lnd,
           expires_at: futureDate(daysAsMs(askForExpiration.days)),
+          price: askForRate.rate,
           secret: saleSecret,
           tokens: asNumber(saleCost),
         },
@@ -233,7 +235,6 @@ module.exports = ({action, ask, balance, lnd, logger, request}, cbk) => {
         },
         cbk) =>
       {
-        const tokens = !!hasFiat(askForRate.rate) ? askForRate.rate : asNumber(saleCost);
 
         return serviceOpenTrade({
           action,
@@ -241,7 +242,6 @@ module.exports = ({action, ask, balance, lnd, logger, request}, cbk) => {
           lnd,
           logger,
           request,
-          tokens,
           capacity: askForAmount.amount,
           channels: getChannels.channels,
           expires_at: futureDate(daysAsMs(askForExpiration.days)),
@@ -249,6 +249,7 @@ module.exports = ({action, ask, balance, lnd, logger, request}, cbk) => {
           network: getNetwork.network,
           public_key: getIdentity.public_key,
           secret: saleSecret,
+          tokens: asNumber(saleCost),
           uris: (getIdentity.uris || []),
         },
         cbk);

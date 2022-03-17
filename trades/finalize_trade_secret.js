@@ -3,12 +3,15 @@ const {createHash} = require('crypto');
 const asyncAuto = require('async/auto');
 const {createHodlInvoice} = require('ln-service');
 const {createInvoice} = require('ln-service');
+const {getInvoice} = require('ln-service');
 const {getChainFeeRate} = require('ln-service');
+const {parsePaymentRequest} = require('ln-service');
 const {returnResult} = require('asyncjs-util');
 
+const convertFiatToBtc = require('./convert_fiat_to_btc');
+const decodeAnchoredTrade = require('./decode_anchored_trade');
 const encodeTradeSecret = require('./encode_trade_secret');
 const encryptTradeSecret = require('./encrypt_trade_secret');
-const convertFiatToBtc = require('./convert_fiat_to_btc');
 
 const asNumber = n => parseFloat(n, 10);
 const bufferAsHex = buffer => buffer.toString('hex');
@@ -29,6 +32,7 @@ const utf8AsHex = utf8 => Buffer.from(utf8, 'utf8').toString('hex');
     action: <Trade Action String>
     description: <Trade Description String>
     expires_at: <Trade Expires At ISO 8601 Date String>
+    [id]: <Trade Anchor Id Hex String>
     is_hold: <Create Hold Invoice Bool>
     lnd: <Authenticated LND API Object>
     logger: <Winston Logger Object>
@@ -85,22 +89,68 @@ module.exports = (args, cbk) => {
         return cbk();
       },
 
-      // Convert fiat to btc
-      validateTokens: ['validate', async ({}) => {
-        // Exit early if fiat is not used
-        if (!hasFiat(args.tokens)) {
-          return {tokens: asNumber(args.tokens)};
+      // Get the anchor invoice
+      getAnchorInvoice: ['validate', ({}, cbk) => {
+        // Exit early when there is no anchor invoice (closed trade)
+        if (!args.id) {
+          return cbk(null, {});
         }
 
-        const tokens = await convertFiatToBtc({fiat_price: args.tokens, request: args.request});
+        getInvoice({
+          id: args.id,
+          lnd: args.lnd,
+        },
+        (err, res) => {
+          if (!!err) {
+            return cbk([503, 'UnexpectedErrorGettingAnchorInvoice', err]);
+          }
+          const {request} = res;
+
+          return cbk(null, {request});
+        },
+        cbk);
+      }],
+
+      // Parse anchor invoice
+      decodeAnchorInvoice: ['getAnchorInvoice', ({getAnchorInvoice}, cbk) => {
+        // Exit early when there is no anchor invoice
+        if (!getAnchorInvoice.request) {
+          return cbk(null, {});
+        }
+
+        try {
+          const {request} = getAnchorInvoice;
+          const requestDetails = parsePaymentRequest({request});
+          const {trade} = decodeAnchoredTrade({encoded: requestDetails.description});
+  
+          return cbk(null, {trade});
+        } catch (err) {
+          return cbk([503, 'UnexpectedErrorDecodingAnchorInvoice', err]);
+        }
+      }],
+
+      // Convert fiat to btc
+      validateTokens: ['decodeAnchorInvoice', async ({decodeAnchorInvoice}) => {
+        // Exit early when there is no anchor invoice
+        if (!decodeAnchorInvoice.trade) {
+          return {};
+        }
+
+        // Exit early if fiat is not used
+        const {price} = decodeAnchorInvoice.trade;
+        
+        if (!price) {
+          return {price: undefined, tokens: asNumber(args.tokens)};
+        }
+        const tokens = await convertFiatToBtc({fiat_price: price, request: args.request});
 
         args.logger.info({fiat_to_satoshis: tokens});
 
-        return {tokens: asNumber(tokens)};
+        return {price, tokens: asNumber(tokens)};
       }], 
 
       // Calculate dynamic sale price for channel sales
-      salePrice: ['validate', 'validateTokens', ({validateTokens}, cbk) => {
+      salePrice: ['validateTokens', ({validateTokens}, cbk) => {
         // Exit early when this is not a channel sale
         if (args.action !== sellAction) {
           return cbk(null, {});
@@ -143,11 +193,10 @@ module.exports = (args, cbk) => {
         'salePrice', 
         'validateTokens', 
         ({encrypt, salePrice, validateTokens}, cbk) => {
+          // Exit early when this is a hold invoice
+          if (!!args.is_hold) {
+          const expiry = !!hasFiat(validateTokens.price) ? futureDate(defaultFiatInvoiceExpiryMs) : args.expires_at;
 
-        const expiry = !!hasFiat(args.tokens) ? futureDate(defaultFiatInvoiceExpiryMs) : args.expires_at;
-          
-        // Exit early when this is a hold invoice
-        if (!!args.is_hold) {
           return createHodlInvoice({
             description: args.description,
             expires_at: expiry,
@@ -161,10 +210,10 @@ module.exports = (args, cbk) => {
 
         return createInvoice({
           description: args.description,
-          expires_at: expiry,
+          expires_at: args.expires_at,
           lnd: args.lnd,
           secret: encrypt.payment_secret,
-          tokens: validateTokens.tokens,
+          tokens: args.tokens,
         },
         cbk);
       }],

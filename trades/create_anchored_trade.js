@@ -13,6 +13,7 @@ const maxSecretLength = 100;
     description: <Trade Description String>
     expires_at: <Trade Expires at ISO 8601 Date String>
     lnd: <Authenticated LND API Object>
+    price: <Trade Price String>
     secret: <Trade Secret String>
     tokens: <Trade Price Tokens Number>
   }
@@ -47,6 +48,10 @@ module.exports = (args, cbk) => {
           return cbk([400, 'ExpectedAuthenticatedLndToCreateAnchoredTrade']);
         }
 
+        if (!args.price) {
+          return cbk([400, 'ExpectedTradePriceToCreateAnchoredTrade']);
+        }
+
         if (!args.secret) {
           return cbk([400, 'ExpectedTradeSecretToCreateAnchoredTrade']);
         }
@@ -66,6 +71,7 @@ module.exports = (args, cbk) => {
       create: ['validate', ({}, cbk) => {
         const {encoded} = encodeAnchoredTrade({
           description: args.description,
+          price: args.price,
           secret: args.secret,
         });
 

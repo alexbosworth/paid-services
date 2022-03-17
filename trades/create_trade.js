@@ -12,6 +12,7 @@ const serviceOpenTrade = require('./service_open_trade');
 const asNumber = n => parseFloat(n, 10);
 const daysAsMs = days => Number(days) * 1000 * 60 * 60 * 24;
 const defaultExpirationDays = 14;
+const defaultFiatInvoiceExpiryMs = 30 * 60 * 1000;
 const {floor} = Math;
 const futureDate = ms => new Date(Date.now() + ms).toISOString();
 const hasFiat = n => /(aud|cad|eur|gbp|inr|jpy|usd)/gim.test(n);
@@ -178,7 +179,12 @@ module.exports = ({ask, lnd, logger, request}, cbk) => {
       }],
 
       // Ask for the expiration of the trade
-      askForExpiration: ['askForPrice', ({}, cbk) => {
+      askForExpiration: ['askForNodeId', 'askForPrice', ({askForNodeId, askForPrice}, cbk) => {
+        // Exit early when there is a specific node and fiat is being used
+        if (!!askForNodeId.id && !!hasFiat(askForPrice.tokens)) {
+          return cbk(null, {});
+        }
+
         return ask({
           default: defaultExpirationDays,
           name: 'days',
@@ -233,6 +239,7 @@ module.exports = ({ask, lnd, logger, request}, cbk) => {
           lnd,
           description: askForDescription.description,
           expires_at: futureDate(daysAsMs(askForExpiration.days)),
+          price: askForPrice.tokens,
           secret: askForSecret.secret,
           tokens: asNumber(parsePrice.tokens),
         },
@@ -269,13 +276,11 @@ module.exports = ({ask, lnd, logger, request}, cbk) => {
         if (!!askForNodeId.id) {
           return cbk();
         }
-        const tokens = !!hasFiat(askForPrice.tokens) ? askForPrice.tokens : asNumber(parsePrice.tokens);
 
         return serviceOpenTrade({
           lnd,
           logger,
           request,
-          tokens,
           channels: getChannels.channels,
           description: askForDescription.description,
           expires_at: futureDate(daysAsMs(askForExpiration.days)),
@@ -283,6 +288,7 @@ module.exports = ({ask, lnd, logger, request}, cbk) => {
           network: getNetwork.network,
           public_key: getIdentity.public_key,
           secret: askForSecret.secret,
+          tokens: asNumber(parsePrice.tokens),
           uris: (getIdentity.uris || []),
         },
         cbk);
@@ -310,17 +316,17 @@ module.exports = ({ask, lnd, logger, request}, cbk) => {
         if (!askForNodeId.id) {
           return cbk();
         }
-        const tokens = !!hasFiat(askForPrice.tokens) ? askForPrice.tokens : asNumber(parsePrice.tokens);
+        const expiry = !!askForExpiration.days ? futureDate(daysAsMs(askForExpiration.days)) : futureDate(defaultFiatInvoiceExpiryMs);
 
         return finalizeTradeSecret({
           lnd,
           logger,
           request,
-          tokens,
           description: askForDescription.description,
-          expires_at: futureDate(daysAsMs(askForExpiration.days)),
+          expires_at: expiry,
           secret: askForSecret.secret,
           to: askForNodeId.id,
+          tokens: asNumber(parsePrice.tokens),
         },
         cbk);
       }],
