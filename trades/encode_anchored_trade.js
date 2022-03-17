@@ -18,7 +18,7 @@ const withPrefix = (pre, v) => pre + Buffer.from(v, 'hex').toString('base64');
 
   {
     [description]: <Open Trade Description String>
-    pirce: <Trade Price String>
+    price: <Trade Price String>
     secret: <Open Trade Secret String>
   }
 
