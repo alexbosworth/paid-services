@@ -200,11 +200,14 @@ module.exports = ({ask, lnd, logger, request, separator}, cbk) => {
           return cbk([404, 'NoTradesCurrentlyOpen']);
         }
 
+        const trades = getTrades.filter(n => !!n.secret && !!n.description);
+
         return ask({
-          choices: getTrades.filter(n => !!n.secret).map(trade => ({
-            name: `${tokensAsBigUnit(trade.tokens)} ${trade.description}`,
-            value: trade.id,
-          })),
+          choices: trades.map(({description, id, price, tokens}) => {
+            const charging = !!tokens ? tokensAsBigUnit(tokens) : price;
+
+            return {name: `${charging} ${description}`, value: id};
+          }),
           message: 'Trade?',
           name: 'manage',
           type: 'list',
@@ -258,6 +261,7 @@ module.exports = ({ask, lnd, logger, request, separator}, cbk) => {
           expires_at: trade.expires_at,
           id: trade.id,
           network: getNetwork.network,
+          price: trade.price,
           public_key: getIdentity.public_key,
           secret: trade.secret,
           tokens: trade.tokens,
