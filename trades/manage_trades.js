@@ -315,8 +315,10 @@ module.exports = ({ask, lnd, logger, request, separator}, cbk) => {
           return logger.info(`sold: ${tokensAsBigUnit(tokens)} ${item}`);
         });
 
-        sub.on('start', ({description, tokens}) => {
-          const trade = `${tokensAsBigUnit(tokens)} ${description}`;
+        sub.on('start', ({description, price, tokens}) => {
+          const amount = !!tokens ? tokensAsBigUnit(tokens) : price;
+
+          const trade = `${amount} ${description}`;
 
           return logger.info(`open: ${trade}`);
         });
