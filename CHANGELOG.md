@@ -1,5 +1,9 @@
 # Versions
 
+## Version 3.14.0
+
+- `manageTrades`: Add support for dynamic fiat-priced trades
+
 ## Version 3.13.2
 
 - `acceptTrade`: Fix `logger` to be documented as an arg and optional
