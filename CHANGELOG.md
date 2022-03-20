@@ -1,6 +1,6 @@
 # Versions
 
-## Version 3.14.3
+## Version 3.14.4
 
 - `manageTrades`: Fix listing of trades that have fiat-pricing
 

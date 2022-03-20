@@ -95,6 +95,7 @@ module.exports = ({lnd, request}) => {
       description: trade.description,
       expires_at: trade.expires_at,
       id: trade.id,
+      price: trade.price,
       secret: trade.secret,
       tokens: trade.tokens,
     });
