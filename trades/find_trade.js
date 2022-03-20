@@ -85,7 +85,7 @@ module.exports = ({ask, id, lnd, logger, nodes}, cbk) => {
           return cbk();
         }
 
-        return requestTradeById({action, id, lnd, to}, cbk);
+        return requestTradeById({id, lnd, to}, cbk);
       })],
 
       // Request an inventory of trades

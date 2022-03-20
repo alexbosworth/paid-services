@@ -32,7 +32,7 @@ module.exports = args => {
     return {};
   }
 
-  if (!!args.is_push || !args.tokens) {
+  if (!!args.is_push) {
     return {};
   }
 
