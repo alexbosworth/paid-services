@@ -1,35 +1,34 @@
-const {randomBytes} = require('crypto');
-
 const asyncAuto = require('async/auto');
-const asyncReflect = require('async/reflect');
-const {getChainFeeRate} = require('ln-service');
+const {getChainBalance} = require('ln-service');
 const {getChannels} = require('ln-service');
 const {getNetwork} = require('ln-sync');
 const {getWalletInfo} = require('ln-service');
-const {signMessage} = require('ln-service');
 const {returnResult} = require('asyncjs-util');
 
-const convertFiatToBtc = require('./convert_fiat_to_btc');
+const convertFiat = require('./convert_fiat');
 const createAnchoredTrade = require('./create_anchored_trade');
 const serviceOpenTrade = require('./service_open_trade');
 
 const asNumber = n => parseFloat(n, 10);
 const daysAsMs = days => Number(days) * 1000 * 60 * 60 * 24;
+const defaultChannelSize = 5000000;
 const defaultExpirationDays = 1;
+const {floor} = Math;
 const futureDate = ms => new Date(Date.now() + ms).toISOString();
-const hasFiat = n => /(aud|cad|eur|gbp|inr|jpy|usd)/gim.test(n);
 const isNumber = n => !isNaN(n);
+const {min} = Math;
+const minChannelSize = 20000;
+const ppmCost = (amount, rate) => Math.ceil(amount * rate / 1000000);
+const priceFiat = 'price-in-fiat';
+const pricePpm = 'price-in-ppm';
+const priceTokens = 'price-in-tokens';
 const query = 'How much would you like to sell?';
-const saleCost = (amount, rate) => (amount * rate / 1000000).toFixed(0);
-const saleSecret = randomBytes(48).toString('hex');
-const tradeDescription = (alias, tokens) => `channelsale:${alias}-${tokens}`;
+const usdAsPrice = usd => `${usd}*USD`;
 
 /** Create a new channel sale
 
   {
-    action: <Channel Sale Action String>
     ask: <Ask Function>
-    balance: <Total Available Chain Confirmed Balance Tokens Number>
     lnd: <Authenticated LND API Object>
     logger: <Winston Logger Object>
     request: <Request Function>
@@ -37,21 +36,13 @@ const tradeDescription = (alias, tokens) => `channelsale:${alias}-${tokens}`;
 
   @returns via cbk or Promise
 */
-module.exports = ({action, ask, balance, lnd, logger, request}, cbk) => {
+module.exports = ({ask, lnd, logger, request}, cbk) => {
   return new Promise((resolve, reject) => {
     return asyncAuto({
       // Check arguments
       validate: cbk => {
-        if (!action) {
-          return cbk([400, 'ExpectedActionTypeToCreateChannelSale']);
-        }
-
         if (!ask) {
           return cbk([400, 'ExpectedAskFunctionToCreateChannelSale']);
-        }
-
-        if (balance === undefined) {
-          return cbk([400, 'ExpectedOnChainBalanceToCreateChannelSale']);
         }
 
         if (!lnd) {
@@ -69,6 +60,9 @@ module.exports = ({action, ask, balance, lnd, logger, request}, cbk) => {
         return cbk();
       },
 
+      // Get the current chain balance to set the limit for a channel sale
+      getBalance: ['validate', ({}, cbk) => getChainBalance({lnd}, cbk)],
+
       // Get the public channels to use for an open trade
       getChannels: ['validate', ({}, cbk) => {
         return getChannels({lnd, is_public: true}, cbk);
@@ -80,10 +74,15 @@ module.exports = ({action, ask, balance, lnd, logger, request}, cbk) => {
       // Get the network name to use for an open trade
       getNetwork: ['validate', ({}, cbk) => getNetwork({lnd}, cbk)],
 
-      // Ask for sale amount
-      askForAmount: ['validate', ({}, cbk) => {
+      // Ask for channel capacity to sell
+      askForAmount: ['getBalance', ({getBalance}, cbk) => {
+        if (getBalance.chain_balance < minChannelSize) {
+          return cbk([400, 'InsufficientOnChainFundsToSellChannel']);
+        }
+
         return ask({
-          message: `${query} (Available balance: ${balance})`,
+          default: min(defaultChannelSize, getBalance.chain_balance),
+          message: `${query} (Available balance: ${getBalance.chain_balance})`,
           name: 'amount',
           type: 'input',
           validate: input => {
@@ -93,30 +92,116 @@ module.exports = ({action, ask, balance, lnd, logger, request}, cbk) => {
 
             // The token amount should be numeric
             if (!isNumber(input)) {
-              return 'Expected numeric amount for sale';
+              return 'Expected numeric amount for channel capacity';
             }
 
-            if (input > balance) {
-              return 'Sale amount cannot be more than available balance';
+            // Avoid listing more coins than are present on-chain
+            if (Number(input) > getBalance.chain_balance) {
+              return 'Capacity cannot be more than available balance';
+            }
+
+            if (Number(input) < minChannelSize) {
+              return `Channel capacity must be larger than ${minChannelSize}`;
+            }
+
+            // Disallow fractional values
+            if (!!isNumber(input) && floor(input) !== asNumber(input)) {
+              return 'Decimal capacities are not supported';
             }
 
             return true;
           },
         },
-        (err, result) => {
-          if (!!err) {
-            return cbk([503, 'UnexpectedErrorAskingForSaleAmount', {err}]);
-          }
-
-          return cbk(null, result);
-        });
+        cbk);
       }],
 
-      // Ask for the rate
-      askForRate: ['askForAmount', ({}, cbk) => {
+      // Select method of pricing
+      selectPricing: ['askForAmount', ({}, cbk) => {
         return ask({
-          default: '1',
-          message: 'Price of channel in fiat or ppm? (Example: 25*USD or 2000)',
+          choices: [
+            {name: 'Set absolute price', value: priceTokens},
+            {name: 'Set price by PPM (parts per million)', value: pricePpm},
+            {name: 'Set price in fiat (USD)', value: priceFiat},
+          ],
+          default: pricePpm,
+          message: '?',
+          name: 'action',
+          type: 'list',
+        },
+        cbk);
+      }],
+
+      // Ask for fiat based cost
+      askForFiat: ['selectPricing', ({selectPricing}, cbk) => {
+        // Exit early when the pricing is not in fiat
+        if (selectPricing.action !== priceFiat) {
+          return cbk();
+        }
+
+        return ask({
+          default: '0.01',
+          message: 'Dollars USD to charge?',
+          name: 'usd',
+          type: 'input',
+          validate: input => {
+            if (!input) {
+              return false;
+            }
+
+            // Price of sale should be numeric
+            if (!isNumber(input)) {
+              return 'Not a number of dollars, try a number?';
+            }
+
+            return true;
+          },
+        },
+        cbk);
+      }],
+
+      // Ask for absolute cost
+      askForPrice: ['selectPricing', ({selectPricing}, cbk) => {
+        // Exit early when the pricing is not absolute
+        if (selectPricing.action !== priceTokens) {
+          return cbk();
+        }
+
+        return ask({
+          default: '1337',
+          message: 'Amount to charge?',
+          name: 'tokens',
+          type: 'input',
+          validate: input => {
+            if (!input) {
+              return false;
+            }
+
+            // Price of sale should be numeric
+            if (!isNumber(input)) {
+              return 'Not a number, try a number?';
+            }
+
+            // Disallow fractional values
+            if (!!isNumber(input) && floor(input) !== asNumber(input)) {
+              return 'Specified precision not supported';
+            }
+
+            return true;
+          },
+        },
+        cbk);
+      }],
+
+      // Ask for rate-based cost
+      askForRate: ['askForAmount', 'selectPricing', ({selectPricing}, cbk) => {
+        // Exit early when the pricing is not in ppm
+        if (selectPricing.action !== pricePpm) {
+          return cbk();
+        }
+
+        return ask({
+          default: '350',
+          message: 'Price in PPM?',
           name: 'rate',
           type: 'input',
           validate: input => {
@@ -124,25 +209,24 @@ module.exports = ({action, ask, balance, lnd, logger, request}, cbk) => {
               return false;
             }
 
-            // Price of sale should be in fiat or numeric ppm
-            if (!hasFiat(input) && !isNumber(input)) {
-              return 'Expected fiat or numeric ppm fee rate for sale';
+            // Price of sale should be in numeric ppm
+            if (!isNumber(input)) {
+              return 'Unable to parse rate, try a numeric ppm rate?';
+            }
+
+            // Disallow fractional values
+            if (!!isNumber(input) && floor(input) !== asNumber(input)) {
+              return 'Specified precision not supported';
             }
 
             return true;
           },
         },
-        (err, result) => {
-          if (!!err) {
-            return cbk([503, 'UnexpectedErrorAskingForRate', err]);
-          }
-
-          return cbk(null, result);
-        });
+        cbk);
       }],
 
       // Ask for the expiration of the channel sale
-      askForExpiration: ['askForRate', ({askForRate}, cbk) => {
+      askForDays: ['askForFiat', 'askForPrice', 'askForRate', ({}, cbk) => {
         return ask({
           default: defaultExpirationDays,
           name: 'days',
@@ -158,56 +242,54 @@ module.exports = ({action, ask, balance, lnd, logger, request}, cbk) => {
         cbk);
       }],
 
-      // Calculate sale cost
-      saleCost: [
-        'askForAmount',
-        'askForExpiration',
-        'askForRate',
-        async ({askForRate, askForAmount}) =>
-      { 
+      // Check ability to get fiat prices
+      checkCostLookup: ['askForFiat', ({askForFiat}, cbk) => {
         // Exit early when no fiat is referenced
-        if (!hasFiat(askForRate.rate)) {
-          return saleCost(askForAmount.amount, askForRate.rate);
+        if (!askForFiat) {
+          return cbk();
         }
 
-        // Get fiat conversion rate to use for sale
-        const cost = await convertFiatToBtc({request, fiat_price: askForRate.rate});
-
-        return cost;
+        return convertFiat({request, price: usdAsPrice(askForFiat.usd)}, cbk);
       }],
 
-      // Description of sale
-      description: [
+      // Determine the tokens value of the trade
+      cost: [
         'askForAmount',
-        'getIdentity',
-        ({askForAmount, getIdentity}, cbk) =>
+        'askForFiat',
+        'askForPrice',
+        'askForRate',
+        ({askForAmount, askForFiat, askForPrice, askForRate}, cbk) =>
       {
-        const alias = getIdentity.alias || getIdentity.public_key;
+        // Exit early when price is in fiat, not tokens
+        if (!!askForFiat) {
+          return cbk(null, {price: usdAsPrice(askForFiat.usd)});
+        }
 
-        return cbk(null, tradeDescription(alias, askForAmount.amount));
+        // Exit early when the price is specified directly
+        if (!!askForPrice) {
+          return cbk(null, {tokens: askForPrice.tokens});
+        }
+
+        // Calculate the rate that was specified in PPM
+        const tokens = ppmCost(Number(askForAmount.amount), askForRate.rate);
+
+        return cbk(null, {tokens});
       }],
 
       // Create an anchor invoice for the channel sale
       createAnchor: [
-        'askForExpiration',
-        'askForRate',
-        'description',
-        'saleCost',
-        ({
-          askForExpiration, 
-          askForRate,
-          description, 
-          saleCost
-        }, 
-        cbk) =>
+        'askForAmount',
+        'askForDays',
+        'checkCostLookup',
+        'cost',
+        ({askForAmount, askForDays, askForRate, cost}, cbk) =>
       {
         return createAnchoredTrade({
-          description,
           lnd,
-          expires_at: futureDate(daysAsMs(askForExpiration.days)),
-          price: askForRate.rate,
-          secret: saleSecret,
-          tokens: asNumber(saleCost),
+          channel: Number(askForAmount.amount),
+          expires_at: futureDate(daysAsMs(askForDays.days)),
+          price: cost.price,
+          tokens: cost.tokens,
         },
         cbk);
       }],
@@ -215,41 +297,36 @@ module.exports = ({action, ask, balance, lnd, logger, request}, cbk) => {
       // Wait for a peer to connect and ask for the channel sale details
       serviceSaleRequests: [
         'askForAmount',
-        'askForExpiration',
-        'askForRate',
+        'askForDays',
+        'cost',
         'createAnchor',
-        'description',
         'getChannels',
         'getNetwork',
         'getIdentity',
         ({
           askForAmount,
-          askForExpiration,
+          askForDays,
           askForRate,
+          cost,
           createAnchor,
-          description,
           getChannels,
           getNetwork,
           getIdentity,
-          saleCost,
         },
         cbk) =>
       {
-
         return serviceOpenTrade({
-          action,
-          description,
           lnd,
           logger,
           request,
-          capacity: askForAmount.amount,
+          channel: Number(askForAmount.amount),
           channels: getChannels.channels,
-          expires_at: futureDate(daysAsMs(askForExpiration.days)),
+          expires_at: futureDate(daysAsMs(askForDays.days)),
           id: createAnchor.id,
           network: getNetwork.network,
+          price: cost.price,
           public_key: getIdentity.public_key,
-          secret: saleSecret,
-          tokens: asNumber(saleCost),
+          tokens: cost.tokens,
           uris: (getIdentity.uris || []),
         },
         cbk);

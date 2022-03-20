@@ -5,6 +5,7 @@ const {returnResult} = require('asyncjs-util');
 const {subscribeToProbeForRoute} = require('ln-service');
 
 const cltvDeltaBuffer = 5;
+const tokensAsBigUnit = tokens => (tokens / 1e8).toFixed(8);
 
 /** Buy the preimage for a trade
 
@@ -134,9 +135,9 @@ module.exports = ({ask, lnd, logger, request}, cbk) => {
       // Final payment
       paid: ['parseRequest', 'pay', ({parseRequest, pay}, cbk) => {
         return cbk(null, {
-          fee: pay.fee,
+          fee: tokensAsBigUnit(pay.fee),
           secret: pay.secret,
-          tokens: parseRequest.tokens,
+          tokens: tokensAsBigUnit(parseRequest.tokens),
         });
       }],
     },

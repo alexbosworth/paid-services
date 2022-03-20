@@ -1,7 +1,10 @@
+const {decodeBigSize} = require('bolt01');
 const {decodeTlvStream} = require('bolt01');
 
 const anchorPrefix = 'anchor-trade-secret:';
 const base64AsHex = base64 => Buffer.from(base64, 'base64').toString('hex');
+const decodeNumber = encoded => Number(decodeBigSize({encoded}).decoded);
+const findChannel = records => records.find(n => n.type === '3');
 const findDescription = records => records.find(n => n.type === '1');
 const findSecret = records => records.find(n => n.type === '0');
 const findPrice = records => records.find(n => n.type === '2');
@@ -12,8 +15,10 @@ const hexAsUtf = n => !n ? '' : Buffer.from(n.value, 'hex').toString('utf8');
   Data blobs look like anchored-trade-secret:<base64-encoded-data>
 
   Inside the base64 is encoded TLV data:
-  0: <Trade Secret>
+  [0]: <Trade Secret>
   [1]: <Trade Description>
+  [2]: <Price Expression>
+  [3]: <Channel Sale Tokens>
 
   {
     encoded: <Encoded Trade Data String>
@@ -22,8 +27,10 @@ const hexAsUtf = n => !n ? '' : Buffer.from(n.value, 'hex').toString('utf8');
   @returns
   {
     [trade]: {
-      description: <Description of Trade String>
-      secret: <Trade Secret String>
+      [channel]: <Channel Sale Capacity Tokens Number>
+      [description]: <Description of Trade String>
+      [price]: <Trade Price String>
+      [secret]: <Trade Secret String>
     }
   }
 */
@@ -42,17 +49,36 @@ module.exports = ({encoded}) => {
 
   const {records} = decodeTlvStream({encoded: base64AsHex(data)});
 
+  const channel = findChannel(records);
+  const description = findDescription(records);
+  const price = findPrice(records);
   const secret = findSecret(records);
 
-  if (!secret.value) {
-    return {};
+  if (!!channel) {
+    // Make sure the channel value is reasonable
+    try {
+      decodeNumber(channel.value);
+    } catch {
+      return {};
+    }
+
+    return {
+      trade: {
+        channel: decodeNumber(channel.value),
+        price: !!price ? hexAsUtf(price) : undefined,
+      },
+    };
   }
 
-  return {
-    trade: {
-      description: hexAsUtf(findDescription(records)),
-      price: hexAsUtf(findPrice(records)),
-      secret: hexAsUtf(secret),
-    },
-  };
+  if (!!description && !!secret) {
+    return {
+      trade: {
+        description: hexAsUtf(description),
+        price: !!price ? hexAsUtf(price) : undefined,
+        secret: hexAsUtf(secret),
+      },
+    };
+  }
+
+  return {};
 };

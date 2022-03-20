@@ -16,12 +16,14 @@ const decodeAnchoredTrade = require('./decode_anchored_trade');
   @returns
   {
     [trade]: {
+      [channel]: <Channel Sale Tokens Number>
       created_at: <Open Trade Created At ISO 8601 Date String>
-      description: <Trade Description String>
+      [description]: <Trade Description String>
       expires_at: <Trade Expires at ISO 8601 Date String>
       id: <Trade Id Hex String>
-      secret: <Secret Payload String>
-      tokens: <Tokens Number>
+      [price]: <Price Expression String>
+      [secret]: <Secret Payload String>
+      [tokens]: <Tokens Number>
     }
   }
 */
@@ -43,12 +45,14 @@ module.exports = args => {
 
   return {
     trade: {
+      channel: trade.channel || undefined,
       created_at: args.created_at,
-      description: trade.description,
+      description: trade.description || undefined,
       expires_at: args.expires_at,
       id: args.id,
-      secret: trade.secret,
-      tokens: args.tokens,
+      price: trade.price || undefined,
+      secret: trade.secret || undefined,
+      tokens: args.tokens || undefined,
     },
   };
 };

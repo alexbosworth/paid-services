@@ -2,13 +2,13 @@ const asyncAuto = require('async/auto');
 const asyncUntil = require('async/until');
 const {cancelHodlInvoice} = require('ln-service');
 const {diffieHellmanComputeSecret} = require('ln-service');
-const {getChainBalance} = require('ln-service');
 const {getIdentity} = require('ln-service');
 const {getInvoices} = require('ln-service');
 const {getNetwork} = require('ln-sync');
 const {getNodeAlias} = require('ln-sync');
 const {returnResult} = require('asyncjs-util');
 
+const buyChannel = require('./buy_channel');
 const createChannelSale = require('./create_channel_sale');
 const createTrade = require('./create_trade');
 const encodeTrade = require('./encode_trade');
@@ -33,15 +33,15 @@ const viewAction = 'view';
 
   {
     ask: <Ask Function>
-    experimental: <Experiment Mode Bool>
     lnd: <Authenticated LND API Object>
     logger: <Winston Logger Object>
+    request: <Request Function>
     separator: <Create Separator Function>
   }
 
   @returns via cbk or Promise
 */
-module.exports = ({ask, experimental, lnd, logger, request, separator}, cbk) => {
+module.exports = ({ask, lnd, logger, request, separator}, cbk) => {
   return new Promise((resolve, reject) => {
     return asyncAuto({
       // Check arguments
@@ -75,23 +75,20 @@ module.exports = ({ask, experimental, lnd, logger, request, separator}, cbk) => 
       select: ['validate', ({}, cbk) => {
         return ask({
           choices: [
-            separator(),
-            {name: 'Create Trade', value: createAction},
-            {name: 'Decode Trade', value: decodeAction},
-            separator(),
+            {name: 'Buy Secret', value: decodeAction},
             {
               name: 'Buy Channel (experimental)',
               value: buyAction,
-              disabled: !experimental,
             },
+            separator(),
+            {name: 'Sell Secret', value: createAction},
             {
               name: 'Sell Channel (experimental)',
               value: sellAction,
-              disabled: !experimental,
             },
             separator(),
-            {name: 'Open Trades', value: listAction},
-            {name: 'Serve Trades', value: serveAction},
+            {name: 'List Open Trades', value: listAction},
+            {name: 'Serve Open Trades', value: serveAction},
           ],
           loop: false,
           message: 'Trade?',
@@ -101,7 +98,7 @@ module.exports = ({ask, experimental, lnd, logger, request, separator}, cbk) => 
         cbk);
       }],
 
-      // Confirm that signer RPC is enabled
+      // Confirm that signer RPC is enabled, this is required for trade secret
       checkSigner: ['getIdentity', ({getIdentity}, cbk) => {
         return diffieHellmanComputeSecret({
           lnd,
@@ -135,14 +132,24 @@ module.exports = ({ask, experimental, lnd, logger, request, separator}, cbk) => 
       // View an existing trade
       view: ['checkSigner', 'select', ({checkSigner, select}, cbk) => {
         // Exit early when not decoding a trade
-        if (select.action !== decodeAction && select.action !== buyAction) {
+        if (select.action !== decodeAction) {
           return cbk();
         }
 
-        return manageTrade({ask, lnd, logger, action: select.action}, cbk)
+        return manageTrade({ask, lnd, logger}, cbk)
       }],
 
-      // Get open trades
+      // Buy a channel
+      buyChannel: ['select', ({select}, cbk) => {
+        // Exit early when not buying a channel
+        if (select.action !== buyAction) {
+          return cbk();
+        }
+
+        return buyChannel({ask, lnd, logger}, cbk);
+      }],
+
+      // Get open trades that are being offered
       getTrades: ['validate', ({}, cbk) => {
         const paging = {trades: []};
 
@@ -194,7 +201,7 @@ module.exports = ({ask, experimental, lnd, logger, request, separator}, cbk) => 
         }
 
         return ask({
-          choices: getTrades.map(trade => ({
+          choices: getTrades.filter(n => !!n.secret).map(trade => ({
             name: `${tokensAsBigUnit(trade.tokens)} ${trade.description}`,
             value: trade.id,
           })),
@@ -285,7 +292,7 @@ module.exports = ({ask, experimental, lnd, logger, request, separator}, cbk) => 
           return cbk();
         }
 
-        const sub = serviceAnchoredTrades({lnd, logger, request});
+        const sub = serviceAnchoredTrades({lnd, request});
 
         const {trade} = encodeTrade({
           connect: {
@@ -299,11 +306,15 @@ module.exports = ({ask, experimental, lnd, logger, request, separator}, cbk) => 
         sub.on('settled', async ({description, to, tokens}) => {
           const {alias, id} = await getNodeAlias({lnd, id: to});
 
-          return logger.info(`sold: ${tokensAsBigUnit(tokens)} ${description} to ${alias} ${to}`);
+          const item = `${description} to ${alias} ${to}`;
+
+          return logger.info(`sold: ${tokensAsBigUnit(tokens)} ${item}`);
         });
 
         sub.on('start', ({description, tokens}) => {
-          return logger.info(`open: ${tokensAsBigUnit(tokens)} ${description}`);
+          const trade = `${tokensAsBigUnit(tokens)} ${description}`;
+
+          return logger.info(`open: ${trade}`);
         });
 
         sub.on('error', err => {
@@ -320,21 +331,7 @@ module.exports = ({ask, experimental, lnd, logger, request, separator}, cbk) => 
           return cbk();
         }
 
-        return getChainBalance({lnd}, (err, res) => {
-          if (!!err) {
-            return cbk(err);
-          }
-
-          return createChannelSale({
-            ask,
-            lnd,
-            logger,
-            request,
-            action: select.action,
-            balance: res.chain_balance,
-          },
-          cbk);
-        });
+        return createChannelSale({ask, lnd, logger, request}, cbk);
       }],
     },
     returnResult({reject, resolve}, cbk));

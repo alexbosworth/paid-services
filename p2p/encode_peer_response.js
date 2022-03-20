@@ -1,9 +1,8 @@
-const {encodeBigSize} = require('bolt01');
 const {encodeTlvStream} = require('bolt01');
 
-const encodeMessage = message => `626f73ff${message}`;
 const encodeResponseCode = require('./encode_response_code');
 
+const encodeMessage = message => `626f73ff${message}`;
 const headers = null;
 const params = null;
 const version = null;

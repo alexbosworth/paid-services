@@ -14,22 +14,22 @@ const uriAsSocket = n => n.substring(67);
 /** Service an individual trade
 
   {
-    [action]: <Trade Action String>
-    [capacity]: <Channel Open Capacity Tokens Number>
+    [channel]: <Sell Channel With Capacity Tokens Number>
     channels: [{
       id: <Standard Format Channel Id String>
       partner_public_key: <Node Public Key Hex String>
     }]
-    description: <Trade Description String>
+    [description]: <Trade Description String>
     expires_at: <Expires At ISO 8601 Date String>
     id: <Trade Anchor Id Hex String>
     lnd: <Authenticated LND API Object>
     logger: <Winston Logger Object>
     network: <Network Name String>
+    [price]: <Price Expression String>
     public_key: <Identity Public Key Hex String>
     request: <Request Function>
-    secret: <Secret to Sell String>
-    tokens: <Trade Price Tokens Number>
+    [secret]: <Secret to Sell String>
+    [tokens]: <Trade Price Tokens Number>
     uris: [<Node URI String>]
   }
 
@@ -40,12 +40,16 @@ module.exports = (args, cbk) => {
     return asyncAuto({
       // Check arguments
       validate: cbk => {
+        if (!args.channel && !args.secret) {
+          return cbk([400, 'ExpectedSecretOrChannelToSellToServiceTrade']);
+        }
+
         if (!isArray(args.channels)) {
           return cbk([400, 'ExpectedArrayOfChannelsToServiceTrade']);
         }
 
-        if (!args.description) {
-          return cbk([400, 'ExpectedDescriptionToServiceTrade']);
+        if (!args.channel && !args.description) {
+          return cbk([400, 'ExpectedChannelOrDescriptionToServiceTrade']);
         }
 
         if (!args.expires_at) {
@@ -68,20 +72,16 @@ module.exports = (args, cbk) => {
           return cbk([400, 'ExpectedNetworkNameToServiceTrade']);
         }
 
+        if (!args.price && !args.tokens) {
+          return cbk([400, 'ExpectedTokensOrPriceExpressionToServiceTrade']);
+        }
+
         if (!args.public_key) {
           return cbk([400, 'ExpectedIdentityPublicKeyToServiceTrade']);
         }
 
         if (!args.request) {
           return cbk([400, 'ExpectedRequestFunctionToServiceTrade']);
-        }
-
-        if (!args.secret) {
-          return cbk([400, 'ExpectedSecretToSellToServiceTrade']);
-        }
-
-        if (!args.tokens) {
-          return cbk([400, 'ExpectedTokensPriceToServiceTrade']);
         }
 
         if (!isArray(args.uris)) {
@@ -109,13 +109,12 @@ module.exports = (args, cbk) => {
         args.logger.info({trade_expiry: new Date(args.expires_at)});
 
         const sub = serviceTradeRequests({
-          action: args.action,
-          capacity: args.capacity,
+          channel: args.channel,
           description: args.description,
           expires_at: args.expires_at,
           id: args.id,
           lnd: args.lnd,
-          logger: args.logger,
+          price: args.price,
           request: args.request,
           secret: args.secret,
           tokens: args.tokens,
@@ -135,6 +134,8 @@ module.exports = (args, cbk) => {
         });
 
         sub.on('failure', failure => args.logger.error({failure}));
+
+        sub.on('opening_channel', opening => args.logger.info({opening}));
 
         sub.on('settled', ({to}) => settled.push(to));
 

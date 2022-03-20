@@ -21,7 +21,6 @@ const tokensAsBigUnit = tokens => (tokens / 1e8).toFixed(8);
 /** Manage an individual trade
 
   {
-    action: <Action Type String>
     ask: <Ask Function>
     lnd: <Authenticated LND API Object>
     logger: <Winston Logger Object>
@@ -29,15 +28,11 @@ const tokensAsBigUnit = tokens => (tokens / 1e8).toFixed(8);
 
   @returns via cbk or Promise
 */
-module.exports = ({action, ask, lnd, logger}, cbk) => {
+module.exports = ({ask, lnd, logger}, cbk) => {
   return new Promise((resolve, reject) => {
     return asyncAuto({
       // Check arguments
       validate: cbk => {
-        if (!action) {
-          return cbk([400, 'ExpectedActionTypeToManageTrade']);
-        }
-
         if (!ask) {
           return cbk([400, 'ExpectedAskFunctionToManageTrade']);
         }
@@ -95,7 +90,6 @@ module.exports = ({action, ask, lnd, logger}, cbk) => {
 
         // Get the trade details interactively
         return findTrade({
-          action,
           ask,
           lnd,
           logger,
@@ -376,7 +370,7 @@ module.exports = ({action, ask, lnd, logger}, cbk) => {
           return cbk();
         }
 
-        logger.info({trade_complete: hexAsUtf8(decryptSecret.plain)});
+        logger.info({secret_purchased: hexAsUtf8(decryptSecret.plain)});
 
         return cbk();
       }],

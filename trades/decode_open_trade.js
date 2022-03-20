@@ -55,6 +55,12 @@ module.exports = ({network, records}) => {
     throw new Error('ExpectedNodesRecordToDecodeOpenTradeDetails');
   }
 
+  try {
+    decodeTlvStream({encoded: nodesRecord.value});
+  } catch (err) {
+    throw new Error('ExpectedValidNodesTlvStreamToDecodeOpenTradeDetails');
+  }
+
   const nodeRecords = decodeTlvStream({encoded: nodesRecord.value}).records;
 
   if (!nodeRecords.length) {

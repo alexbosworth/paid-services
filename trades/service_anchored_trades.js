@@ -19,7 +19,6 @@ const sumOf = arr => arr.reduce((sum, n) => sum + n, 0);
 
   {
     lnd: <Authenticated LND API Object>
-    logger: <Winston Logger Object>
     request: <Request Function>
   }
 
@@ -67,7 +66,7 @@ const sumOf = arr => arr.reduce((sum, n) => sum + n, 0);
   @returns
   <EventEmitter Object>
 */
-module.exports = ({lnd, logger, request}) => {
+module.exports = ({lnd, request}) => {
   const emitter = new EventEmitter();
   const listening = {};
   const paging = {};
@@ -81,11 +80,11 @@ module.exports = ({lnd, logger, request}) => {
 
     const sub = serviceTradeRequests({
       lnd,
-      logger,
       request,
       description: trade.description,
       expires_at: trade.expires_at,
       id: trade.id,
+      price: trade.price,
       secret: trade.secret,
       tokens: trade.tokens,
     });
@@ -199,6 +198,7 @@ module.exports = ({lnd, logger, request}) => {
           .map(tradeFromInvoice)
           .map(n => n.trade)
           .filter(n => !!n)
+          .filter(n => !!n.description && !!n.secret)
           .forEach(serviceTrade);
 
         return cbk();

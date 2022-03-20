@@ -15,10 +15,12 @@ const decodeAnchoredTrade = require('./decode_anchored_trade');
   @returns via cbk or Promise
   {
     [trade]: {
-      description: <Trade Description String>
+      [channel]: <Channel Sale Capacity Tokens Number>
+      [description]: <Description of Trade String>
       expires_at: <Trade Expires at ISO 8601 Date String>
-      secret: <Trade Secret String>
-      tokens: <Trade Price Tokens Number>
+      [price]: <Trade Price String>
+      [secret]: <Trade Secret String>
+      [tokens]: <Trade Price Tokens Number>
     }
   }
 */
@@ -59,10 +61,12 @@ module.exports = ({id, lnd}, cbk) => {
 
         return cbk(null, {
           trade: {
-            description: trade.description,
+            channel: trade.channel || undefined,
+            description: trade.description || undefined,
             expires_at: getInvoice.value.expires_at,
-            secret: trade.secret,
-            tokens: getInvoice.value.tokens,
+            price: trade.price || undefined,
+            secret: trade.secret || undefined,
+            tokens: getInvoice.value.tokens || undefined,
           },
         });
       }],

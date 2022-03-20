@@ -1,34 +1,23 @@
 const {randomBytes} = require('crypto');
 
-const {addPeer} = require('ln-service');
 const asyncAuto = require('async/auto');
-const asyncDetect = require('async/detect');
-const asyncDetectSeries = require('async/detectSeries');
-const asyncMap = require('async/map');
 const asyncReflect = require('async/reflect');
-const {getChannel} = require('ln-service');
-const {getNode} = require('ln-service');
-const {getPeers} = require('ln-service');
 const {returnResult} = require('asyncjs-util');
 
+const connectToSeller = require('./connect_to_seller');
 const decodeBasicTrade = require('./decode_basic_trade');
 const {makePeerRequest} = require('./../p2p');
 const requestTradeById = require('./request_trade_by_id');
 const {servicePeerRequests} = require('./../p2p');
-const {serviceTypeReceiveChannelSale} = require('./../service_types');
-const {serviceTypeRequestChannelSale} = require('./../service_types');
 const {serviceTypeReceiveTrades} = require('./../service_types');
 const {serviceTypeRequestTrades} = require('./../service_types');
 
-const buyChannelAction = 'buy';
 const findBasicRecord = records => records.find(n => n.type === '1');
 const findIdRecord = records => records.find(n => n.type === '0');
 const {isArray} = Array;
 const makeRequestId = () => randomBytes(32).toString('hex');
-const requestTradeType = '805005';
 const requestTradesTimeoutMs = 1000 * 30;
 const tradesRequestIdType = '1';
-const uniq = arr => Array.from(new Set(arr));
 const uniqBy = (a,b) => a.filter((e,i) => a.findIndex(n => n[b] == e[b]) == i);
 const waitForTradesMs = 1000 * 5;
 
@@ -37,7 +26,6 @@ const waitForTradesMs = 1000 * 5;
   {
     ask: <Inquirer Ask Function>
     [id]: <Trade Id Encoded Hex String>
-    identity: <Own Node Identity Public Key Hex String>
     lnd: <Authenticated LND API Object>
     logger: <Winston Logger Object>
     nodes: [{
@@ -52,27 +40,19 @@ const waitForTradesMs = 1000 * 5;
 
   @returns via cbk or Promise
   {
-    auth: <Encrypted Payload Auth Hex String>
-    payload: <Preimage Encrypted Payload Hex String>
+    [auth]: <Encrypted Payload Auth Hex String>
+    [payload]: <Preimage Encrypted Payload Hex String>
     request: <BOLT 11 Payment Request String>
     trade: <Encoded Trade String>
   }
 */
-module.exports = ({action, ask, id, identity, lnd, logger, nodes}, cbk) => {
+module.exports = ({ask, id, lnd, logger, nodes}, cbk) => {
   return new Promise((resolve, reject) => {
     return asyncAuto({
       // Check arguments
       validate: cbk => {
-        if (!action) {
-          return cbk([400, 'ExpectedActionTypeToFindTrade']);
-        }
-
         if (!ask) {
           return cbk([400, 'ExpectedAskMethodToFindTrade']);
-        }
-
-        if (!identity) {
-          return cbk([400, 'ExpectedIdentityToFindTrade']);
         }
 
         if (!lnd) {
@@ -90,148 +70,13 @@ module.exports = ({action, ask, id, identity, lnd, logger, nodes}, cbk) => {
         return cbk();
       },
 
-      // Find node connect info to connect to
-      getNodes: ['validate', ({}, cbk) => {
-        return asyncMap(nodes, (connect, cbk) => {
-          // Exit early when the node is self
-          if (!!connect.node && connect.node.id === identity) {
-            return cbk();
-          }
-
-          // Exit early when the node id and sockets is specified directly
-          if (!!connect.node) {
-            return getNode({
-              lnd,
-              is_omitting_channels: true,
-              public_key: connect.node.id,
-            },
-            (err, res) => {
-              if (!!err) {
-                return cbk(null, connect.node);
-              }
-
-              const sockets = res.sockets.map(n => n.socket);
-
-              return cbk(null, {
-                id: connect.node.id,
-                sockets: uniq([].concat(sockets).concat(connect.node.sockets)),
-              });
-            });
-          }
-
-          // Exit early when there is no landmark channel
-          if (!connect.high_channel && !connect.low_channel) {
-            return cbk();
-          }
-
-          const channelId = connect.high_channel || connect.low_channel;
-
-          // Get the public keys of the landmark channel
-          return getChannel({lnd, id: channelId}, (err, res) => {
-            // Exit early when the channel cannot be fetched
-            if (!!err) {
-              return cbk();
-            }
-
-            const [low, high] = res.policies.map(n => n.public_key);
-
-            // The node key is either the lower or the higher public key
-            const nodeId = !!connect.low_channel ? low : high;
-
-            // Exit early when the node is self
-            if (nodeId === identity) {
-              return cbk();
-            }
-
-            // Find the sockets for the node
-            return getNode({
-              lnd,
-              is_omitting_channels: true,
-              public_key: nodeId,
-            },
-            (err, res) => {
-              if (!!err) {
-                return cbk();
-              }
-
-              return cbk(null, {
-                id: nodeId,
-                sockets: res.sockets.map(n => n.socket),
-              });
-            });
-          });
-        },
-        cbk);
+      // Connect to the seller
+      connect: ['validate', ({}, cbk) => {
+        return connectToSeller({lnd, logger, nodes}, cbk);
       }],
 
-      // Get the list of connected peers
-      getPeers: ['validate', ({}, cbk) => getPeers({lnd}, cbk)],
-
-      // Determine the receive type to listen for
-      receiveType: ['validate', ({}, cbk) => {
-        // Exit early when the action is to buy a channel
-        if (action === buyChannelAction) {
-          return cbk(null, serviceTypeReceiveChannelSale);
-        }
-
-        return cbk(null, serviceTypeReceiveTrades);
-      }],
-
-      // Determine the request type to send
-      requestType: ['validate', ({}, cbk) => {
-        // Exit early when the action is to buy a channel
-        if (action === buyChannelAction) {
-          return cbk(null, serviceTypeRequestChannelSale);
-        }
-
-        return cbk(null, serviceTypeRequestTrades);
-      }],
-
-      // Try and connect to a node in order to do p2p messaging
-      connect: ['getNodes', 'getPeers', ({getNodes, getPeers}, cbk) => {
-        const connected = getPeers.peers.map(n => n.public_key);
-
-        // Look for a node that is already a connected peer
-        const [alreadyConnected] = getNodes.filter(node => {
-          return !!node && connected.includes(node.id);
-        });
-
-        // Exit early when already connected to a node
-        if (!!alreadyConnected) {
-          return cbk(null, alreadyConnected);
-        }
-
-        // Try and connect to a referenced node
-        return asyncDetect(getNodes.filter(n => !!n), (node, cbk) => {
-          logger.info({connecting_to: node.id});
-
-          // Attempt referenced sockets to establish p2p connection
-          return asyncDetectSeries(node.sockets, (socket, cbk) => {
-            return addPeer({lnd, socket, public_key: node.id}, err => {
-              // Stop trying sockets when there is no error
-              return cbk(null, !err);
-            });
-          },
-          (err, socket) => {
-            if (!!err) {
-              return cbk(err);
-            }
-
-            // The node is connected if one of the sockets worked
-            return cbk(null, !!socket);
-          });
-        },
-        cbk);
-      }],
-
-      // Node to request trades from
-      to: ['connect', ({connect}, cbk) => {
-        if (!connect) {
-          return cbk([503, 'FailedToConnectToNode']);
-        }
-
-        return cbk(null, connect.id);
-      }],
+      // Send request to node with public key identity
+      to: ['connect', ({connect}, cbk) => cbk(null, connect.id)],
 
       // Request a specific trade
       requestTrade: ['to', asyncReflect(({to}, cbk) => {
@@ -244,13 +89,7 @@ module.exports = ({action, ask, id, identity, lnd, logger, nodes}, cbk) => {
       })],
 
       // Request an inventory of trades
-      requestTrades: [
-        'receiveType',
-        'requestTrade',
-        'requestType',
-        'to',
-        ({receiveType, requestTrade, requestType, to}, cbk) =>
-      {
+      requestTrades: ['requestTrade', 'to', ({requestTrade, to}, cbk) => {
         // Exit early when there was a successful request for a specific id
         if (!!requestTrade.value) {
           return cbk();
@@ -267,7 +106,7 @@ module.exports = ({action, ask, id, identity, lnd, logger, nodes}, cbk) => {
           return !!err ? cbk(err) : cbk(null, {trades});
         };
 
-        service.request({type: receiveType}, (req, res) => {
+        service.request({type: serviceTypeReceiveTrades}, (req, res) => {
           const requestIdRecord = findIdRecord(req.records);
 
           // Exit early when this is a request for something else
@@ -300,7 +139,7 @@ module.exports = ({action, ask, id, identity, lnd, logger, nodes}, cbk) => {
           to,
           records: [{type: tradesRequestIdType, value: requestId}],
           timeout: requestTradesTimeoutMs,
-          type: requestType,
+          type: serviceTypeRequestTrades,
         },
         (err, res) => {
           if (!!err) {
@@ -355,7 +194,7 @@ module.exports = ({action, ask, id, identity, lnd, logger, nodes}, cbk) => {
           return cbk();
         }
 
-        return requestTradeById({action, lnd, to, id: selectTrade.id}, cbk);
+        return requestTradeById({lnd, to, id: selectTrade.id}, cbk);
       }],
 
       // Final trade details

@@ -4,23 +4,25 @@ const {getNetwork} = require('ln-sync');
 const {getWalletInfo} = require('ln-service');
 const {returnResult} = require('asyncjs-util');
 
-const convertFiatToBtc = require('./convert_fiat_to_btc');
+const convertFiat = require('./convert_fiat');
 const createAnchoredTrade = require('./create_anchored_trade');
-const finalizeTradeSecret = require('./finalize_trade_secret');
+const finalizeTrade = require('./finalize_trade');
 const serviceOpenTrade = require('./service_open_trade');
 
 const asNumber = n => parseFloat(n, 10);
 const daysAsMs = days => Number(days) * 1000 * 60 * 60 * 24;
-const defaultExpirationDays = 14;
-const defaultFiatInvoiceExpiryMs = 30 * 60 * 1000;
+const defaultExpirationDays = 1;
+const defaultFiatInvoiceExpiryMs = 1000 * 60 * 30;
 const {floor} = Math;
 const futureDate = ms => new Date(Date.now() + ms).toISOString();
-const hasFiat = n => /(aud|cad|eur|gbp|inr|jpy|usd)/gim.test(n);
 const isNumber = n => !isNaN(n);
 const isPublicKey = n => !!n && /^0[2-3][0-9A-F]{64}$/i.test(n);
 const maxDescriptionLength = 100;
 const maxSecretLength = 100;
+const priceFiat = 'set-price-fiat';
+const priceTokens = 'set-price-tokens';
 const uriAsSocket = n => n.substring(67);
+const usdAsPrice = ({usd}) => `${usd}*USD`;
 const utf8AsHex = utf8 => Buffer.from(utf8).toString('hex');
 
 /** Create a new trade
@@ -134,7 +136,7 @@ module.exports = ({ask, lnd, logger, request}, cbk) => {
       askForSecret: ['askForDescription', ({askForDescription}, cbk) => {
         return ask({
           name: 'secret',
-          message: 'Enter the secret you want to sell:',
+          message: 'What is the secret you want to sell?',
           type: 'input',
           validate: input => {
             if (!input) {
@@ -151,20 +153,77 @@ module.exports = ({ask, lnd, logger, request}, cbk) => {
         cbk);
       }],
 
-      // Ask for the price of the secret
-      askForPrice: ['askForSecret', ({}, cbk) => {
+      // Select pricing type
+      selectPriceType: [
+        'askForNodeId',
+        'askForSecret',
+        ({askForNodeId}, cbk) =>
+      {
+        // Exit early and force absolute price when this is a direct trade
+        if (!!askForNodeId.id) {
+          return cbk(null, {type: priceTokens});
+        }
+
         return ask({
-          name: 'tokens',
-          message: 'How much do you want to charge in Fiat or Satoshis? (Example: 25*USD or 2000)',
+          choices: [
+            {name: 'Set absolute price', value: priceTokens},
+            {name: 'Set dynamic price in fiat terms (USD)', value: priceFiat},
+          ],
+          message: '?',
+          name: 'type',
+          type: 'list',
+        },
+        cbk);
+      }],
+
+      // Ask for the fiat price of the secret
+      askForFiatPrice: ['selectPriceType', ({selectPriceType}, cbk) => {
+        // Exit early when not setting a fiat price
+        if (selectPriceType.type !== priceFiat) {
+          return cbk();
+        }
+
+        return ask({
+          default: '0.01',
+          message: 'Dollars USD to charge?',
+          name: 'usd',
+          type: 'input',
           validate: input => {
-            // Only allow numeric input
             if (!input) {
               return false;
             }
 
-            // Price of trade should be in fiat or a number
-            if (!hasFiat(input) && !isNumber(input)) {
-              return 'Expected fiat or numeric price for trade';
+            // Price of sale should be numeric
+            if (!isNumber(input)) {
+              return 'Not a number of dollars, try a number?';
+            }
+
+            return true;
+          },
+        },
+        cbk);
+      }],
+
+      // Ask for the price of the secret
+      askForTokensPrice: ['selectPriceType', ({selectPriceType}, cbk) => {
+        // Exit early when not asking for an absolute price
+        if (selectPriceType.type !== priceTokens) {
+          return cbk();
+        }
+
+        return ask({
+          default: '1',
+          message: 'Amount to charge?',
+          name: 'tokens',
+          type: 'input',
+          validate: input => {
+            if (!input) {
+              return false;
+            }
+
+            // Price of sale should be numeric
+            if (!isNumber(input)) {
+              return 'Not a number, try a number?';
             }
 
             // Disallow fractional values
@@ -179,17 +238,13 @@ module.exports = ({ask, lnd, logger, request}, cbk) => {
       }],
 
       // Ask for the expiration of the trade
-      askForExpiration: ['askForNodeId', 'askForPrice', ({askForNodeId, askForPrice}, cbk) => {
-        // Exit early when there is a specific node and fiat is being used
-        if (!!askForNodeId.id && !!hasFiat(askForPrice.tokens)) {
-          return cbk(null, {});
-        }
-
+      askForExpiration: ['askForFiatPrice', 'askForTokensPrice', ({}, cbk) => {
         return ask({
           default: defaultExpirationDays,
           name: 'days',
           message: 'Days to offer this for?',
           validate: input => {
+            // Days must be a number
             if (!isNumber(input) || !Number(input)) {
               return false;
             }
@@ -200,33 +255,33 @@ module.exports = ({ask, lnd, logger, request}, cbk) => {
         cbk);
       }],
 
-      parsePrice: ['askForExpiration', 'askForPrice', async ({askForPrice}) => {
+      // Get the conversion to tokens for fiat
+      getTokens: ['askForFiatPrice', ({askForFiatPrice}, cbk) => {
         // Exit early if not using fiat
-        if (!hasFiat(askForPrice.tokens)) {
-          return {tokens: asNumber(askForPrice.tokens)};
+        if (!askForFiatPrice) {
+          return cbk();
         }
 
-        const tokens = await convertFiatToBtc({request, fiat_price: askForPrice.tokens});
-
-        return {tokens: asNumber(tokens)};
-
+        // Check that the fiat price can be converted
+        return convertFiat({request, price: usdAsPrice(askForFiatPrice)}, cbk);
       }],
 
       // Create an anchor invoice for the trade
       createAnchor: [
         'askForDescription',
         'askForExpiration',
+        'askForFiatPrice',
         'askForNodeId',
-        'askForPrice',
         'askForSecret',
-        'parsePrice',
+        'askForTokensPrice',
+        'getTokens',
         ({
           askForDescription,
           askForExpiration,
+          askForFiatPrice,
           askForNodeId,
-          askForPrice,
           askForSecret,
-          parsePrice,
+          askForTokensPrice,
         },
         cbk) =>
       {
@@ -235,13 +290,16 @@ module.exports = ({ask, lnd, logger, request}, cbk) => {
           return cbk();
         }
 
+        // Tokens may be undefined when fiat price is set
+        const {tokens} = !!askForTokensPrice ? askForTokensPrice : {};
+
         return createAnchoredTrade({
           lnd,
+          tokens,
           description: askForDescription.description,
           expires_at: futureDate(daysAsMs(askForExpiration.days)),
-          price: askForPrice.tokens,
+          price: !!askForFiatPrice ? usdAsPrice(askForFiatPrice) : undefined,
           secret: askForSecret.secret,
-          tokens: asNumber(parsePrice.tokens),
         },
         cbk);
       }],
@@ -250,25 +308,25 @@ module.exports = ({ask, lnd, logger, request}, cbk) => {
       serviceTradeRequests: [
         'askForDescription',
         'askForExpiration',
+        'askForFiatPrice',
         'askForNodeId',
-        'askForPrice',
         'askForSecret',
+        'askForTokensPrice',
         'createAnchor',
         'getChannels',
         'getIdentity',
         'getNetwork',
-        'parsePrice',
         ({
           askForDescription,
           askForExpiration,
+          askForFiatPrice,
           askForNodeId,
-          askForPrice,
           askForSecret,
+          askForTokensPrice,
           createAnchor,
           getChannels,
           getIdentity,
           getNetwork,
-          parsePrice,
         },
         cbk) =>
       {
@@ -286,9 +344,10 @@ module.exports = ({ask, lnd, logger, request}, cbk) => {
           expires_at: futureDate(daysAsMs(askForExpiration.days)),
           id: createAnchor.id,
           network: getNetwork.network,
+          price: !!askForFiatPrice ? usdAsPrice(askForFiatPrice) : undefined,
           public_key: getIdentity.public_key,
           secret: askForSecret.secret,
-          tokens: asNumber(parsePrice.tokens),
+          tokens: (!!askForTokensPrice ? askForTokensPrice : {}).tokens,
           uris: (getIdentity.uris || []),
         },
         cbk);
@@ -299,16 +358,14 @@ module.exports = ({ask, lnd, logger, request}, cbk) => {
         'askForDescription',
         'askForExpiration',
         'askForNodeId',
-        'askForPrice',
         'askForSecret',
-        'parsePrice',
+        'askForTokensPrice',
         ({
           askForDescription,
           askForExpiration,
           askForNodeId,
-          askForPrice,
           askForSecret,
-          parsePrice,
+          askForTokensPrice,
         },
         cbk) =>
       {
@@ -316,17 +373,14 @@ module.exports = ({ask, lnd, logger, request}, cbk) => {
         if (!askForNodeId.id) {
           return cbk();
         }
-        const expiry = !!askForExpiration.days ? futureDate(daysAsMs(askForExpiration.days)) : futureDate(defaultFiatInvoiceExpiryMs);
 
-        return finalizeTradeSecret({
+        return finalizeTrade({
           lnd,
-          logger,
-          request,
           description: askForDescription.description,
-          expires_at: expiry,
+          expires_at: futureDate(daysAsMs(askForExpiration.days)),
           secret: askForSecret.secret,
           to: askForNodeId.id,
-          tokens: asNumber(parsePrice.tokens),
+          tokens: asNumber(askForTokensPrice.tokens),
         },
         cbk);
       }],

@@ -5,11 +5,12 @@ const {requestAsRequestRecords} = require('./../records');
 
 const asTrade = hex => `626f73ff${hex}`;
 
-/** Encode a trade
+/** Encode a trade for a regular payment
+
+  [1]: <Network Name>
+  2: <Payment Request Record>
 
   {
-    auth: <Encrypted Payload Auth Hex String>
-    payload: <Preimage Encrypted Payload Hex String>
     request: <BOLT 11 Payment Request String>
   }
 
@@ -18,8 +19,8 @@ const asTrade = hex => `626f73ff${hex}`;
     trade: <Hex Encoded Trade String>
   }
 */
-module.exports = ({auth, payload, request}, cbk) => {
-  // Encode the trade record
+module.exports = ({request}, cbk) => {
+  // Encode the request into a trade record
   const tradeRecords = [{
     type: '2',
     value: requestAsRequestRecords({request}).encoded,
@@ -32,19 +33,6 @@ module.exports = ({auth, payload, request}, cbk) => {
       value: networkRecordFromRequest({request}).value,
     });
   }
-
-  // Encode the encrypted data
-  const encryptionRecords = encodeTlvStream({
-    records: [{type: '0', value: payload}, {type: '1', value: auth}],
-  });
-
-  // Encode the encrypted elements of the trade
-  const detailsRecords = encodeTlvStream({
-    records: [{type: '0', value: encryptionRecords.encoded}],
-  });
-
-  // Add the trade details to the trade
-  tradeRecords.push({type: '3', value: detailsRecords.encoded});
 
   return {trade: asTrade(encodeTlvStream({records: tradeRecords}).encoded)};
 };

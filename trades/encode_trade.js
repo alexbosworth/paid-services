@@ -44,7 +44,7 @@ module.exports = ({connect, secret}) => {
   }
 
   if (!!connect && !!secret) {
-    throw new Error('ExpectedEitherConnectDetailsOrTradeSecretNotBoth');
+    throw new Error('ExpectedOnlyOneConnectDetailsOrTradeSecretNotBoth');
   }
 
   // Exit early when this is an open ended trade

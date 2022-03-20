@@ -6,7 +6,7 @@ const {getInvoice} = require('ln-service');
 const {subscribeToInvoice} = require('ln-service');
 
 const acceptTrade = require('./accept_trade');
-const finalizeTradeSecret = require('./finalize_trade_secret');
+const finalizeTrade = require('./finalize_trade');
 const {makePeerRequest} = require('./../p2p');
 const {servicePeerRequests} = require('./../p2p');
 const {serviceTypeReceiveChannelSale} = require('./../service_types');
@@ -14,17 +14,15 @@ const {serviceTypeRequestChannelSale} = require('./../service_types');
 const {serviceTypeRequestTrades} = require('./../service_types');
 const {serviceTypeReceiveTrades} = require('./../service_types');
 
+const chanDescription = capacity => `${(capacity / 1e8).toFixed(8)} channel`;
 const descRecord = description => ({type: '2', value: description});
-const events = ['details', 'end', 'failure', 'settled', 'trade'];
+const events = 'details end failure opening_channel settled trade'.split(' ');
 const findIdRecord = records => records.find(n => n.type === '0');
 const findRequestIdRecord = records => records.find(n => n.type === '1');
 const hashHexLength = 64;
 const idBackType = '0';
 const idRecord = id => ({type: '1', value: id});
-const msRemainingToTime = time => time - Date.now();
 const postOpenTradeTimeoutMs = 1000 * 30;
-const priceRecord = price => ({type: '3', value: price});
-const sellAction = 'sell';
 const sumOf = arr => arr.reduce((sum, n) => sum + n, 0);
 const tradeSecretType = '1';
 const utf8AsHex = utf8 => Buffer.from(utf8).toString('hex');
@@ -33,17 +31,19 @@ const utf8AsHex = utf8 => Buffer.from(utf8).toString('hex');
 
   The maximum expiration date is three weeks
 
+  Either a channel or secret to sell is required
+  Either a direct price in tokens or a price expression is required
+
   {
-    action: <Trade Action String>
-    description: <Trade Description String>
+    [channel]: <Sell Channel With Capacity Tokens Number>
+    [description]: <Trade Description String>
     expires_at: <Trade Expires At ISO 8601 Date String>
     id: <Trade Id Hex String>
     lnd: <Authenticated LND API Object>
-    logger: <Winston Logger Object>
-    price: <Trade Price String>
+    [price]: <Trade Price String>
     request: <Request Function>
-    secret: <Secret Payload String>
-    tokens: <Trade Price Tokens Number>
+    [secret]: <Secret Payload String>
+    [tokens]: <Trade Price Tokens Number>
   }
 
   // Return details
@@ -58,6 +58,14 @@ const utf8AsHex = utf8 => Buffer.from(utf8).toString('hex');
   // Encountered a failure
   @event 'failure'
   [<Failure Code Number>, <Failure Code String>]
+
+  // Traded a channel open
+  @event 'opening_channel'
+  {
+    fee_tokens_per_vbyte: <Chain Fee Rate Number>
+    transaction_id: <Channel Funding Transaction Id Hex String>
+    transaction_vout: <Channel Funding Transaction Output Index Number>
+  }
 
   // Received payment
   @event 'settled'
@@ -75,7 +83,11 @@ const utf8AsHex = utf8 => Buffer.from(utf8).toString('hex');
   <Service Event Emitter Object>
 */
 module.exports = args => {
-  if (!args.description) {
+  if (!args.channel && !args.secret) {
+    throw new Error('ExpectedChannelOrSecretToEncryptToServiceTradeRequests');
+  }
+
+  if (!args.channel && !args.description) {
     throw new Error('ExpectedTradeDescriptionToServiceTradeRequests');
   }
 
@@ -91,24 +103,15 @@ module.exports = args => {
     throw new Error('ExpectedAuthenticatedLndToServiceTradeRequests');
   }
 
-  if (!args.logger) {
-    throw new Error('ExpectedWinstonLoggerObjectToServiceTradeRequests');
+  if (!args.price && !args.tokens) {
+    throw new Error('ExpectedTokensOrPriceForTradeToServiceTradeRequests');
   }
 
   if (!args.request) {
     throw new Error('ExpectedRequestFunctionToServiceTradeRequests');
   }
 
-  if (!args.secret) {
-    throw new Error('ExpectedSecretToEncryptToServiceTradeRequests');
-  }
-
-  if (!args.tokens) {
-    throw new Error('ExpectedTokensPriceForTradeToServiceTradeRequests');
-  }
-
   const emitter = new EventEmitter();
-
   const holds = [];
   const service = servicePeerRequests({lnd: args.lnd});
 
@@ -140,10 +143,10 @@ module.exports = args => {
   // Basic trade description
   const basicTradeRecords = [
     idRecord(args.id),
-    descRecord(utf8AsHex(args.description)),
+    descRecord(utf8AsHex(args.description || chanDescription(args.channel))),
   ];
 
-  const requestType = !!args.action ?
+  const requestType = !!args.channel ?
     serviceTypeRequestChannelSale :
     serviceTypeRequestTrades;
 
@@ -184,7 +187,7 @@ module.exports = args => {
           return;
         }
 
-        const receiveType = args.action === sellAction ?
+        const receiveType = !!args.channel ?
           serviceTypeReceiveChannelSale :
           serviceTypeReceiveTrades;
 
@@ -215,14 +218,14 @@ module.exports = args => {
     emitter.emit('trade', ({to: req.from}));
 
     // Create a trade secret for the requesting peer and return that
-    return finalizeTradeSecret({
-      action: args.action,
+    return finalizeTrade({
+      channel: args.channel,
       description: args.description,
       expires_at: args.expires_at,
       id: args.id,
       is_hold: true,
       lnd: args.lnd,
-      logger: args.logger,
+      price: args.price,
       request: args.request,
       secret: args.secret,
       to: req.from,
@@ -232,7 +235,7 @@ module.exports = args => {
       if (!!err) {
         emitter.emit('failure', err);
 
-        return failure([503, 'FailedToFinalizeTradeSecret']);
+        return failure([503, 'FailedToFinalizeTrade']);
       }
 
       // Create a record for the encoded trade
@@ -259,36 +262,40 @@ module.exports = args => {
 
         // Settle the held invoice with the preimage
         return acceptTrade({
-          action: args.action,
-          capacity: args.capacity,
           cancel: holds.filter(n => n.id !== updated.id).map(n => n.id),
+          channel: args.channel,
+          from: req.from,
           id: args.id,
           lnd: args.lnd,
-          logger: args.logger,
-          partner_public_key: req.from,
           secret: res.secret,
         },
-        err => {
+        (err, res) => {
           if (!!err) {
             return emitter.emit('failure', err);
           }
 
           emitter.emit('settled', {to: req.from});
 
+          if (!!res.opening_channel) {
+            emitter.emit('opening_channel', res.opening_channel);
+          }
+
           return emitter.emit('end', {});
         });
       });
 
-      // Exit early on channel sale, confirming acceptance
-      if (args.action === sellAction) {
+      // Exit early on channel sale, make sure a channel can be opened first
+      if (!!args.channel) {
         return acceptsChannelOpen({
-          capacity: args.capacity,
+          capacity: args.channel,
           lnd: args.lnd,
           partner_public_key: req.from,
         },
         err => {
           if (!!err) {
-            return failure([503, 'FailedToAcceptChannelOpen', {err}]);
+            emitter.emit('failure', [503, 'FailedOpenAttempt', {err}]);
+
+            return failure([503, 'CannotOpenChannel']);
           }
 
           // Return details about the trade

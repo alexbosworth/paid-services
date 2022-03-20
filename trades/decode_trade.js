@@ -2,9 +2,11 @@ const {decodeBigSize} = require('bolt01');
 const {decodeTlvStream} = require('bolt01');
 
 const decodeOpenTrade = require('./decode_open_trade');
+const decodeTradePayment = require('./decode_trade_payment');
 const decodeTradeSecret = require('./decode_trade_secret');
 const networkFromNetworkRecord = require('./network_from_network_record');
 
+const findDetailsRecord = records => records.find(n => n.type === '3');
 const findNetwork = records => records.find(n => n.type === '1');
 const findVer = records => records.find(n => n.type === '0') || {value: '00'};
 const findRequestRecord = records => records.find(n => n.type === '2');
@@ -38,6 +40,9 @@ const tradeData = trade => trade.slice('626f73ff'.length);
           sockets: [<Peer Socket String>]
         }
       }]
+    }
+    [payment]: {
+      request: <BOLT 11 Payment Request String>
     }
     [secret]: {
       auth: <Encrypted Payload Auth Hex String>
@@ -81,10 +86,17 @@ module.exports = ({trade}) => {
   // Decode the network record
   const {network} = networkFromNetworkRecord({value: networkRecord.value});
 
-  // A trade is either a trade secret to someone or an open trade offer
-  if (!!findRequestRecord(records)) {
+  const requestRecord = findRequestRecord(records);
+
+  // Exit early when this is a secret to trade
+  if (!!requestRecord && !!findDetailsRecord(records)) {
     return {secret: decodeTradeSecret({network, records})};
-  } else {
-    return {connect: decodeOpenTrade({network, records})};
   }
+
+  // Exit early when this is just a payment request
+  if (!!requestRecord) {
+    return {payment: decodeTradePayment({network, records})};
+  }
+
+  return {connect: decodeOpenTrade({network, records})};
 };

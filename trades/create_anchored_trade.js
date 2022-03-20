@@ -4,18 +4,23 @@ const {returnResult} = require('asyncjs-util');
 
 const encodeAnchoredTrade = require('./encode_anchored_trade');
 
-const maxDescriptionLength = 100;
+const maxDescLength = 100;
 const maxSecretLength = 100;
 
 /** Create an anchored trade
 
+  Either a channel or description and secret is required
+
+  Either a price or tokens is required
+
   {
-    description: <Trade Description String>
+    [channel]: <Channel Sale Capacity Tokens Number>
+    [description]: <Trade Description String>
     expires_at: <Trade Expires at ISO 8601 Date String>
     lnd: <Authenticated LND API Object>
-    price: <Trade Price String>
-    secret: <Trade Secret String>
-    tokens: <Trade Price Tokens Number>
+    [price]: <Trade Price String>
+    [secret]: <Trade Secret String>
+    [tokens]: <Trade Price Tokens Number>
   }
 
   @returns via cbk or Promise
@@ -28,11 +33,15 @@ module.exports = (args, cbk) => {
     return asyncAuto({
       // Check arguments
       validate: cbk => {
-        if (args.description === undefined) {
+        if (!args.channel && !args.description) {
           return cbk([400, 'ExpectedTradeDescriptionToCreateAnchoredTrade']);
         }
 
-        if (args.description.length > maxDescriptionLength) {
+        if (!args.channel && !args.secret) {
+          return cbk([400, 'ExpectedEitherChannelOrSecretToTrade']);
+        }
+
+        if (!!args.description && args.description.length > maxDescLength) {
           return cbk([400, 'ExpectedShorterTradeDescriptionToCreateTrade']);
         }
 
@@ -48,20 +57,12 @@ module.exports = (args, cbk) => {
           return cbk([400, 'ExpectedAuthenticatedLndToCreateAnchoredTrade']);
         }
 
-        if (!args.price) {
-          return cbk([400, 'ExpectedTradePriceToCreateAnchoredTrade']);
-        }
-
-        if (!args.secret) {
-          return cbk([400, 'ExpectedTradeSecretToCreateAnchoredTrade']);
-        }
-
-        if (args.secret.length > maxSecretLength) {
-          return cbk([400, 'ExpectedShorterTradeSecretToCreateAnchoredTrade']);
-        }
-
-        if (!args.tokens) {
+        if (!args.price && !args.tokens) {
           return cbk([400, 'ExpectedTokensPriceToCreateAnchoredTrade']);
+        }
+
+        if (!!args.secret && args.secret.length > maxSecretLength) {
+          return cbk([400, 'ExpectedShorterTradeSecretToCreateAnchoredTrade']);
         }
 
         return cbk();
@@ -70,11 +71,13 @@ module.exports = (args, cbk) => {
       // Create the trade
       create: ['validate', ({}, cbk) => {
         const {encoded} = encodeAnchoredTrade({
+          channel: args.channel,
           description: args.description,
           price: args.price,
           secret: args.secret,
         });
 
+        // The anchor invoice description will contain the trade details
         return createInvoice({
           description: encoded,
           expires_at: args.expires_at,
