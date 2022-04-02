@@ -1,15 +1,18 @@
-const addPeer = require('ln-service');
+const {addPeer} = require('ln-service');
 const asyncAuto = require('async/auto');
 const asyncDetect = require('async/detect');
 const asyncDetectSeries = require('async/detectSeries');
 const asyncMap = require('async/map');
+const asyncRetry = require('async/retry');
 const {getChannel} = require('ln-service');
 const {getIdentity} = require('ln-service');
 const {getNode} = require('ln-service');
 const {getPeers} = require('ln-service');
 const {returnResult} = require('asyncjs-util');
 
+const interval = 1000;
 const {isArray} = Array;
+const times = 10;
 const uniq = arr => Array.from(new Set(arr));
 
 /** Connect to a seller
@@ -164,6 +167,30 @@ module.exports = ({lnd, logger, nodes}, cbk) => {
 
             // The node is connected if one of the sockets worked
             return cbk(null, !!socket);
+          });
+        },
+        cbk);
+      }],
+
+      // Confirm the connection
+      confirmConnected: ['connect', ({connect}, cbk) => {
+        return asyncRetry({interval, times}, cbk => {
+          return getPeers({lnd}, (err, res) => {
+            if (!!err) {
+              return cbk(err);
+            }
+
+            const peer = res.peers.find(n => n.public_key === connect.id);
+
+            if (!peer) {
+              return cbk([503, 'FailedToConnectToPeer']);
+            }
+
+            if (!peer.bytes_received) {
+              return cbk([503, 'FailedToFinalizeConnectionWithPeer']);
+            }
+
+            return cbk();
           });
         },
         cbk);

@@ -1,4 +1,5 @@
 const {test} = require('@alexbosworth/tap');
+const tinysecp = require('tiny-secp256k1');
 
 const method = require('./../../capacity/interim_replacement_psbt');
 
@@ -31,6 +32,8 @@ const tests = [
 
 tests.forEach(({args, description, error, expected}) => {
   return test(description, async ({end, strictSame, throws}) => {
+    args.ecp = (await import('ecpair')).ECPairFactory(tinysecp);
+
     if (!!error) {
       throws(() => method(args), new Error(error), 'Got error');
     } else {

@@ -1,5 +1,9 @@
 # Versions
 
+## Version 3.14.5
+
+- `manageTrades`: Fix connecting to sellers when not already connected
+
 ## Version 3.14.4
 
 - `manageTrades`: Fix listing of trades that have fiat-pricing
