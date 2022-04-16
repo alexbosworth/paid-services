@@ -1,5 +1,9 @@
 # Versions
 
+## Version 3.15.0
+
+- `manageSwap`: Add method to execute submarine swaps on testnet
+
 ## Version 3.14.5
 
 - `manageTrades`: Fix connecting to sellers when not already connected
