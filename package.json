@@ -7,21 +7,24 @@
     "url": "https://github.com/alexbosworth/paid-services/issues"
   },
   "dependencies": {
-    "@alexbosworth/fiat": "1.0.1",
+    "@alexbosworth/fiat": "1.0.2",
     "async": "3.2.3",
-    "asyncjs-util": "1.2.8",
-    "bolt01": "1.2.3",
-    "bolt07": "1.8.0",
+    "asyncjs-util": "1.2.9",
+    "bolt01": "1.2.4",
+    "bolt07": "1.8.1",
     "ecpair": "2.0.1",
-    "invoices": "2.0.4",
-    "ln-service": "53.9.4",
-    "ln-sync": "3.11.0",
+    "goldengate": "11.2.1",
+    "invoices": "2.0.6",
+    "ln-service": "53.11.0",
+    "ln-sync": "3.12.0",
+    "psbt": "2.0.1",
+    "p2tr": "1.3.1",
     "tiny-secp256k1": "2.2.1"
   },
   "description": "Lightning Paid Services library",
   "devDependencies": {
     "@alexbosworth/tap": "15.0.11",
-    "ln-docker-daemons": "2.2.5",
+    "ln-docker-daemons": "2.2.7",
     "mock-lnd": "1.4.1",
     "secp256k1": "4.0.3"
   },

@@ -9,6 +9,7 @@ const {getServiceSchema} = require('./client');
 const {getServicesList} = require('./client');
 const {makePeerRequest} = require('./p2p');
 const {makeServiceRequest} = require('./client');
+const {manageSwap} = require('./swaps');
 const {manageTrades} = require('./trades');
 const {schema} = require('./services');
 const {serviceAnchoredTrades} = require('./trades');
@@ -29,6 +30,7 @@ module.exports = {
   getServicesList,
   makePeerRequest,
   makeServiceRequest,
+  manageSwap,
   manageTrades,
   serviceAnchoredTrades,
   serviceIds,

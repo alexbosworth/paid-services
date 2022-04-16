@@ -1,0 +1,27 @@
+{
+  "privateTypes": {
+    "typeAuthTag": "1",
+    "typeCipher": "2",
+    "typeCoopPrivateKey": "3",
+    "typeKeyIndex": "4",
+    "typeSecret": "5",
+    "typeSoloPrivateKey": "6"
+  },
+  "publicTypes": {
+    "typeClaimCoopPublicKeyHash": "1",
+    "typeClaimSoloPublicKey": "2",
+    "typeDeposit": "3",
+    "typeHash": "4",
+    "typePrivateClaimDetails": "5",
+    "typePrivateRefundDetails": "6",
+    "typePush": "7",
+    "typeRefundCoopPrivateKeyHash": "8",
+    "typeRefundCoopPublicKey": "9",
+    "typeRefundSoloPublicKey": "10",
+    "typeRequest": "11",
+    "typeTimeout": "12",
+    "typeTokens": "13",
+    "typeVersion": "0"
+  },
+  "typePayMetadata": "805001"
+}
