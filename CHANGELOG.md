@@ -1,6 +1,6 @@
 # Versions
 
-## Version 3.15.0
+## Version 3.15.1
 
 - `manageSwap`: Add method to execute submarine swaps on testnet
 

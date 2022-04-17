@@ -718,7 +718,7 @@ module.exports = (args, cbk) => {
           return cbk();
         }
 
-        args.emitter.emit('update', {receiving_funds: findSecret.secret});
+        args.emitter.emit('update', {receiving_funds: getSettlement.tokens});
 
         return settleHodlInvoice({
           lnd: args.lnd,

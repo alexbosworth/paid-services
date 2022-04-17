@@ -5,6 +5,7 @@ const asyncAuto = require('async/auto');
 const asyncMap = require('async/map');
 const asyncRace = require('async/race');
 const asyncReflect = require('async/reflect');
+const {bech32m} = require('bech32');
 const {broadcastChainTransaction} = require('ln-service');
 const {confirmationFee} = require('goldengate');
 const {controlBlock} = require('p2tr');
@@ -19,12 +20,14 @@ const {getNetwork} = require('ln-sync');
 const {getPayment} = require('ln-service');
 const {getPublicKey} = require('ln-service');
 const {hashForTree} = require('p2tr');
+const {networks} = require('bitcoinjs-lib');
 const {parsePaymentRequest} = require('ln-service');
 const {pay} = require('ln-service');
 const {payViaPaymentDetails} = require('ln-service');
 const {pointAdd} = require('tiny-secp256k1');
 const {privateAdd} = require('tiny-secp256k1');
 const {returnResult} = require('asyncjs-util');
+const {script} = require('bitcoinjs-lib');
 const {signTransaction} = require('ln-service');
 const {subscribeToBlocks} = require('ln-service');
 const {subscribeToPastPayment} = require('ln-service');
@@ -42,12 +45,14 @@ const {typePayMetadata} = require('./swap_field_types');
 
 const bufferAsHex = buffer => buffer.toString('hex');
 const {ceil} = Math;
+const decompileOutputScript = hex => script.decompile(Buffer.from(hex, 'hex'));
 const defaultConfsCount = 1;
 const defaultDepositSettleTimeoutMs = 1000 * 60 * 10;
 const defaultMaxFeeMultiplier = 1000;
 const defaultMaxPreimagePushFee = 10;
 const defaultMinSweepBlocks = 20;
 const defaultWaitForChainFundingMs = 1000 * 60 * 60 * 3;
+const encodeAddress = (prefix, data) => bech32m.encode(prefix, data);
 const family = 805;
 const {floor} = Math;
 const {from} = Buffer;
@@ -69,6 +74,7 @@ const sweepInputIndex = 0;
 const times = n => Array(n).fill(null).map((_, i) => i);
 const tokensForPushPreimage = 1;
 const uniqBy = (a,b) => a.filter((e,i) => a.findIndex(n => n[b] == e[b]) == i);
+const v1AddressWords = key => [].concat(1).concat(bech32m.toWords(key));
 
 /** Complete the off to on swap
 
@@ -393,9 +399,13 @@ module.exports = (args, cbk) => {
         'swap',
         ({deadline, getNetwork, requestDetails, startHeight, swap}, cbk) =>
       {
+        const [, key] = decompileOutputScript(swap.output_script);
         const outputScript = swap.output_script;
+        const prefix = networks[getNetwork.bitcoinjs].bech32;
 
-        args.emitter.emit('update', {waiting_for_chain_funding: outputScript});
+        const address = encodeAddress(prefix, v1AddressWords(key));
+
+        args.emitter.emit('update', {waiting_for_chain_funding: address});
 
         if (!!args.request) {
           return findDeposit({
