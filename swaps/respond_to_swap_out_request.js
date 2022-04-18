@@ -23,7 +23,7 @@ const rateDenominator = 1e6;
     ask: <Ask Function>
     lnd: <Authenticated LND API Object>
     logger: <Winston Logger Object>
-    request: <Request Function>
+    [request]: <Request Function>
   }
 
   @returns via cbk or Promise
@@ -43,10 +43,6 @@ module.exports = ({ask, lnd, logger, request}, cbk) => {
 
         if (!logger) {
           return cbk([400, 'ExpectedLoggerToRespondToSwapOutRequest']);
-        }
-
-        if (!request) {
-          return cbk([400, 'ExpectedRequestFunctionToRespondToSwapOutReq']);
         }
 
         return cbk();
