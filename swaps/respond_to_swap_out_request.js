@@ -111,7 +111,7 @@ module.exports = ({ask, lnd, logger, request}, cbk) => {
           lnd,
           delta: defaultCltvDelta,
           deposit: ceil(getRate.tokens_per_vbyte * estimatedVirtualSize),
-          is_external_solo_key: true,
+          is_external_solo_key: !!request,
           price: floor(tokens * askForRate / rateDenominator),
           request: askForRequest,
         },

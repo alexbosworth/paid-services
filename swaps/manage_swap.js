@@ -1,5 +1,6 @@
 const asyncAuto = require('async/auto');
-const {getNetwork} = require('ln-sync')
+const {getMasterPublicKeys} = require('ln-service');
+const {getNetwork} = require('ln-sync');
 const {returnResult} = require('asyncjs-util');
 
 const recoverResponseToSwapOut = require('./recover_response_to_swap_out');
@@ -7,6 +8,7 @@ const requestSwapOut = require('./request_swap_out');
 const respondToSwapOutRequest = require('./respond_to_swap_out_request');
 
 const allowedNetwork = 'btctestnet';
+const bip86Path = `m/86'/0'/0'`;
 const recoverRespondAction = 'recover-response';
 const requestAction = 'request';
 const respondAction = 'respond';
@@ -46,13 +48,25 @@ module.exports = ({ask, lnd, logger, request}, cbk) => {
         return cbk();
       },
 
+      // Look for a p2tr master public key to detect p2tr support
+      getMasterPublicKeys: ['validate', ({}, cbk) => {
+        return getMasterPublicKeys({lnd}, cbk);
+      }],
+
       // Get the network to make sure this is on testnet
       getNetwork: ['validate', ({}, cbk) => getNetwork({lnd}, cbk)],
 
+      // Determine if taproot is supported or not
+      hasTr: ['getMasterPublicKeys', ({getMasterPublicKeys}, cbk) => {
+        const {keys} = getMasterPublicKeys;
+
+        return cbk(null, !!keys.find(n => n.derivation_path === bip86Path));
+      }],
+
       // Select a swap action
-      selectAction: ['getNetwork', ({getNetwork}, cbk) => {
+      selectAction: ['getNetwork', 'hasTr', ({getNetwork, hasTr}, cbk) => {
         // Check to make sure the network is supported
-        if (getNetwork.network !== allowedNetwork) {
+        if (!hasTr && getNetwork.network !== allowedNetwork) {
           return cbk([501, 'CurrentlyUnsupportedChainForSwap']);
         }
 
@@ -79,30 +93,52 @@ module.exports = ({ask, lnd, logger, request}, cbk) => {
       }],
 
       // Make swap request
-      makeRequest: ['selectAction', ({selectAction}, cbk) => {
+      makeRequest: ['hasTr', 'selectAction', ({hasTr, selectAction}, cbk) => {
         if (selectAction !== requestAction) {
           return cbk();
         }
 
-        return requestSwapOut({ask, lnd, logger, request}, cbk);
+        return requestSwapOut({
+          ask,
+          lnd,
+          logger,
+          request: !hasTr ? request : undefined,
+        },
+        cbk);
       }],
 
       // Respond to swap request
-      makeResponse: ['selectAction', ({selectAction}, cbk) => {
+      makeResponse: ['hasTr', 'selectAction', ({hasTr, selectAction}, cbk) => {
         if (selectAction !== respondAction) {
           return cbk();
         }
 
-        return respondToSwapOutRequest({ask, lnd, logger, request}, cbk);
+        return respondToSwapOutRequest({
+          ask,
+          lnd,
+          logger,
+          request: !hasTr ? request : undefined,
+        },
+        cbk);
       }],
 
       // Recover responding to swap request
-      recoverResponse: ['selectAction', ({selectAction}, cbk) => {
+      recoverResponse: [
+        'hasTr',
+        'selectAction',
+        ({hasTr, selectAction}, cbk) =>
+      {
         if (selectAction !== recoverRespondAction) {
           return cbk();
         }
 
-        return recoverResponseToSwapOut({ask, lnd, logger, request}, cbk);
+        return recoverResponseToSwapOut({
+          ask,
+          lnd,
+          logger,
+          request: !hasTr ? request : undefined,
+        },
+        cbk);
       }],
 
       // Final result

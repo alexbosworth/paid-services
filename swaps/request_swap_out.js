@@ -22,27 +22,29 @@ const rateDenominator = 1e6;
 
   {
     ask: <Ask Function>
+    [is_avoiding_broadcast]: <Avoid Broadcasting Bool>
+    [is_uncooperative]: <Avoid Cooperative Resolution Bool>
     lnd: <Authenticated LND API Object>
     logger: <Winston Logger Object>
-    request: <Request Function>
+    [request]: <Request Function>
   }
 
   @returns via cbk or Promise
 */
-module.exports = ({ask, lnd, logger, request}, cbk) => {
+module.exports = (args, cbk) => {
   return new Promise((resolve, reject) => {
     return asyncAuto({
       // Check arguments
       validate: cbk => {
-        if (!ask) {
+        if (!args.ask) {
           return cbk([400, 'ExpectedAskFunctionToRequestSwapOut']);
         }
 
-        if (!lnd) {
+        if (!args.lnd) {
           return cbk([400, 'ExpectedAuthenticatedLndToRequestSwapOut']);
         }
 
-        if (!logger) {
+        if (!args.logger) {
           return cbk([400, 'ExpectedWinstonLoggerToRequestSwapOut']);
         }
 
@@ -51,7 +53,7 @@ module.exports = ({ask, lnd, logger, request}, cbk) => {
 
       // Ask for amount
       askForTokens: ['validate', ({}, cbk) => {
-        return ask({
+        return args.ask({
           default: defaultSwapAmount,
           message: 'Amount to swap?',
           name: 'tokens',
@@ -71,11 +73,11 @@ module.exports = ({ask, lnd, logger, request}, cbk) => {
       }],
 
       // Get the network name
-      getNetwork: ['validate', ({}, cbk) => getNetwork({lnd}, cbk)],
+      getNetwork: ['validate', ({}, cbk) => getNetwork({lnd: args.lnd}, cbk)],
 
       // Ask for routing fee rate
       askForRate: ['askForTokens', ({}, cbk) => {
-        return ask({
+        return args.ask({
           default: defaultFeeRate,
           message: 'Max routing fee rate for swap funds in parts per million?',
           name: 'rate',
@@ -97,8 +99,8 @@ module.exports = ({ask, lnd, logger, request}, cbk) => {
       // Make a swap request
       makeRequest: ['askForTokens', ({askForTokens}, cbk) => {
         return makeRequest({
-          lnd,
-          is_external_solo_key: true,
+          is_external_solo_key: !!args.request,
+          lnd: args.lnd,
           tokens: askForTokens,
         },
         cbk);
@@ -111,9 +113,9 @@ module.exports = ({ask, lnd, logger, request}, cbk) => {
         'makeRequest',
         ({getNetwork, makeRequest}, cbk) =>
       {
-        logger.info({swap_request: makeRequest.request});
+        args.logger.info({swap_request: makeRequest.request});
 
-        return ask({
+        return args.ask({
           message: 'Response to swap request?',
           name: 'response',
           validate: response => {
@@ -152,7 +154,7 @@ module.exports = ({ask, lnd, logger, request}, cbk) => {
         const fee = tokens - askForTokens;
         const pricing = `Execution cost ${deposit}, plus liquidity fee ${fee}`;
 
-        return ask({
+        return args.ask({
           default: true,
           message: `Start swap ${timeout}? ${pricing}?`,
           name: 'ok',
@@ -176,15 +178,17 @@ module.exports = ({ask, lnd, logger, request}, cbk) => {
 
         const emitter = new EventEmitter();
 
-        emitter.on('update', update => logger.info(update));
+        emitter.on('update', update => args.logger.info(update));
 
         return completeOffToOnSwap({
           emitter,
-          lnd,
-          request,
+          is_avoiding_broadcast: args.is_avoiding_broadcast,
+          is_uncooperative: args.is_uncooperative,
+          lnd: args.lnd,
           max_fee_deposit: defaultMaxFeeForDeposit,
           max_fee_funding: askForTokens * askForRate / rateDenominator,
           recovery: makeRequest.recovery,
+          request: args.request,
           response: getResponse,
         },
         cbk);

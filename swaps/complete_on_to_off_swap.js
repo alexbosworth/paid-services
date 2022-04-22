@@ -418,8 +418,7 @@ module.exports = (args, cbk) => {
             });
 
             return cbk(null, tx.toHex());
-          },
-          cbk);
+          });
         },
         cbk);
       }],
@@ -681,7 +680,7 @@ module.exports = (args, cbk) => {
             transaction,
             lnd: args.lnd,
           },
-          err => {});
+          () => {});
         });
 
         subTimeout.on('error', err => done(err));

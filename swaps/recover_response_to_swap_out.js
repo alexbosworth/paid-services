@@ -11,7 +11,7 @@ const completeOnToOffSwap = require('./complete_on_to_off_swap');
     ask: <Ask Function>
     lnd: <Authenticated LND API Object>
     logger: <Winston Logger Object>
-    request: <Request Function>
+    [request]: <Request Function>
   }
 
   @returns via cbk or Promise
@@ -31,10 +31,6 @@ module.exports = ({ask, lnd, logger, request}, cbk) => {
 
         if (!logger) {
           return cbk([400, 'ExpectedWinstonLoggerToRecoverResponseToSwapOut']);
-        }
-
-        if (!request) {
-          return cbk([400, 'ExpectedRequestFunctionToRecoverResponseToSwap']);
         }
 
         return cbk();

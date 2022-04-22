@@ -22,8 +22,8 @@ const taprootDerivationPath = `m/86'/0'/0'`;
 const times = 3000;
 const tokens = 1e5;
 
-// Start an offchain swap
-test(`Start offchain swap`, async ({end, equal, strictSame}) => {
+// Start an offchain swap but do not cooperate and eventually force a refund
+test(`Timeout a swap`, async ({end, equal, strictSame}) => {
   const {kill, nodes} = await spawnLightningCluster({size});
 
   const [{generate, id, lnd}, target] = nodes;
@@ -97,32 +97,43 @@ test(`Start offchain swap`, async ({end, equal, strictSame}) => {
         const swapRequest = messages.find(n => !!n.swap_request);
 
         if (args.name === 'response') {
-          return await respondToSwapOut({
-            ask: (args, cbk) => {
-              if (args.name === 'rate') {
-                return cbk({rate: '100'});
-              }
-
-              if (args.name === 'req') {
-                return cbk({req: swapRequest.swap_request});
-              }
-
-              throw new Error('UnrecognizedQueryForResponse');
-            },
-            lnd: target.lnd,
-            logger: {
-              info: async message => {
-                if (!!message.response) {
-                  return cbk({response: message.response});
+          try {
+            return await respondToSwapOut({
+              ask: (args, cbk) => {
+                if (args.name === 'rate') {
+                  return cbk({rate: '100'});
                 }
 
-                // Transaction is funded, generate funding into a block
-                if (!!message.funding_transaction_id) {
-                  return await target.generate({count});
+                if (args.name === 'req') {
+                  return cbk({req: swapRequest.swap_request});
                 }
+
+                throw new Error('UnrecognizedQueryForResponse');
               },
-            },
-          });
+              lnd: target.lnd,
+              logger: {
+                info: async message => {
+                  // Push chain forward to timeout
+                  if (!!message.blocks_until_timeout) {
+                    return await target.generate({});
+                  }
+
+                  if (!!message.response) {
+                    return cbk({response: message.response});
+                  }
+
+                  // Transaction is funded, generate funding into a block
+                  if (!!message.funding_transaction_id) {
+                    return await target.generate({count});
+                  }
+                },
+              },
+            });
+          } catch (err) {
+            strictSame(err, [503, 'SwapFailedViaTimeout']);
+
+            return;
+          }
         }
 
         if (args.name === 'ok') {
@@ -131,6 +142,8 @@ test(`Start offchain swap`, async ({end, equal, strictSame}) => {
 
         throw new Error('UnrecognizedQueryForRequest');
       },
+      is_avoiding_broadcast: true,
+      is_uncooperative: true,
       logger: {
         info: async message => {
           if (message.broadcasting_tx_to_resolve_swap) {

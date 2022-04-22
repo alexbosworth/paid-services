@@ -22,8 +22,8 @@ const taprootDerivationPath = `m/86'/0'/0'`;
 const times = 3000;
 const tokens = 1e5;
 
-// Start an offchain swap
-test(`Start offchain swap`, async ({end, equal, strictSame}) => {
+// Start an offchain swap but use the claim path to sweep
+test(`Swap with claim path`, async ({end, equal, strictSame}) => {
   const {kill, nodes} = await spawnLightningCluster({size});
 
   const [{generate, id, lnd}, target] = nodes;
@@ -131,6 +131,7 @@ test(`Start offchain swap`, async ({end, equal, strictSame}) => {
 
         throw new Error('UnrecognizedQueryForRequest');
       },
+      is_uncooperative: true,
       logger: {
         info: async message => {
           if (message.broadcasting_tx_to_resolve_swap) {
