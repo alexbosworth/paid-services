@@ -140,6 +140,7 @@ test(`Start offchain swap`, async ({end, equal, strictSame}) => {
           return messages.push(message);
         },
       },
+      min_confirmations: 3,
     });
   } catch (err) {
     strictSame(err, null, 'Expected no failure');

@@ -26,6 +26,7 @@ const rateDenominator = 1e6;
     [is_uncooperative]: <Avoid Cooperative Resolution Bool>
     lnd: <Authenticated LND API Object>
     logger: <Winston Logger Object>
+    [min_confirmations]: <Minimum Confirmations to Wait Number>
     [request]: <Request Function>
   }
 
@@ -187,6 +188,7 @@ module.exports = (args, cbk) => {
           lnd: args.lnd,
           max_fee_deposit: defaultMaxFeeForDeposit,
           max_fee_funding: askForTokens * askForRate / rateDenominator,
+          min_confirmations: args.min_confirmations,
           recovery: makeRequest.recovery,
           request: args.request,
           response: getResponse,

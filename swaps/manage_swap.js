@@ -9,6 +9,7 @@ const respondToSwapOutRequest = require('./respond_to_swap_out_request');
 
 const allowedNetwork = 'btctestnet';
 const bip86Path = `m/86'/0'/0'`;
+const minConfirmations = {btc: 2, btcregtest: 3, btctestnet: 1};
 const recoverRespondAction = 'recover-response';
 const requestAction = 'request';
 const respondAction = 'respond';
@@ -102,6 +103,7 @@ module.exports = ({ask, lnd, logger, request}, cbk) => {
           ask,
           lnd,
           logger,
+          min_confirmations: minConfirmations[getNetwork.network],
           request: !hasTr ? request : undefined,
         },
         cbk);
