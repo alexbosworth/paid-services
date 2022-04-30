@@ -1,5 +1,9 @@
 # Versions
 
+## Version 3.16.0
+
+- `manageSwap`: Add external funding, conf target setting, keysend pushes
+
 ## Version 3.15.4
 
 - `manageSwap`: Add method to execute submarine swaps on testnet

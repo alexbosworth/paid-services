@@ -68,9 +68,9 @@ const witnessLengthTimeoutSweep = 3;
 /** Complete the on-chain side of the swap by taking the off-chain funds
 
   {
+    [confirmation_target]: <Funding Confirmation Target Number>
     emitter: <Event Emitter Object>
     [is_ignoring_deposit]: <Ignore Held Deposit Funds Bool>
-    [fund_fee_rate]: <Fund Chain Fee Rate Number>
     lnd: <Authenticated LND API Object>
     recovery: <Swap Recovery Hex String>
     [request]: <Request Function>
@@ -486,8 +486,8 @@ module.exports = (args, cbk) => {
 
         return fundPsbt({
           psbt,
-          fee_tokens_per_vbyte: args.fund_fee_rate,
           lnd: args.lnd,
+          target_confirmations: args.confirmation_target,
         },
         cbk);
       }],

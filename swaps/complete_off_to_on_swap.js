@@ -81,6 +81,7 @@ const v1AddressWords = key => [].concat(1).concat(bech32m.toWords(key));
   {
     emitter: <Event Emitter Object>
     [is_avoiding_broadcast]: <Avoid Sweep Broadcast Bool>
+    [is_external_funding]: <Externally Fund Swap Bool>
     [is_uncooperative]: <Avoid Cooperative Signing Bool>
     lnd: <Autenticated LND API Object>
     max_fee_deposit: <Max Routing Fee Tokens For Deposit Number>
@@ -235,6 +236,12 @@ module.exports = (args, cbk) => {
       // Pay the funding request that is locked to the swap hash
       payToFund: ['responseDetails', asyncReflect(({responseDetails}, cbk) => {
         const request = responseDetails.request;
+
+        if (!!args.is_external_funding) {
+          args.emitter.emit('update', {pay_to_fund_swap_offchain: request});
+
+          return cbk();
+        }
 
         args.emitter.emit('update', {funding_swap_offchain: request});
 
@@ -906,9 +913,9 @@ module.exports = (args, cbk) => {
 
         return cbk(null, {
           paid_execution_fee: deposit.tokens,
-          paid_execution_routing: deposit.fee,
+          paid_execution_routing: deposit.fee || undefined,
           swap_payment_sent: funding.tokens,
-          swap_payment_routing_fee: funding.fee,
+          swap_payment_routing_fee: funding.fee || undefined,
         });
       }],
     },

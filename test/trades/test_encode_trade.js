@@ -5,13 +5,8 @@ const method = require('./../../trades/encode_trade');
 const tests = [
   {
     args: {},
-    description: 'Either connect or secret is required',
-    error: 'ExpectedEitherConnectDetailsOrTradeSecret',
-  },
-  {
-    args: {connect: true, secret: true},
-    description: 'Cannot encode both connect and secret',
-    error: 'ExpectedOnlyOneConnectDetailsOrTradeSecretNotBoth',
+    description: 'Trade details are required',
+    error: 'ExpectedTradeDetailsToEncode',
   },
   {
     args: {

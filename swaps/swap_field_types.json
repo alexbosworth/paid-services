@@ -23,5 +23,9 @@
     "typeTokens": "13",
     "typeVersion": "0"
   },
+  "pushTypes": {
+    "typeSwapId": "0",
+    "typeSwapResponse": "1"
+  },
   "typePayMetadata": "805001"
 }

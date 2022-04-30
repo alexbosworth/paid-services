@@ -1,4 +1,5 @@
 const encodeOpenTrade = require('./encode_open_trade');
+const encodeSwapTrade = require('./encode_swap_trade');
 const encodeTradeSecret = require('./encode_trade_secret');
 
 /** Encode v1 trade records
@@ -12,6 +13,7 @@ const encodeTradeSecret = require('./encode_trade_secret');
   [3]: trade details
   [4]: nodes records
   [5]: trade identifier
+  [6]: swap request
 
   {
     [connect]: {
@@ -28,6 +30,10 @@ const encodeTradeSecret = require('./encode_trade_secret');
       payload: <Preimage Encrypted Payload Hex String>
       request: <BOLT 11 Payment Request String>
     }
+    [swap]: {
+      node: <Node Public Key Id Hex String>
+      request: <Swap Request Hex String>
+    }
   }
 
   @throws
@@ -38,16 +44,11 @@ const encodeTradeSecret = require('./encode_trade_secret');
     trade: <Hex Encoded Trade String>
   }
 */
-module.exports = ({connect, secret}) => {
-  if (!connect && !secret) {
-    throw new Error('ExpectedEitherConnectDetailsOrTradeSecret');
+module.exports = ({connect, secret, swap}) => {
+  if (!connect && !secret && !swap) {
+    throw new Error('ExpectedTradeDetailsToEncode');
   }
 
-  if (!!connect && !!secret) {
-    throw new Error('ExpectedOnlyOneConnectDetailsOrTradeSecretNotBoth');
-  }
-
-  // Exit early when this is an open ended trade
   if (!!connect) {
     return encodeOpenTrade({
       id: connect.id,
@@ -56,10 +57,17 @@ module.exports = ({connect, secret}) => {
     });
   }
 
-  // Encode the trade secret
-  return encodeTradeSecret({
-    auth: secret.auth,
-    payload: secret.payload,
-    request: secret.request,
-  });
+  if (!!secret) {
+    return encodeTradeSecret({
+      auth: secret.auth,
+      payload: secret.payload,
+      request: secret.request,
+    });
+  }
+
+  if (!!swap) {
+    return encodeSwapTrade({node: swap.node, request: swap.request});
+  }
+
+  throw new Error('ExpectedTradeTypeToEncode');
 };

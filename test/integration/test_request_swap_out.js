@@ -99,8 +99,8 @@ test(`Start offchain swap`, async ({end, equal, strictSame}) => {
         if (args.name === 'response') {
           return await respondToSwapOut({
             ask: (args, cbk) => {
-              if (args.name === 'rate') {
-                return cbk({rate: '100'});
+              if (args.default) {
+                return cbk({[args.name]: args.default});
               }
 
               if (args.name === 'req') {

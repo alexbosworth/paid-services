@@ -1,3 +1,4 @@
+const {createHash} = require('crypto');
 const EventEmitter = require('events');
 
 const asyncAuto = require('async/auto');
@@ -5,17 +6,30 @@ const {getChainFeeRate} = require('ln-service');
 const {returnResult} = require('asyncjs-util');
 
 const completeOnToOffSwap = require('./complete_on_to_off_swap');
+const {connectPeer} = require('ln-sync');
 const decodeOffToOnRequest = require('./decode_off_to_on_request');
+const {makePeerRequest} = require('./../p2p');
+const serviceTypes = require('./../service_types');
 const startOnToOffSwap = require('./start_on_to_off_swap');
 
+const bufferAsHex = buffer => buffer.toString('hex');
 const {ceil} = Math;
+const defaultConfirmationTarget = 6;
 const {floor} = Math;
 const defaultCltvDelta = 400;
-const defaultFeeRate = 5000;
+const defaultFeeRate = 2500;
 const estimatedVirtualSize = 300;
+const hexAsBuffer = hex => Buffer.from(hex, 'hex');
 const isNumber = n => !isNaN(n) && !isNaN(parseFloat(n));
+const maxTarget = 144;
 const minRate = 1;
+const minTarget = 2;
+const peerRequestTimeoutMs = 1000 * 60 * 3;
 const rateDenominator = 1e6;
+const sha256 = preimage => createHash('sha256').update(preimage).digest();
+const typeSwapId = '0';
+const typeSwapReply = '1';
+const typeSwapResponse = serviceTypes.serviceTypeSwapResponse;
 
 /** Respond to a swap out request
 
@@ -24,11 +38,13 @@ const rateDenominator = 1e6;
     lnd: <Authenticated LND API Object>
     logger: <Winston Logger Object>
     [request]: <Request Function>
+    [swap]: <Swap Hex String>
+    [to]: <Send Swap Response To Public Key Id Hex String>
   }
 
   @returns via cbk or Promise
 */
-module.exports = ({ask, lnd, logger, request}, cbk) => {
+module.exports = ({ask, lnd, logger, request, swap, to}, cbk) => {
   return new Promise((resolve, reject) => {
     return asyncAuto({
       // Check arguments
@@ -45,11 +61,24 @@ module.exports = ({ask, lnd, logger, request}, cbk) => {
           return cbk([400, 'ExpectedLoggerToRespondToSwapOutRequest']);
         }
 
+        if (!!swap) {
+          try {
+            decodeOffToOnRequest({request: swap});
+          } catch (err) {
+            return cbk([400, err.message]);
+          }
+        }
+
         return cbk();
       },
 
       // Ask for a request
       askForRequest: ['validate', ({}, cbk) => {
+        // Exit early when a swap request is defined
+        if (!!swap) {
+          return cbk(null, swap);
+        }
+
         return ask({
           message: 'Swap request?',
           name: 'req',
@@ -70,8 +99,14 @@ module.exports = ({ask, lnd, logger, request}, cbk) => {
         ({req}) => cbk(null, req));
       }],
 
-      // Get the chain fee rate
-      getRate: ['validate', ({}, cbk) => getChainFeeRate({lnd}, cbk)],
+      // Connect to the peer when a swap is pushed
+      connect: ['validate', ({}, cbk) => {
+        if (!to) {
+          return cbk();
+        }
+
+        return connectPeer({lnd, id: to}, cbk);
+      }],
 
       // Ask for pricing
       askForRate: ['askForRequest', ({askForRequest}, cbk) => {
@@ -98,6 +133,36 @@ module.exports = ({ask, lnd, logger, request}, cbk) => {
         ({rate}) => cbk(null, Number(rate)));
       }],
 
+      // Ask for chain fee target
+      askForTarget: ['askForRate', ({}, cbk) => {
+        return ask({
+          default: defaultConfirmationTarget,
+          message: 'Confirm on-chain funding within how many blocks?',
+          name: 'target',
+          validate: input => {
+            if (!isNumber(input)) {
+              return false;
+            }
+
+            if (Number(input) > maxTarget) {
+              return `A smaller number is required, maximum: ${maxTarget}`;
+            }
+
+            if (Number(input) < minTarget) {
+              return `A larger number is required, minimum: ${minTarget}`;
+            }
+
+            return true;
+          },
+        },
+        ({target}) => cbk(null, Number(target)));
+      }],
+
+      // Get the chain fee rate
+      getRate: ['askForTarget', ({askForTarget}, cbk) => {
+        return getChainFeeRate({lnd, confirmation_target: askForTarget}, cbk);
+      }],
+
       // Make a response
       makeResponse: [
         'askForRate',
@@ -119,10 +184,14 @@ module.exports = ({ask, lnd, logger, request}, cbk) => {
       }],
 
       // Complete the swap
-      completeSwap: ['makeResponse', ({makeResponse}, cbk) => {
+      completeSwap: [
+        'askForTarget',
+        'makeResponse',
+        ({askForTarget, makeResponse}, cbk) =>
+      {
         logger.info({
           recovery: makeResponse.recovery,
-          response: makeResponse.response,
+          response: !to ? makeResponse.response : undefined,
         });
 
         const emitter = new EventEmitter();
@@ -133,7 +202,28 @@ module.exports = ({ask, lnd, logger, request}, cbk) => {
           emitter,
           lnd,
           request,
+          confirmation_target: askForTarget,
           recovery: makeResponse.recovery,
+        },
+        cbk);
+      }],
+
+      // Send swap response over p2p so the peer can start the payment
+      sendResponse: ['connect', 'makeResponse', ({makeResponse}, cbk) => {
+        // Exit early when a swap response destination is not defined
+        if (!swap || !to) {
+          return cbk();
+        }
+
+        return makePeerRequest({
+          lnd,
+          to,
+          records: [
+            {type: typeSwapId, value: bufferAsHex(sha256(hexAsBuffer(swap)))},
+            {type: typeSwapReply, value: makeResponse.response},
+          ],
+          timeout: peerRequestTimeoutMs,
+          type: typeSwapResponse,
         },
         cbk);
       }],
