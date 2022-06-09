@@ -1,6 +1,6 @@
 # Versions
 
-## Version 3.16.0
+## Version 3.16.1
 
 - `manageSwap`: Add external funding, conf target setting, keysend pushes
 
