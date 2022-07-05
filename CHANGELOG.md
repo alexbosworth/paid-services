@@ -1,5 +1,9 @@
 # Versions
 
+## Version 3.17.0
+
+- `manageGroupJoin`: Add method to coordinate or join a channels group
+
 ## Version 3.16.3
 
 - `manageSwap`: Add external funding, conf target setting, keysend pushes
