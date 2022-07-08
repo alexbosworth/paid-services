@@ -59,7 +59,7 @@ module.exports = ({ask, lnd, logger}, cbk) => {
           rate: askForDetails.rate,
         });
 
-        join.once('end', ({id}) => cbk(null, {id}));
+        join.once('end', ({id}) => cbk(null, {transaction_id: id}));
         join.once('error', err => cbk(err));
 
         join.once('peering', async ({inbound, outbound}) => {
@@ -70,7 +70,7 @@ module.exports = ({ask, lnd, logger}, cbk) => {
           return logger.info({peering_with: formatNodes(nodes)});
         });
 
-        join.once('publishing', () => logger.info({publishing: true}));
+        join.once('publishing', ({signed}) => logger.info({signed}));
 
         return;
       }],

@@ -1,6 +1,6 @@
 # Versions
 
-## Version 3.17.0
+## Version 3.17.1
 
 - `manageGroupJoin`: Add method to coordinate or join a channels group
 

@@ -169,7 +169,7 @@ module.exports = ({capacity, coordinator, count, id, lnd, rate}, cbk) => {
     // Publish partial signatures to coordinator
     reveal: ['incoming', 'register', ({register}, cbk) => {
       // Let listeners know that the signature will be sent to coordinator
-      emitter.emit('publishing', {});
+      emitter.emit('publishing', {signed: register.psbt});
 
       return registerSignedOpen({
         coordinator,

@@ -107,7 +107,7 @@ module.exports = ({ask, lnd, logger}, cbk) => {
         coordinate.events.once('broadcast', broadcast => {
           coordinate.events.removeAllListeners();
 
-          return cbk(null, {id: broadcast.id});
+          return cbk(null, {transaction_id: broadcast.id});
         });
 
         coordinate.events.once('error', err => {
