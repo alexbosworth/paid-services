@@ -184,7 +184,7 @@ module.exports = ({ask, id, lnd, logger, nodes}, cbk) => {
           name: 'id',
           type: 'list',
         },
-        cbk);
+        res => cbk(null, res));
       }],
 
       // Fetch the full trade-secret that was selected

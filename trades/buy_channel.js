@@ -80,7 +80,7 @@ module.exports = ({ask, lnd, logger}, cbk) => {
             return true;
           },
         },
-        cbk);
+        res => cbk(null, res));
       }],
 
       // Decode the connect details

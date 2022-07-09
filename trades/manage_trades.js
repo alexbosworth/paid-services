@@ -95,7 +95,7 @@ module.exports = ({ask, lnd, logger, request, separator}, cbk) => {
           name: 'action',
           type: 'list',
         },
-        cbk);
+        res => cbk(null, res));
       }],
 
       // Confirm that signer RPC is enabled, this is required for trade secret
@@ -212,7 +212,7 @@ module.exports = ({ask, lnd, logger, request, separator}, cbk) => {
           name: 'manage',
           type: 'list',
         },
-        cbk);
+        res => cbk(null, res));
       }],
 
       // Manage an open trades
@@ -232,7 +232,7 @@ module.exports = ({ask, lnd, logger, request, separator}, cbk) => {
           name: 'trade',
           type: 'list',
         },
-        cbk);
+        res => cbk(null, res));
       }],
 
       // Service an open trade

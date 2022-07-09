@@ -88,7 +88,7 @@ module.exports = ({ask, lnd, logger, request}, cbk) => {
             return true;
           },
         },
-        cbk);
+        res => cbk(null, res));
       }],
 
       // Get the public channels to use for an open trade
@@ -129,7 +129,7 @@ module.exports = ({ask, lnd, logger, request}, cbk) => {
             return true;
           },
         },
-        cbk);
+        res => cbk(null, res));
       }],
 
       // Ask for the actual payload of the trade
@@ -150,7 +150,7 @@ module.exports = ({ask, lnd, logger, request}, cbk) => {
             return true;
           },
         },
-        cbk);
+        res => cbk(null, res));
       }],
 
       // Select pricing type
@@ -173,7 +173,7 @@ module.exports = ({ask, lnd, logger, request}, cbk) => {
           name: 'type',
           type: 'list',
         },
-        cbk);
+        res => cbk(null, res));
       }],
 
       // Ask for the fiat price of the secret
@@ -201,7 +201,7 @@ module.exports = ({ask, lnd, logger, request}, cbk) => {
             return true;
           },
         },
-        cbk);
+        res => cbk(null, res));
       }],
 
       // Ask for the price of the secret
@@ -234,7 +234,7 @@ module.exports = ({ask, lnd, logger, request}, cbk) => {
             return true;
           },
         },
-        cbk);
+        res => cbk(null, res));
       }],
 
       // Ask for the expiration of the trade
@@ -252,7 +252,7 @@ module.exports = ({ask, lnd, logger, request}, cbk) => {
             return true;
           },
         },
-        cbk);
+        res => cbk(null, res));
       }],
 
       // Get the conversion to tokens for fiat

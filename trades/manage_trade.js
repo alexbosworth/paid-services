@@ -56,7 +56,7 @@ module.exports = ({ask, lnd, logger}, cbk) => {
           type: 'input',
           validate: input => !!input,
         },
-        cbk);
+        res => cbk(null, res));
       }],
 
       // Derive the self public key
@@ -182,7 +182,7 @@ module.exports = ({ask, lnd, logger}, cbk) => {
           name: 'action',
           type: 'list',
         },
-        cbk);
+        res => cbk(null, res));
       }],
 
       // Cancel past offer
@@ -244,7 +244,7 @@ module.exports = ({ask, lnd, logger}, cbk) => {
           name: 'action',
           type: 'list',
         },
-        cbk);
+        res => cbk(null, res));
       }],
 
       // Ask for preimage in case it is separately known
@@ -279,7 +279,7 @@ module.exports = ({ask, lnd, logger}, cbk) => {
             return true;
           },
         },
-        cbk);
+        res => cbk(null, res));
       }],
 
       // Pay and get the preimage through paying for it

@@ -112,7 +112,7 @@ module.exports = ({ask, lnd, logger, request}, cbk) => {
             return true;
           },
         },
-        cbk);
+        res => cbk(null, res));
       }],
 
       // Select method of pricing
@@ -128,7 +128,7 @@ module.exports = ({ask, lnd, logger, request}, cbk) => {
           name: 'action',
           type: 'list',
         },
-        cbk);
+        res => cbk(null, res));
       }],
 
       // Ask for fiat based cost
@@ -156,7 +156,7 @@ module.exports = ({ask, lnd, logger, request}, cbk) => {
             return true;
           },
         },
-        cbk);
+        res => cbk(null, res));
       }],
 
       // Ask for absolute cost
@@ -189,7 +189,7 @@ module.exports = ({ask, lnd, logger, request}, cbk) => {
             return true;
           },
         },
-        cbk);
+        res => cbk(null, res));
       }],
 
       // Ask for rate-based cost
@@ -222,7 +222,7 @@ module.exports = ({ask, lnd, logger, request}, cbk) => {
             return true;
           },
         },
-        cbk);
+        res => cbk(null, res));
       }],
 
       // Ask for the expiration of the channel sale
@@ -239,7 +239,7 @@ module.exports = ({ask, lnd, logger, request}, cbk) => {
             return true;
           },
         },
-        cbk);
+        res => cbk(null, res));
       }],
 
       // Check ability to get fiat prices

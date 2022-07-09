@@ -108,7 +108,7 @@ module.exports = ({ask, lnd, logger, request}, cbk) => {
           message: `Pay ${parseRequest.tokens} and ${getRoute.fee} fee?`,
           type: 'confirm',
         },
-        cbk);
+        res => cbk(null, res));
       }],
 
       // Pay the request
