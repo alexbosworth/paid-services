@@ -70,7 +70,9 @@ module.exports = ({ask, lnd, logger}, cbk) => {
           return logger.info({peering_with: formatNodes(nodes)});
         });
 
-        join.once('publishing', ({signed}) => logger.info({signed}));
+        join.once('publishing', ({refund, signed}) => {
+          return logger.info({refund, signed});
+        });
 
         return;
       }],

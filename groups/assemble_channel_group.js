@@ -78,6 +78,9 @@ module.exports = ({capacity, count, ecp, identity, lnd, rate}) => {
     return emitter.emit('error', err);
   };
 
+  // An error was encountered
+  coordinator.events.once('error', errored);
+
   // Group members have registered themselves
   coordinator.events.once('joined', async ({ids}) => {
     emitter.emit('filled', {ids});

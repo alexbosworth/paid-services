@@ -1,5 +1,9 @@
 # Versions
 
+## Version 3.18.0
+
+- `manageGroupJoin`: Add conflict tx for safe funded pending channel deletion
+
 ## Version 3.17.2
 
 - `manageGroupJoin`: Add method to coordinate or join a channels group

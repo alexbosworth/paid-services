@@ -1,8 +1,11 @@
 const EventEmitter = require('events');
 
 const asyncAuto = require('async/auto');
+const asyncReflect = require('async/reflect');
 const asyncRetry = require('async/retry');
+const {cancelPendingChannel} = require('ln-service');
 const {decodePsbt} = require('psbt');
+const {deletePendingChannel} = require('ln-service');
 const {returnResult} = require('asyncjs-util');
 const tinysecp = require('tiny-secp256k1');
 const {Transaction} = require('bitcoinjs-lib');
@@ -16,6 +19,7 @@ const {registerPendingOpen} = require('./p2p');
 const {registerSignedOpen} = require('./p2p');
 
 const {fromHex} = Transaction;
+const hexAsBuffer = hex => Buffer.from(hex, 'hex');
 const interval = 1000;
 const times = 60 * 10;
 
@@ -138,10 +142,22 @@ module.exports = ({capacity, coordinator, count, id, lnd, rate}, cbk) => {
     }],
 
     // Decode the unsigned PSBT
-    transaction: ['ecp', 'register', ({ecp, register}, cbk) => {
+    transaction: [
+      'ecp',
+      'propose',
+      'register',
+      ({ecp, propose, register}, cbk) =>
+    {
+      const funding = hexAsBuffer(propose.funding);
       const psbt = decodePsbt({ecp, psbt: register.psbt});
 
-      return cbk(null, {id: fromHex(psbt.unsigned_transaction).getId()});
+      const tx = fromHex(psbt.unsigned_transaction);
+
+      return cbk(null, {
+        id: tx.getId(),
+        raw: psbt.unsigned_transaction,
+        vout: tx.outs.findIndex(n => n.script.equals(funding)),
+      });
     }],
 
     // Confirm the incoming channel
@@ -150,7 +166,7 @@ module.exports = ({capacity, coordinator, count, id, lnd, rate}, cbk) => {
       'partners',
       'register',
       'transaction',
-      ({ecp, partners, register, transaction}, cbk) =>
+      asyncReflect(({ecp, partners, register, transaction}, cbk) =>
     {
       // Make sure that there is an inbound channel
       return asyncRetry({interval, times}, cbk => {
@@ -164,12 +180,45 @@ module.exports = ({capacity, coordinator, count, id, lnd, rate}, cbk) => {
         cbk);
       },
       cbk);
+    })],
+
+    // Clean up funding pending channels when the channel group fails
+    clean: [
+      'incoming',
+      'propose',
+      'register',
+      'transaction',
+      ({incoming, propose, register, transaction}, cbk) =>
+    {
+      // Exit early when incoming channel is seen
+      if (!incoming.error) {
+        return cbk();
+      }
+
+      // When there was no incoming channel detected, fail and clean up
+      return deletePendingChannel({
+        lnd,
+        confirmed_transaction: register.conflict,
+        pending_transaction: transaction.raw,
+        pending_transaction_vout: transaction.vout,
+      },
+      err => {
+        if (!!err) {
+          return cbk([503, 'UnexpectedErrorCleaningUpGroupChannel', {err}]);
+        }
+
+        // Pass back the original error
+        return cbk(incoming.error);
+      });
     }],
 
     // Publish partial signatures to coordinator
-    reveal: ['incoming', 'register', ({register}, cbk) => {
+    reveal: ['clean', 'incoming', 'register', ({register}, cbk) => {
       // Let listeners know that the signature will be sent to coordinator
-      emitter.emit('publishing', {signed: register.psbt});
+      emitter.emit('publishing', {
+        refund: register.conflict,
+        signed: register.psbt,
+      });
 
       return registerSignedOpen({
         coordinator,

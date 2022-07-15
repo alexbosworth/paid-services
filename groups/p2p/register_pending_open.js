@@ -1,5 +1,7 @@
 const asyncAuto = require('async/auto');
+const asyncReflect = require('async/reflect');
 const asyncRetry = require('async/retry');
+const {cancelPendingChannel} = require('ln-service');
 const {connectPeer} = require('ln-sync');
 const {decodePsbt} = require('psbt');
 const {returnResult} = require('asyncjs-util');
@@ -46,7 +48,8 @@ const typeGroupChannelId = '1';
 
   @returns via cbk or Promise
   {
-    psbt: <Unsigned PSBT Hex String>
+    conflict: <Conflict Transaction Hex String>
+    psbt: <Partially Signed PSBT Hex String>
   }
 */
 module.exports = (args, cbk) => {
@@ -94,7 +97,7 @@ module.exports = (args, cbk) => {
       }],
 
       // Send connection confirmation request
-      request: ['connect', ({}, cbk) => {
+      request: ['connect', asyncReflect(({}, cbk) => {
         const {records} = encodePendingProposal({
           change: args.change,
           funding: args.funding,
@@ -145,17 +148,34 @@ module.exports = (args, cbk) => {
           });
         },
         cbk);
+      })],
+
+      // Clean up the pending channel if registration fails
+      clean: ['request', ({request}, cbk) => {
+        // Exit early when there was no error registering the pending channel
+        if (!request.error) {
+          return cbk();
+        }
+
+        return cancelPendingChannel({id: args.pending, lnd: args.lnd}, err => {
+          if (!!err) {
+            return cbk([503, 'UnexpectedErrorCleaningPendingChannel', {err}]);
+          }
+
+          // Return the original registration error
+          return cbk(request.error);
+        });
       }],
 
       // Check the unsigned funding transaction represents the partial open
-      check: ['ecp', 'request', ({ecp, request}, cbk) => {
+      check: ['clean', 'ecp', 'request', ({ecp, request}, cbk) => {
         try {
-          decodePsbt({ecp, psbt: request});
+          decodePsbt({ecp, psbt: request.value});
         } catch (err) {
           return cbk([503, 'ExpectedValidUnsignedResponsePsbt', {err}]);
         }
 
-        const psbt = decodePsbt({ecp, psbt: request});
+        const psbt = decodePsbt({ecp, psbt: request.value});
 
         const tx = fromHex(psbt.unsigned_transaction);
 
@@ -207,7 +227,7 @@ module.exports = (args, cbk) => {
         return signAndFundGroupChannel({
           id: args.pending,
           lnd: args.lnd,
-          psbt: request,
+          psbt: request.value,
           utxos: args.utxos,
         },
         cbk);

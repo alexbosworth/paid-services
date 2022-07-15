@@ -1,4 +1,5 @@
 const asyncAuto = require('async/auto');
+const asyncRetry = require('async/retry');
 const {connectPeer} = require('ln-sync');
 const {getChainBalance} = require('ln-service');
 const {getNodeAlias} = require('ln-sync');
@@ -8,9 +9,11 @@ const {getGroupDetails} = require('./p2p');
 
 const coordinatorFromJoinCode = n => n.slice(0, 66);
 const groupIdFromJoinCode = n => n.slice(66);
+const interval = 500;
 const isCode = n => !!n && n.length === 98;
 const isPublicKey = n => !!n && /^0[2-3][0-9A-F]{64}$/i.test(n);
 const niceName = n => `${n.alias} ${n.id}`.trim();
+const times = 2 * 60;
 const tokensAsBigUnit = tokens => (tokens / 1e8).toFixed(8);
 
 /** Ask to confirm joining a group
@@ -73,7 +76,10 @@ module.exports = ({ask, lnd}, cbk) => {
 
       // Connect to the coordinator
       connect: ['group', ({group}, cbk) => {
-        return connectPeer({lnd, id: group.coordinator}, cbk);
+        return asyncRetry({interval, times}, cbk => {
+          return connectPeer({lnd, id: group.coordinator}, cbk);
+        },
+        cbk);
       }],
 
       // Get the coordinator node alias

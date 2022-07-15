@@ -13,6 +13,8 @@ const half = n => n / 2;
     lnd: <Authenticated LND API Object>
     to: <Look for Outgoing Channel To Identity Public Key Hex String>
   }
+
+  @returns via cbk or Promise
 */
 module.exports = ({capacity, from, id, lnd, to}, cbk) => {
   return new Promise((resolve, reject) => {
