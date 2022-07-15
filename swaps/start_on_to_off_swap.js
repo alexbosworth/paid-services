@@ -29,6 +29,7 @@ const sha256 = preimage => createHash('sha256').update(preimage).digest('hex');
   {
     delta: <Swap CLTV Delta Number>
     deposit: <Unilateral Deposit Tokens Number>
+    [incoming_peer]: <Constrained to Inbound Peer Public Key Id Hex String>
     [is_external_solo_key]: <Use External Unilateral Refund Key Bool>
     lnd: <Authenticated LND API Object>
     price: <Swap Price Tokens Number>
@@ -227,6 +228,7 @@ module.exports = (args, cbk) => {
           deposit: createExecInvoice.request,
           encrypt: getEncrypt.secret,
           hash: requestDetails.hash,
+          incoming_peer: args.incoming_peer || undefined,
           key_index: getRefundKey.index,
           push: createPushInvoice.request,
           refund_public_key: getRefundKey.public_key,

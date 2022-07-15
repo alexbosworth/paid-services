@@ -5,6 +5,7 @@ const {parsePaymentRequest} = require('ln-service');
 const encodeSwapSecrets = require('./encode_swap_secrets');
 const {requestAsRequestRecords} = require('./../records');
 const {publicTypes} = require('./swap_field_types');
+const {swapVersion} = require('./swap_field_types');
 
 const encode = records => encodeTlvStream({records}).encoded;
 const encodeNumber = n => encodeBigSize({number: n.toString()}).encoded;
@@ -13,6 +14,7 @@ const {typeClaimCoopPublicKeyHash} = publicTypes;
 const {typeClaimSoloPublicKey} = publicTypes;
 const {typeDeposit} = publicTypes;
 const {typeHash} = publicTypes;
+const {typeInboundPeer} = publicTypes;
 const {typePush} = publicTypes;
 const {typePrivateRefundDetails} = publicTypes;
 const {typeRefundCoopPrivateKeyHash} = publicTypes;
@@ -21,6 +23,7 @@ const {typeRefundSoloPublicKey} = publicTypes;
 const {typeRequest} = publicTypes;
 const {typeTimeout} = publicTypes;
 const {typeTokens} = publicTypes;
+const {typeVersion} = publicTypes;
 
 /** Serialize off to on swap records
 
@@ -32,6 +35,7 @@ const {typeTokens} = publicTypes;
     deposit: <Deposit BOLT 11 Request String>
     encrypt: <Encrypt Secrets Base Encryption Key Hex String>
     hash: <Swap Hash Hex String>
+    [incoming_peer]: <Constrained to Inbound Peer Public Key Id Hex String>
     [key_index]: <Refund Unilateral Key Id Number>
     push: <BOLT 11 Encoded Push Request String>
     refund_public_key: <Refund Unilateral Public Key Hex String>
@@ -62,6 +66,10 @@ module.exports = args => {
       value: deposit.payment + depositAmount,
     },
     {
+      type: typeInboundPeer,
+      value: args.incoming_peer,
+    },
+    {
       type: typeRefundCoopPrivateKeyHash,
       value: privateCoopKeyHash,
     },
@@ -84,6 +92,10 @@ module.exports = args => {
     {
       type: typeTimeout,
       value: timeout,
+    },
+    {
+      type: typeVersion,
+      value: encodeNumber(swapVersion),
     },
   ];
 
@@ -109,6 +121,10 @@ module.exports = args => {
       value: swapHash,
     },
     {
+      type: typeInboundPeer,
+      value: args.incoming_peer,
+    },
+    {
       type: typePrivateRefundDetails,
       value: encoded,
     },
@@ -124,10 +140,14 @@ module.exports = args => {
       type: typeTokens,
       value: encodeNumber(args.tokens),
     },
+    {
+      type: typeVersion,
+      value: encodeNumber(swapVersion),
+    },
   ];
 
   return {
-    recovery: encode(recoveryRecords),
-    response: encode(responseRecords),
+    recovery: encode(recoveryRecords.filter(n => !!n.value)),
+    response: encode(responseRecords.filter(n => !!n.value)),
   };
 };

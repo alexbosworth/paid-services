@@ -14,6 +14,7 @@ const {diffieHellmanComputeSecret} = require('ln-service');
 const {fundPsbt} = require('ln-service');
 const {getChainFeeRate} = require('ln-service');
 const {getChainTransactions} = require('ln-service');
+const {getChannels} = require('ln-service');
 const {getHeight} = require('ln-service');
 const {getIdentity} = require('ln-service');
 const {getInvoice} = require('ln-service');
@@ -159,6 +160,7 @@ module.exports = (args, cbk) => {
             claim_solo_public_key: details.claim_solo_public_key,
             hash: details.hash,
             key_index: details.key_index,
+            incoming_peer: details.incoming_peer || undefined,
             refund_coop_private_key: details.refund_coop_private_key,
             refund_coop_private_key_hash: details.refund_coop_private_key_hash,
             solo_private_key: details.refund_solo_private_key,
@@ -168,6 +170,19 @@ module.exports = (args, cbk) => {
         } catch (err) {
           return cbk([400, 'ExpectedValidOnToOffRecoveryDetails', {err}]);
         }
+      }],
+
+      // Lookup channel ids with the incoming peer when applicable
+      getChannels: ['recoveryDetails', ({recoveryDetails}, cbk) => {
+        if (!recoveryDetails.incoming_peer) {
+          return cbk();
+        }
+
+        return getChannels({
+          lnd: args.lnd,
+          partner_public_key: recoveryDetails.incoming_peer,
+        },
+        cbk);
       }],
 
       // Get the refund key
@@ -213,6 +228,7 @@ module.exports = (args, cbk) => {
             return;
           }
 
+          const channels = invoice.payments.map(n => n.in_channel);
           const hash = recoveryDetails.claim_coop_public_key_hash;
           const timeout = min(...invoice.payments.map(n => n.timeout));
 
@@ -231,7 +247,11 @@ module.exports = (args, cbk) => {
 
           args.emitter.emit('update', {execution_payment_held: id});
 
-          return cbk(null, {delta, claim_coop_public_key: message.value});
+          return cbk(null, {
+            channels,
+            delta,
+            claim_coop_public_key: message.value,
+          });
         });
       }],
 
@@ -257,13 +277,14 @@ module.exports = (args, cbk) => {
 
           args.emitter.emit('update', {offchain_funding_held: id});
 
+          const channels = invoice.payments.map(n => n.in_channel);
           const timeout = min(...invoice.payments.map(n => n.timeout));
 
           const delta = timeout - recoveryDetails.timeout;
 
           sub.removeAllListeners();
 
-          return cbk(null, {delta});
+          return cbk(null, {channels, delta});
         });
 
         return;
@@ -423,12 +444,52 @@ module.exports = (args, cbk) => {
         cbk);
       }],
 
+      // Check incoming peer constraints
+      checkIncomingPeer: [
+        'getChannels',
+        'waitForDepositHold',
+        'waitForFundHold',
+        ({getChannels, waitForDepositHold, waitForFundHold}, cbk) =>
+      {
+        // Exit early when there are no incoming peer constraints
+        if (!args.incoming_peer) {
+          return cbk();
+        }
+
+        const channels = getChannels.channels.map(n => n.id);
+
+        // The deposit must come in under a channel with the incoming peer
+        const invalidDeposit = waitForDepositHold.channels.find(id => {
+          return !channels.includes(id);
+        });
+
+        if (!!invalidDeposit) {
+          return cbk([503, 'UnexpectedInboundChannelForHeldDeposit']);
+        }
+
+        // The funding must come in under a channel with the incoming peer
+        const invalidFunding = waitForFundHold.channels.find(id => {
+          return !channels.includes(id);
+        });
+
+        if (!!invalidFunding) {
+          return cbk([503, 'UnexpectedInboundChannelForHeldFunding']);
+        }
+
+        return cbk();
+      }],
+
       // Check that there are sufficient remaining blocks
       checkTimeRemaining: [
         'recoveryDetails',
         'waitForDepositHold',
         'waitForFundHold',
-        ({recoveryDetails, waitForDepositHold, waitForFundHold}, cbk) =>
+        ({
+          recoveryDetails,
+          waitForDepositHold,
+          waitForFundHold,
+        },
+        cbk) =>
       {
         if (waitForDepositHold.delta < defaultMinDelta) {
           return cbk([503, 'InsufficientDepositDeltaBlocksToFundSwap']);
@@ -458,6 +519,7 @@ module.exports = (args, cbk) => {
 
       // Lock chain funds to fund the swap with
       lockFunding: [
+        'checkIncomingPeer',
         'checkTimeRemaining',
         'getTransactions',
         'swap',

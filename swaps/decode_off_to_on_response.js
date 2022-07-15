@@ -3,6 +3,7 @@ const {decodeTlvStream} = require('bolt01');
 
 const {requestRecordsAsRequest} = require('./../records');
 const {publicTypes} = require('./swap_field_types');
+const {swapVersion} = require('./swap_field_types');
 
 const decodeNumber = encoded => decodeBigSize({encoded}).decoded;
 const findRecord = (records, type) => records.find(n => n.type === type);
@@ -13,6 +14,7 @@ const paymentNonceLength = 64;
 const startIndex = 0;
 const typeCoopPrivateKeyHash = publicTypes.typeRefundCoopPrivateKeyHash;
 const {typeDeposit} = publicTypes;
+const {typeInboundPeer} = publicTypes;
 const {typePush} = publicTypes;
 const {typeRefundCoopPublicKey} = publicTypes;
 const {typeRefundSoloPublicKey} = publicTypes;
@@ -33,6 +35,7 @@ const {typeVersion} = publicTypes;
     coop_public_key: <Refund Cooperative Key Hex String>
     deposit_mtokens: <Deposit Amount Millitokens Number String>
     deposit_payment: <Deposit Payment Nonce Hex String>
+    [incoming_peer]: <Constrained to Inbound Peer Public Key Id Hex String>
     push: <Push Payment Nonce Hex String>
     refund_public_key: <Refund Unilateral Public Key Hex String>
     request: <BOLT 11 Encoded Funding Request String>
@@ -56,8 +59,20 @@ module.exports = ({network, response}) => {
 
   const {records} = decodeTlvStream({encoded: response});
 
-  if (!!findRecord(records, typeVersion)) {
+  if (!findRecord(records, typeVersion)) {
     throw new Error('UnexpectedVersionOfOffToOnResponse');
+  }
+
+  const versionRecord = findRecord(records, typeVersion);
+
+  try {
+    decodeNumber(versionRecord.value);
+  } catch (err) {
+    throw new Error('ExpectedValidVersionRecordForOffToOnResponse');
+  }
+
+  if (Number(decodeNumber(versionRecord.value)) !== swapVersion) {
+    throw new Error('UnsupportedSwapVersionNumberForOffchainToOnchainSwap');
   }
 
   const coopPrivateKeyHashRecord = findRecord(records, typeCoopPrivateKeyHash);
@@ -106,6 +121,12 @@ module.exports = ({network, response}) => {
     throw new Error('ExpectedSmallerDepositAmountInOffToOnResponse');
   }
 
+  const inboundRecord = findRecord(records, typeInboundPeer);
+
+  if (!!inboundRecord && !isPublicKey(inboundRecord.value)) {
+    throw new Error('ExpectectedPublicKeyForInboundPeerConstraint');
+  }
+
   const pushRecord = findRecord(records, typePush);
 
   if (!pushRecord) {
@@ -150,6 +171,7 @@ module.exports = ({network, response}) => {
     coop_public_key: coopPublicKeyRecord.value,
     deposit_mtokens: decodeBigSize({encoded: depositAmount}).decoded,
     deposit_payment: depositRecord.value.slice(startIndex, paymentNonceLength),
+    incoming_peer: !!inboundRecord ? inboundRecord.value : undefined,
     push: pushRecord.value,
     refund_public_key: soloPublicKeyRecord.value,
     request: funding.request,

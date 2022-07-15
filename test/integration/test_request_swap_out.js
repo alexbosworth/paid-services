@@ -103,6 +103,10 @@ test(`Start offchain swap`, async ({end, equal, strictSame}) => {
                 return cbk({[args.name]: args.default});
               }
 
+              if (args.name === 'incoming') {
+                return cbk({incoming: false});
+              }
+
               if (args.name === 'req') {
                 return cbk({req: swapRequest.swap_request});
               }

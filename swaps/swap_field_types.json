@@ -8,6 +8,7 @@
     "typeSoloPrivateKey": "6"
   },
   "publicTypes": {
+    "typeVersion": "0",
     "typeClaimCoopPublicKeyHash": "1",
     "typeClaimSoloPublicKey": "2",
     "typeDeposit": "3",
@@ -21,11 +22,12 @@
     "typeRequest": "11",
     "typeTimeout": "12",
     "typeTokens": "13",
-    "typeVersion": "0"
+    "typeInboundPeer": "14"
   },
   "pushTypes": {
     "typeSwapId": "0",
     "typeSwapResponse": "1"
   },
+  "swapVersion": 1,
   "typePayMetadata": "805001"
 }

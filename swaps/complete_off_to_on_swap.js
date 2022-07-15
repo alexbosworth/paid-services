@@ -90,6 +90,7 @@ const v1AddressWords = key => [].concat(1).concat(bech32m.toWords(key));
     recovery: <Swap Request Recovery Hex String>
     [request]: <Request Function>
     response: <Swap Response Hex String>
+    [sweep_address]: <Sweep Chain Address String>
   }
 
   @returns via cbk or Promise
@@ -134,6 +135,11 @@ module.exports = (args, cbk) => {
 
       // Create a sweep address
       createAddress: ['validate', ({}, cbk) => {
+        // Exit early when there is no need to create a sweep address
+        if (!!args.sweep_address) {
+          return cbk(null, {address: args.sweep_address});
+        }
+
         return createChainAddress({lnd: args.lnd}, cbk);
       }],
 
@@ -204,6 +210,7 @@ module.exports = (args, cbk) => {
             coop_public_key: decoded.coop_public_key,
             deposit_mtokens: decoded.deposit_mtokens,
             deposit_payment: decoded.deposit_payment,
+            incoming_peer: decoded.incoming_peer,
             push: decoded.push,
             refund_public_key: decoded.refund_public_key,
             request: decoded.request,
@@ -238,7 +245,10 @@ module.exports = (args, cbk) => {
         const request = responseDetails.request;
 
         if (!!args.is_external_funding) {
-          args.emitter.emit('update', {pay_to_fund_swap_offchain: request});
+          args.emitter.emit('update', {
+            external_funding_pay_to_fund_swap_offchain: request,
+            must_be_in_through: responseDetails.incoming_peer || undefined,
+          });
 
           return cbk();
         }
@@ -247,6 +257,7 @@ module.exports = (args, cbk) => {
 
         return pay({
           request,
+          incoming_peer: responseDetails.incoming_peer || undefined,
           lnd: args.lnd,
           max_fee: args.max_fee_funding,
         },
@@ -381,6 +392,7 @@ module.exports = (args, cbk) => {
               cltv_delta: to.cltv_delta,
               destination: to.destination,
               features: to.features,
+              incoming_peer: requestDetails.incoming_peer || undefined,
               lnd: args.lnd,
               max_fee: args.max_fee_deposit,
               messages: [{
@@ -412,7 +424,10 @@ module.exports = (args, cbk) => {
 
         const address = encodeAddress(prefix, v1AddressWords(key));
 
-        args.emitter.emit('update', {waiting_for_chain_funding: address});
+        args.emitter.emit('update', {
+          waiting_for_chain_funding: address,
+          required_confirmations: args.min_confirmations || defaultConfsCount,
+        });
 
         if (!!args.request) {
           return findDeposit({

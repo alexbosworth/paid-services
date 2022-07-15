@@ -5,6 +5,7 @@ const {decodeTlvStream} = require('bolt01');
 
 const decodeSwapSecrets = require('./decode_swap_secrets');
 const {publicTypes} = require('./swap_field_types');
+const {swapVersion} = require('./swap_field_types');
 
 const decodeNumber = encoded => decodeBigSize({encoded}).decoded;
 const findRecord = (records, type) => records.find(n => n.type === type);
@@ -16,6 +17,7 @@ const sha256 = preimage => createHash('sha256').update(preimage).digest('hex');
 const {typeClaimCoopPublicKeyHash} = publicTypes;
 const {typeClaimSoloPublicKey} = publicTypes;
 const {typeHash} = publicTypes;
+const {typeInboundPeer} = publicTypes;
 const {typePrivateRefundDetails} = publicTypes;
 const {typeRefundCoopPrivateKeyHash} = publicTypes;
 const {typeTimeout} = publicTypes;
@@ -60,8 +62,17 @@ module.exports = ({decrypt, recovery}) => {
 
   const {records} = decodeTlvStream({encoded: recovery});
 
-  if (!!findRecord(records, typeVersion)) {
-    throw new Error('UnexpectedVersionOfOffToOnRecovery');
+  // Make sure the recovery records are for the known swap version
+  const versionRecord = findRecord(records, typeVersion);
+
+  try {
+    decodeNumber(versionRecord.value);
+  } catch (err) {
+    throw new Error('ExpectedValidVersionRecordForOffToOnRecovery');
+  }
+
+  if (Number(decodeNumber(versionRecord.value)) !== swapVersion) {
+    throw new Error('UnsupportedSwapVersionNumberForOffToOnRecovery');
   }
 
   const claimCoopPubKeyHash = findRecord(records, typeClaimCoopPublicKeyHash);
@@ -72,6 +83,12 @@ module.exports = ({decrypt, recovery}) => {
 
   if (!isHash(claimCoopPubKeyHash.value)) {
     throw new Error('ExpectedValidClaimCoopPublicKeyHash');
+  }
+
+  const inboundRecord = findRecord(records, typeInboundPeer);
+
+  if (!!inboundRecord && !isPublicKey(inboundRecord.value)) {
+    throw new Error('ExpectectedPublicKeyForInboundPeerConstraintInRecovery');
   }
 
   const claimSoloPublicKeyRecord = findRecord(records, typeClaimSoloPublicKey);

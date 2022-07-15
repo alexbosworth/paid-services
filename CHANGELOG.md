@@ -1,5 +1,10 @@
 # Versions
 
+## Version 3.19.0
+
+- `manageSwap`: Add support for inbound peer constraint
+- `manageSwap`: Add support for external sweep address
+
 ## Version 3.18.0
 
 - `manageGroupJoin`: Add conflict tx for safe funded pending channel deletion

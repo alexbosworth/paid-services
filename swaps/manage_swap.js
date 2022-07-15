@@ -1,3 +1,4 @@
+const {address} = require('bitcoinjs-lib');
 const asyncAuto = require('async/auto');
 const asyncMap = require('async/map');
 const {findKey} = require('ln-sync');
@@ -6,6 +7,7 @@ const {getAllInvoices} = require('ln-sync');
 const {getInvoice} = require('ln-service');
 const {getNetwork} = require('ln-sync');
 const {getNodeAlias} = require('ln-sync');
+const {networks} = require('bitcoinjs-lib');
 const {returnResult} = require('asyncjs-util');
 
 const decodeOffToOnRequest = require('./decode_off_to_on_request');
@@ -25,6 +27,7 @@ const pushesReceivedAfter = () => new Date(Date.now() - 1000 * 60 * 60 * 24);
 const recoverRespondAction = 'recover-response';
 const requestAction = 'request';
 const respondAction = 'respond';
+const {toOutputScript} = address;
 const tokensAsBigUnit = tokens => (tokens / 1e8).toFixed(8);
 const typeKeySendTrade = '805805';
 
@@ -260,14 +263,57 @@ module.exports = (args, cbk) => {
         }
       }],
 
+      // Ask if the sweep address should be custom
+      askForSweepAddress: [
+        'askForExternal',
+        'getNetwork',
+        'selectAction',
+        ({getNetwork, selectAction}, cbk) =>
+      {
+        switch (selectAction) {
+        case actionPushRequest:
+        case requestAction:
+          return args.ask({
+            message: 'Send on-chain funds to an external address? (Optional)',
+            name: 'sweep',
+            type: 'input',
+            validate: input => {
+              if (!input) {
+                return true;
+              }
+
+              try {
+                return !!toOutputScript(input, networks[getNetwork.bitcoinjs]);
+              } catch (err) {
+                return 'Unsupported on-chain address format';
+              }
+            }
+          },
+          ({sweep}) => cbk(null, sweep));
+
+        default:
+          // Custom sweep address not supported
+          return cbk();
+        }
+      }],
+
       // Make swap request
       makeRequest: [
         'askForExternal',
         'askForRemote',
+        'askForSweepAddress',
         'findKey',
         'hasTr',
         'selectAction',
-        ({askForExternal, askForRemote, findKey, hasTr, selectAction}, cbk) =>
+        ({
+          askForExternal,
+          askForRemote,
+          askForSweepAddress,
+          findKey,
+          hasTr,
+          selectAction,
+        },
+        cbk) =>
       {
         switch (selectAction) {
         case actionPushRequest:
@@ -291,6 +337,7 @@ module.exports = (args, cbk) => {
           push_to: findKey.public_key,
           min_confirmations: minConfirmations[getNetwork.network],
           request: !hasTr ? args.request : undefined,
+          sweep_address: askForSweepAddress || undefined,
         },
         cbk);
       }],

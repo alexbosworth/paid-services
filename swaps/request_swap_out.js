@@ -51,6 +51,7 @@ const typeSwapResponse = serviceTypes.serviceTypeSwapResponse;
     [min_confirmations]: <Minimum Confirmations to Wait Number>
     [push_to]: <Push Swap Request to Node with Identity Public Key Hex String>
     [request]: <Request Function>
+    [sweep_address]: <Sweep Chain Address String>
   }
 
   @returns via cbk or Promise
@@ -329,6 +330,7 @@ module.exports = (args, cbk) => {
         });
 
         const deposit = mtokensAsTokens(response.deposit_mtokens);
+        const inbound = response.incoming_peer;
         const timeout = `that times out at ${response.timeout}`;
         const {tokens} = parsePaymentRequest({request: response.request});
 
@@ -340,9 +342,11 @@ module.exports = (args, cbk) => {
           return cbk(null, true)
         }
 
+        const inPeer = !!args.is_external_funding ? ` in via ${inbound}` : '';
+
         return args.ask({
           default: true,
-          message: `Start swap ${timeout}? ${pricing}?`,
+          message: `Start swap ${timeout}? ${pricing}${inPeer}?`,
           name: 'ok',
           type: 'confirm',
         },
@@ -378,6 +382,7 @@ module.exports = (args, cbk) => {
           recovery: makeRequest.recovery,
           request: args.request,
           response: getResponse,
+          sweep_address: args.sweep_address,
         },
         cbk);
       }],

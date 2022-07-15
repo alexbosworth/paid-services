@@ -2,6 +2,7 @@ const {createHash} = require('crypto');
 const EventEmitter = require('events');
 
 const asyncAuto = require('async/auto');
+const {findKey} = require('ln-sync');
 const {getChainFeeRate} = require('ln-service');
 const {returnResult} = require('asyncjs-util');
 
@@ -158,6 +159,24 @@ module.exports = ({ask, lnd, logger, request, swap, to}, cbk) => {
         ({target}) => cbk(null, Number(target)));
       }],
 
+      // Ask for an incoming peer to constrain the swap to
+      askForIncoming: ['askForTarget', ({}, cbk) => {
+        return ask({
+          message: 'Require off-chain through a specific peer? (Optional)',
+          name: 'incoming',
+        },
+        ({incoming}) => cbk(null, incoming));
+      }],
+
+      // Find the incoming identity key when specified
+      findIncoming: ['askForIncoming', ({askForIncoming}, cbk) => {
+        if (!askForIncoming) {
+          return cbk(null, {});
+        }
+
+        return findKey({lnd, query: askForIncoming}, cbk);
+      }],
+
       // Get the chain fee rate
       getRate: ['askForTarget', ({askForTarget}, cbk) => {
         return getChainFeeRate({lnd, confirmation_target: askForTarget}, cbk);
@@ -167,15 +186,21 @@ module.exports = ({ask, lnd, logger, request, swap, to}, cbk) => {
       makeResponse: [
         'askForRate',
         'askForRequest',
+        'findIncoming',
         'getRate',
-        ({askForRate, askForRequest, getRate}, cbk) =>
+        ({askForRate, askForRequest, findIncoming, getRate}, cbk) =>
       {
         const {tokens} = decodeOffToOnRequest({request: askForRequest});
+
+        if (!!findIncoming.public_key) {
+          logger.info({incoming_peer_constraint: findIncoming.public_key});
+        }
 
         return startOnToOffSwap({
           lnd,
           delta: defaultCltvDelta,
           deposit: ceil(getRate.tokens_per_vbyte * estimatedVirtualSize),
+          incoming_peer: findIncoming.public_key || undefined,
           is_external_solo_key: !!request,
           price: floor(tokens * askForRate / rateDenominator),
           request: askForRequest,
