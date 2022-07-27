@@ -2,12 +2,15 @@ const {addPeer} = require('ln-service');
 const asyncAuto = require('async/auto');
 const asyncDetect = require('async/detect');
 const asyncDetectSeries = require('async/detectSeries');
+const asyncEach = require('async/each');
 const asyncMap = require('async/map');
 const asyncRetry = require('async/retry');
 const {getChannel} = require('ln-service');
+const {getChannels} = require('ln-service');
 const {getIdentity} = require('ln-service');
 const {getNode} = require('ln-service');
 const {getPeers} = require('ln-service');
+const {removePeer} = require('ln-service');
 const {returnResult} = require('asyncjs-util');
 
 const interval = 1000;
@@ -55,11 +58,13 @@ module.exports = ({lnd, logger, nodes}, cbk) => {
         return cbk();
       },
 
+      // Get the channels to see if this is a channel peer
+      getChannels: ['validate', ({}, cbk) => {
+        return getChannels({lnd, is_active: true}, cbk);
+      }],
+
       // Derive the self public key
       getIdentity: ['validate', ({}, cbk) => getIdentity({lnd}, cbk)],
-
-      // Get the list of connected peers
-      getPeers: ['validate', ({}, cbk) => getPeers({lnd}, cbk)],
 
       // Find node connect info to connect to
       getNodes: ['getIdentity', ({getIdentity}, cbk) => {
@@ -135,8 +140,56 @@ module.exports = ({lnd, logger, nodes}, cbk) => {
         cbk);
       }],
 
+      // Remove the peer if there is no channel peer to avoid stale peers
+      removePeer: [
+        'getChannels',
+        'getNodes',
+        ({getChannels, getNodes}, cbk) =>
+      {
+        const ids = getChannels.channels.map(n => n.partner_public_key);
+
+        return asyncEach(getNodes, (node, cbk) => {
+          // Exit early when there is no node id
+          if (!node || !node.id || ids.includes(node.id)) {
+            return cbk();
+          }
+
+          return removePeer({lnd, public_key: node.id}, (err, res) => {
+            if (!!err) {
+              return cbk(err);
+            }
+
+            return asyncRetry({interval, times}, cbk => {
+              return getPeers({lnd}, (err, res) => {
+                if (!!err) {
+                  return cbk(err);
+                }
+
+                const peers = res.peers.map(n => n.public_key);
+
+                if (!!peers.includes(node.id)) {
+                  return cbk([503, 'FailedToDisconnectSellerPeer']);
+                }
+
+                return cbk();
+              });
+            },
+            cbk);
+          });
+        },
+        cbk);
+      }],
+
+      // Get the list of connected peers
+      getPeers: ['removePeer', ({}, cbk) => getPeers({lnd}, cbk)],
+
       // Try and connect to a node in order to do p2p messaging
-      connect: ['getNodes', 'getPeers', ({getNodes, getPeers}, cbk) => {
+      connect: [
+        'getNodes',
+        'getPeers',
+        'removePeer',
+        ({getNodes, getPeers}, cbk) =>
+      {
         const connected = getPeers.peers.map(n => n.public_key);
 
         // Look for a node that is already a connected peer

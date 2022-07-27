@@ -1,6 +1,6 @@
 # Versions
 
-## Version 3.19.0
+## Version 3.19.1
 
 - `manageSwap`: Add support for inbound peer constraint
 - `manageSwap`: Add support for external sweep address
