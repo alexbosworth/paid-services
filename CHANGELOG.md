@@ -1,5 +1,9 @@
 # Versions
 
+## Version 3.20.0
+
+- `manageGroupJoin`: Add support for 2 person groups
+
 ## Version 3.19.2
 
 - `manageSwap`: Add support for inbound peer constraint
