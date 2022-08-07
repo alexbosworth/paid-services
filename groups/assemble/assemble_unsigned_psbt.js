@@ -6,6 +6,7 @@ const tinysecp = require('tiny-secp256k1');
 const {Transaction} = require('bitcoinjs-lib');
 
 const {ceil} = Math;
+const committed = (capacity, m) => m.length === 2 ? capacity / 2 : capacity;
 const dummyEcdsaSignature = Buffer.alloc(74);
 const dummyPublicKey = Buffer.alloc(33);
 const dummySchnorrSignature = Buffer.alloc(64);
@@ -24,7 +25,7 @@ const sumOf = arr => arr.reduce((sum, n) => sum + n, 0);
     capacity: <Channel Capacity Tokens Number>
     proposed: [{
       [change]: <Change Output Hex String>
-      funding: <Funding Output Hex String>
+      [funding]: <Funding Output Hex String>
       utxos: [{
         [non_witness_utxo]: <Spending Transaction Hex String>
         transaction_id: <Transaction Id Hex String>
@@ -120,7 +121,7 @@ module.exports = ({capacity, proposed, rate}, cbk) => {
             },
             {
               script: member.change,
-              tokens: funded - capacity - (vbytes * rate),
+              tokens: funded - committed(capacity, proposed) - (vbytes * rate),
             },
           ];
         });

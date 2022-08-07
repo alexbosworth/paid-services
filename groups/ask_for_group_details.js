@@ -11,7 +11,7 @@ const isOdd = n => !!(n % 2);
 const maxChannelSize = 21e14;
 const minChannelSize = 2e4;
 const maxGroupSize = 420;
-const minGroupSize = 3;
+const minGroupSize = 2;
 const {round} = Math;
 
 /** Ask for new group details to create a group
@@ -150,7 +150,7 @@ module.exports = ({ask, lnd}, cbk) => {
       {
         return cbk(null, {
           capacity: askForCapacity,
-          count: askForCount,
+          count: Number(askForCount),
           rate: askForFeeRate,
         });
       }],

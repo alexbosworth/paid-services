@@ -90,11 +90,16 @@ module.exports = ({capacity, coordinator, count, id, lnd, rate}, cbk) => {
 
     // Find partners in the group
     partners: ['validate', ({}, cbk) => {
-      return findGroupPartners({coordinator, id, lnd}, cbk);
+      return findGroupPartners({coordinator, count, id, lnd}, cbk);
     }],
 
     // Peer with the group partners
     peer: ['partners', ({partners}, cbk) => {
+      // Exit early when there is no inbound partner to connect with
+      if (!partners.inbound) {
+        return cbk();
+      }
+
       // Let listeners know that peering will be happening
       emitter.emit('peering', {
         inbound: partners.inbound,
@@ -118,6 +123,7 @@ module.exports = ({capacity, coordinator, count, id, lnd, rate}, cbk) => {
     propose: ['connected', 'partners', ({partners}, cbk) => {
       return proposeGroupChannel({
         capacity,
+        count,
         lnd,
         rate,
         to: partners.outbound,
@@ -168,6 +174,11 @@ module.exports = ({capacity, coordinator, count, id, lnd, rate}, cbk) => {
       'transaction',
       asyncReflect(({ecp, partners, register, transaction}, cbk) =>
     {
+      // Exit early when there is no inbound partner
+      if (!partners.inbound) {
+        return cbk();
+      }
+
       // Make sure that there is an inbound channel
       return asyncRetry({interval, times}, cbk => {
         return confirmIncomingChannel({

@@ -4,6 +4,8 @@ const encodeNumber = number => encodeBigSize({number}).encoded;
 const typeCapacity = '1';
 const typeCount = '2';
 const typeRate = '3';
+const typeVersion = '0';
+const version = '1';
 
 /** Encode group details records
 
@@ -27,6 +29,7 @@ module.exports = ({capacity, count, rate}) => {
       {type: typeCapacity, value: encodeNumber(capacity)},
       {type: typeCount, value: encodeNumber(count)},
       {type: typeRate, value: encodeNumber(rate)},
+      {type: typeVersion, value: encodeNumber(version)},
     ],
   };
 };

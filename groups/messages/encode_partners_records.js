@@ -16,7 +16,5 @@ const typePartnersRecord = '1';
   }
 */
 module.exports = ({inbound, outbound}) => {
-  const records = [{type: typePartnersRecord, value: inbound + outbound}];
-
-  return {records};
+  return {records: [{type: typePartnersRecord, value: inbound + outbound}]};
 };

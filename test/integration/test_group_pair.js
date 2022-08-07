@@ -23,7 +23,7 @@ const capacity = 1e5;
 const count = 101;
 const feeRate = 1;
 const interval = 10;
-const size = 3;
+const size = 2;
 const tokens = 1e6;
 const times = 2000;
 
@@ -32,7 +32,7 @@ test(`Setup joint channel group`, async ({end, equal, strictSame}) => {
   const ecp = (await import('ecpair')).ECPairFactory(tinysecp);
   const {kill, nodes} = await spawnLightningCluster({size});
 
-  const [control, target, remote] = nodes;
+  const [control, target] = nodes;
 
   const {generate, lnd} = control;
 
@@ -51,15 +51,6 @@ test(`Setup joint channel group`, async ({end, equal, strictSame}) => {
     // Send coins to target
     await sendToChainAddress({lnd, tokens, address: targetAddress.address});
 
-    // Create a remote chain address
-    const remoteAddress = await createChainAddress({
-      format: 'p2tr',
-      lnd: remote.lnd,
-    });
-
-    // Send coins to remote
-    await sendToChainAddress({lnd, tokens, address: remoteAddress.address});
-
     // Wait for funds to arrive
     await asyncRetry({interval, times}, async () => {
       await generate({});
@@ -73,34 +64,15 @@ test(`Setup joint channel group`, async ({end, equal, strictSame}) => {
 
     // Wait for UTXOs to be confirmed
     await asyncRetry({interval, times}, async () => {
-      const remoteUtxos = await getUtxos({lnd: remote.lnd});
       const targetUtxos = await getUtxos({lnd: target.lnd});
 
       if (!targetUtxos.utxos.filter(n => !!n.confirmation_count).length) {
         throw new Error('ExpectedConfirmedUtxoOnTarget');
       }
-
-      if (!remoteUtxos.utxos.filter(n => !!n.confirmation_count).length) {
-        throw new Error('ExpectedConfirmUtxoOnRemote');
-      }
     });
 
     // Connect control to target
     await addPeer({lnd, public_key: target.id, socket: target.socket});
-
-    // Connect target to remote
-    await addPeer({
-      lnd: target.lnd,
-      public_key: remote.id,
-      socket: remote.socket,
-    });
-
-    // Connect remote to control
-    await addPeer({
-      lnd: remote.lnd,
-      public_key: control.id,
-      socket: control.socket,
-    });
 
     // Start Group Coordination
 
@@ -119,8 +91,8 @@ test(`Setup joint channel group`, async ({end, equal, strictSame}) => {
     assemble.events.once('broadcast', n => events.broadcast = n);
     assemble.events.once('filled', n => events.filled = n);
 
-    // Target and remote join the group
-    const joins = await asyncMap([target.lnd, remote.lnd], async lnd => {
+    // Target join the group
+    const joins = await asyncMap([target.lnd], async lnd => {
       const group = await getGroupDetails({
         lnd,
         coordinator: control.id,
@@ -136,11 +108,6 @@ test(`Setup joint channel group`, async ({end, equal, strictSame}) => {
         rate: group.rate,
       });
 
-      const [{inbound, outbound}] = await once(join, 'peering');
-
-      strictSame(!!inbound, true, 'Received inbound peer');
-      strictSame(!!outbound, true, 'Received outbound peer');
-
       const [tx] = await once(join, 'end');
 
       return tx;
@@ -152,7 +119,11 @@ test(`Setup joint channel group`, async ({end, equal, strictSame}) => {
     // Finished, wait for the channels to activate
     await generate({count});
 
+    const {getPendingChannels} = require('ln-service');
+
     await asyncRetry({interval, times}, async () => {
+      await generate({});
+
       const {channels} = await getChannels({lnd, is_active: true});
 
       if (!channels.length) {
@@ -160,7 +131,7 @@ test(`Setup joint channel group`, async ({end, equal, strictSame}) => {
       }
     });
 
-    strictSame(ids, [events.broadcast.id, events.broadcast.id], 'Got tx ids');
+    strictSame(ids, [events.broadcast.id], 'Got tx ids');
     strictSame(events.broadcast.id.length, 64, 'Got broadcast tx id');
     strictSame(!!events.broadcast.transaction, true, 'Got broadcast tx');
     strictSame(events.filled.ids.length, nodes.length, 'Got filled event');

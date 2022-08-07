@@ -11,7 +11,7 @@ const half = n => n / 2;
     from: <Look for Incoming Channel From Identity Public Key Hex String>
     id: <Channel Transaction id Hex String>
     lnd: <Authenticated LND API Object>
-    to: <Look for Outgoing Channel To Identity Public Key Hex String>
+    [to]: <Look for Outgoing Channel To Identity Public Key Hex String>
   }
 
   @returns via cbk or Promise
@@ -35,10 +35,6 @@ module.exports = ({capacity, from, id, lnd, to}, cbk) => {
 
         if (!lnd) {
           return cbk([400, 'ExpectedAuthenticatedLndToConfirmChannel']);
-        }
-
-        if (!to) {
-          return cbk([400, "ExpectedToPublicKeyToConfirmIncomingChannel"]);
         }
 
         return cbk();
@@ -78,6 +74,11 @@ module.exports = ({capacity, from, id, lnd, to}, cbk) => {
 
       // Double check that there is also a twin outgoing channel
       outgoing: ['getPending', ({getPending}, cbk) => {
+        // Exit early when there is no outgoing channel
+        if (!to) {
+          return cbk();
+        }
+
         const pending = getPending.pending_channels.find(chan => {
           return !chan.is_partner_initiated && chan.transaction_id === id;
         });

@@ -34,7 +34,7 @@ const typeGroupChannelId = '1';
     group: <Group Identifier Hex String>
     lnd: <Authenticated LND API Object>
     overflow: <Expected Minimum Change Amount Tokens Number>
-    pending: <Pending Channel Id Hex String>
+    [pending]: <Pending Channel Id Hex String>
     utxos: [{
       [non_witness_utxo]: <Non Witness Transaction Hex String>
       transaction_id: <Transaction Id Hex String>
@@ -78,10 +78,6 @@ module.exports = (args, cbk) => {
 
         if (!args.lnd) {
           return cbk([400, 'ExpectedAuthenticatedLndToRegisterPendingOpen']);
-        }
-
-        if (!args.pending) {
-          return cbk([400, 'ExpectedPendingChannelIdToRegisterPendingOpen']);
         }
 
         if (!isArray(args.utxos)) {
@@ -154,6 +150,11 @@ module.exports = (args, cbk) => {
       clean: ['request', ({request}, cbk) => {
         // Exit early when there was no error registering the pending channel
         if (!request.error) {
+          return cbk();
+        }
+
+        // Exit early if there is no pending id
+        if (!args.pending) {
           return cbk();
         }
 

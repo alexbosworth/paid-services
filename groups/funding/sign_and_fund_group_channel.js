@@ -40,7 +40,7 @@ const times = 500;
 /** Sign and fund group channel
 
   {
-    id: <Pending Channel Id Hex String>
+    [id]: <Pending Channel Id Hex String>
     lnd: <Authenticated LND API Object>
     psbt: <Base Funding PSBT Hex String>
     utxos: [{
@@ -74,10 +74,6 @@ module.exports = ({id, lnd, psbt, utxos}, cbk) => {
 
       // Check arguments
       validate: cbk => {
-        if (!id) {
-          return cbk([400, 'ExpectedPendingChannelIdToSignAndFundGroupChan']);
-        }
-
         if (!lnd) {
           return cbk([400, 'ExpectedAuthenticatedLndToSignAndFundGroupChan']);
         }
@@ -254,6 +250,11 @@ module.exports = ({id, lnd, psbt, utxos}, cbk) => {
 
       // Fund the pending channel with the finalized PSBT
       fundChannel: ['conflict', 'finalizePsbt', ({finalizePsbt}, cbk) => {
+        // Exit early when this is a pair channel and there is no proposal
+        if (!id) {
+          return cbk();
+        }
+
         return fundPendingChannels({
           lnd,
           channels: [id],
@@ -264,6 +265,11 @@ module.exports = ({id, lnd, psbt, utxos}, cbk) => {
 
       // Confirm that the outgoing pending channel is present
       confirmOutPending: ['ecp', 'fundChannel', ({ecp}, cbk) => {
+        // Exit early when this is a pair channel and there is no proposal
+        if (!id) {
+          return cbk();
+        }
+
         const tx = fromHex(decodePsbt({ecp, psbt}).unsigned_transaction);
 
         // Wait for the outgoing pending channel to be present

@@ -13,6 +13,7 @@ const defaultConnectPollTimes = 2 * 60 * 5;
 const defaultGroupPartnersIntervalMs = 500;
 const defaultGroupPartnersPollTimes = 2 * 60 * 60 * 24 * 3;
 const defaultRequestTimeoutMs = 1000 * 60;
+const minGroupCount = 2;
 const missingGroupPartners = 'NoGroupPartnersFound';
 const typeGroupChannelId = '1';
 
@@ -30,13 +31,17 @@ const typeGroupChannelId = '1';
     outbound: <Outbound Peer Public Key Identity Hex String>
   }
 */
-module.exports = ({coordinator, id, lnd}, cbk) => {
+module.exports = ({coordinator, count, id, lnd}, cbk) => {
   return new Promise((resolve, reject) => {
     return asyncAuto({
       // Check arguments
       validate: cbk => {
         if (!coordinator) {
           return cbk([400, 'ExpectedCoordinatorToFindGroupPartners']);
+        }
+
+        if (!count) {
+          return cbk([400, 'ExpectedGroupMemberCountToFindGroupPartners']);
         }
 
         if (!id) {
@@ -84,6 +89,11 @@ module.exports = ({coordinator, id, lnd}, cbk) => {
               return cbk(err);
             }
 
+            // Exit early when the group is a pair
+            if (count === minGroupCount) {
+              return cbk();
+            }
+
             // Exit with error when there are no group partners
             if (!res.records || !res.records.length) {
               return cbk([503, missingGroupPartners]);
@@ -97,6 +107,11 @@ module.exports = ({coordinator, id, lnd}, cbk) => {
 
       // Parse the group partners response
       partners: ['request', ({request}, cbk) => {
+        // Exit early when there are no records
+        if (!request) {
+          return cbk(null, {outbound: coordinator});
+        }
+
         try {
           return cbk(null, decodePartnersRecords({records: request}));
         } catch (err) {
@@ -106,6 +121,11 @@ module.exports = ({coordinator, id, lnd}, cbk) => {
 
       // Attempt to connect to the partners
       peer: ['partners', ({partners}, cbk) => {
+        // Exit early when there are no partners
+        if (!partners.inbound) {
+          return cbk();
+        }
+
         return asyncEach([partners.inbound, partners.outbound], (id, cbk) => {
           return asyncRetry({
             interval: defaultConnectIntervalMs,

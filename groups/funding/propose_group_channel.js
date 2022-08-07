@@ -1,14 +1,19 @@
 const asyncAuto = require('async/auto');
 const asyncEach = require('async/each');
 const {fundPsbtDisallowingInputs} = require('ln-sync');
+const {getNetwork} = require('ln-sync');
 const {getUtxos} = require('ln-service');
 const {openChannels} = require('ln-service');
+const {networks} = require('bitcoinjs-lib');
+const {payments} = require('bitcoinjs-lib');
 const {returnResult} = require('asyncjs-util');
 const {unlockUtxo} = require('ln-service');
 
+const dummyKeys = () => ([Buffer.alloc(33, 2), Buffer.alloc(33, 3)]);
 const fuzzSize = 1;
 const halfOf = n => n / 2;
 const isEven = n => !(n % 2);
+const minGroupCount = 2;
 const nestedSegWitAddressFormat = 'np2wpkh';
 const nestedSegWitPath = "m/49'/";
 
@@ -18,7 +23,7 @@ const nestedSegWitPath = "m/49'/";
     capacity: <Channel Capacity Tokens Number>
     lnd: <Authenticated LND API Object>
     rate: <Fee Rate Number>
-    to: <Peer Id Public Key Hex String>
+    [to]: <Peer Id Public Key Hex String>
   }
 
   @returns via cbk or Promise
@@ -45,13 +50,17 @@ const nestedSegWitPath = "m/49'/";
     }]
   }
 */
-module.exports = ({capacity, lnd, rate, to}, cbk) => {
+module.exports = ({capacity, count, lnd, rate, to}, cbk) => {
   return new Promise((resolve, reject) => {
     return asyncAuto({
       // Check arguments
       validate: cbk => {
         if (!capacity) {
           return cbk([400, 'ExpectedCapacityToProposeGroupChannel']);
+        }
+
+        if (!count) {
+          return cbk([400, 'ExpectedGroupCountToProposeGroupChannel']);
         }
 
         if (!isEven(capacity)) {
@@ -66,28 +75,59 @@ module.exports = ({capacity, lnd, rate, to}, cbk) => {
           return cbk([400, 'ExpectedChainFeeRateToProposeGroupChannel']);
         }
 
-        if (!to) {
-          return cbk([400, 'ExpectedChannelPartnerPublicKeyToProposeChannel']);
-        }
-
         return cbk();
       },
 
       // Get inputs to figure out which cannot be used for a group funding
       getInputs: ['validate', ({}, cbk) => getUtxos({lnd}, cbk)],
 
+      // Get the bitcoinjs network name for dummy output derivation
+      getNetwork: ['validate', ({}, cbk) => getNetwork({lnd}, cbk)],
+
       // Propose the channel to get an address to fund
-      propose: ['validate', ({}, cbk) => {
+      propose: ['getNetwork', ({getNetwork}, cbk) => {
+        const tokens = halfOf(capacity);
+
+        // Exit early when there is a shared proposal due to a pair group
+        if (!to) {
+          const {address} = payments.p2wsh({
+            network: networks[getNetwork.bitcoinjs],
+            redeem: payments.p2ms({
+              m: dummyKeys().length,
+              network: networks[getNetwork.bitcoinjs],
+              pubkeys: dummyKeys(),
+            }),
+          });
+
+          // Pretend we are opening a channel when there is no outbound target
+          return cbk(null, {pending: [{address, tokens}]});
+        }
+
+        // Propose a channel
         return openChannels({
           lnd,
           channels: [{
             capacity,
-            give_tokens: halfOf(capacity),
+            give_tokens: tokens,
             partner_public_key: to,
           }],
           is_avoiding_broadcast: true,
         },
-        cbk);
+        (err, res) => {
+          if (!!err) {
+            return cbk(err);
+          }
+
+          // Exit early with the regular pending when it's a normal group size
+          if (count > minGroupCount) {
+            return cbk(null, res);
+          }
+
+          // In a pair group size, remap the funding so that it's only half
+          const [{address, id}] = res.pending;
+
+          return cbk(null, {pending: [{address, id, tokens}]});
+        });
       }],
 
       // Fund the address to populate UTXOs that can be used
@@ -145,10 +185,13 @@ module.exports = ({capacity, lnd, rate, to}, cbk) => {
         // Find the change output
         const change = fund.outputs.find(n => n.is_change);
 
-        // UTXOs have been selected and channel has been proposed to peer
+        // Find the funding output
+        const funding = fund.outputs.find(n => !n.is_change);
+
+        // UTXOs have been selected
         return cbk(null, {
           change: !!change ? change.output_script : undefined,
-          funding: fund.outputs.find(n => !n.is_change).output_script,
+          funding: !!to ? funding.output_script : undefined,
           id: proposal.id,
           overflow: !!change ? change.tokens : undefined,
           utxos: fund.inputs.map(input => ({

@@ -10,6 +10,7 @@ const typeCapacity = '1';
 const typeCount = '2';
 const typeRate = '3';
 const typeVersion = '0';
+const version = '1';
 
 /** Decode group details
 
@@ -41,8 +42,18 @@ module.exports = ({records}) => {
 
   const versionRecord = findRecord(records, typeVersion);
 
-  if (!!versionRecord) {
-    throw new Error('UnexpectedVersionOfGroupDetailsRecords');
+  if (!versionRecord) {
+    throw new Error('ExpectedVersionOfGroupDetailsRecords');
+  }
+
+  try {
+    decodeBigSize({encoded: versionRecord.value});
+  } catch (err) {
+    throw new Error('ExpectedValidVersionNumberInGroupRecords');
+  }
+
+  if (decodeBigSize({encoded: versionRecord.value}).decoded !== version) {
+    throw new Error('UnsupportedGroupVersion');
   }
 
   const capacityRecord = findRecord(records, typeCapacity);

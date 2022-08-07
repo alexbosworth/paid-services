@@ -21,7 +21,7 @@ const {serviceTypeRegisterSignedOpen} = require('./../../service_types');
 const findRecord = (records, type) => records.find(n => n.type === type);
 const {isArray} = Array;
 const makeGroupId = () => randomBytes(16).toString('hex');
-const minGroupCount = 3;
+const minGroupCount = 2;
 const now = () => new Date().toISOString();
 const staleDate = () => new Date(Date.now() - (1000 * 60 * 10)).toISOString();
 const typeGroupId = '1';
@@ -185,6 +185,11 @@ module.exports = ({capacity, count, identity, lnd, rate}) => {
 
     // Emit event that everyone has joined
     group.emitter.emit('joined', {ids: group.ids});
+
+    // Exit early when this is a pair group
+    if (count === minGroupCount) {
+      return res.success({});
+    }
 
     // Derive position in members list
     const {inbound, outbound} = partnersFromMembers({group, id: req.from});

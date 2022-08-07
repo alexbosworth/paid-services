@@ -16,6 +16,7 @@ const {signAndFundGroupChannel} = require('./funding');
 
 const {fromHex} = Transaction;
 const interval = 500;
+const minGroupCount = 2;
 const times = 2 * 60 * 10;
 
 /** Assemble a channel group
@@ -68,6 +69,10 @@ const times = 2 * 60 * 10;
   {}
 */
 module.exports = ({capacity, count, ecp, identity, lnd, rate}) => {
+  if (count < minGroupCount) {
+    throw new Error('ExpectedHigherGroupCountToAssembleChannelGroup');
+  }
+
   const coordinator = coordinateGroup({capacity, count, identity, lnd, rate});
   const emitter = new EventEmitter();
   const pending = {};
@@ -84,6 +89,11 @@ module.exports = ({capacity, count, ecp, identity, lnd, rate}) => {
   // Group members have registered themselves
   coordinator.events.once('joined', async ({ids}) => {
     emitter.emit('filled', {ids});
+
+    // Exit early when this is a pair group
+    if (count === minGroupCount) {
+      return coordinator.connected();
+    }
 
     const {inbound, outbound} = coordinator.partners(identity);
 
@@ -106,6 +116,7 @@ module.exports = ({capacity, count, ecp, identity, lnd, rate}) => {
       // Fund and propose the pending channel to the outbound partner
       const {change, funding, id, utxos} = await proposeGroupChannel({
         capacity,
+        count,
         lnd,
         rate,
         to: coordinator.partners(identity).outbound,
@@ -142,7 +153,7 @@ module.exports = ({capacity, count, ecp, identity, lnd, rate}) => {
         lnd,
         from: coordinator.partners(identity).inbound,
         id: fromHex(basePsbt.unsigned_transaction).getId(),
-        to: coordinator.partners(identity).outbound,
+        to: coordinator.partners(identity).outbound || undefined,
       });
     });
 
