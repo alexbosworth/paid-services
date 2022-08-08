@@ -1,5 +1,9 @@
 # Versions
 
+## Version 3.20.1
+
+- `manageTrades`: Fix seller connection when not peered
+
 ## Version 3.20.0
 
 - `manageGroupJoin`: Add support for 2 person groups

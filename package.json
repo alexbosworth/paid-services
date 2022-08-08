@@ -47,5 +47,5 @@
     "integration-tests": "tap -j 2 --branches=1 --functions=1 --lines=1 --statements=1 -t 180 test/integration/*.js",
     "test": "tap --branches=1 --functions=1 --lines=1 --statements=1 -t 60 test/actions/*.js test/balanced/*.js test/capacity/*.js test/client/*.js test/config/*.js test/p2p/*.js test/records/*.js test/respond/*.js test/server/*.js test/server/*.js test/services/*.js test/trades/*.js"
   },
-  "version": "3.20.0"
+  "version": "3.20.1"
 }

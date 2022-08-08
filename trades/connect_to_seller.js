@@ -66,6 +66,9 @@ module.exports = ({lnd, logger, nodes}, cbk) => {
       // Derive the self public key
       getIdentity: ['validate', ({}, cbk) => getIdentity({lnd}, cbk)],
 
+      // Get the actively connected peers
+      getPeered: ['validate', ({}, cbk) => getPeers({lnd}, cbk)],
+
       // Find node connect info to connect to
       getNodes: ['getIdentity', ({getIdentity}, cbk) => {
         return asyncMap(nodes, (connect, cbk) => {
@@ -144,13 +147,19 @@ module.exports = ({lnd, logger, nodes}, cbk) => {
       removePeer: [
         'getChannels',
         'getNodes',
-        ({getChannels, getNodes}, cbk) =>
+        'getPeered',
+        ({getChannels, getNodes, getPeered}, cbk) =>
       {
         const ids = getChannels.channels.map(n => n.partner_public_key);
 
         return asyncEach(getNodes, (node, cbk) => {
           // Exit early when there is no node id
           if (!node || !node.id || ids.includes(node.id)) {
+            return cbk();
+          }
+
+          // Exit early when already not peered
+          if (!getPeered.peers.map(n => n.public_key).includes(node.id)) {
             return cbk();
           }
 
@@ -181,7 +190,7 @@ module.exports = ({lnd, logger, nodes}, cbk) => {
       }],
 
       // Get the list of connected peers
-      getPeers: ['removePeer', ({}, cbk) => getPeers({lnd}, cbk)],
+      getPeers: ['validate', ({}, cbk) => getPeers({lnd}, cbk)],
 
       // Try and connect to a node in order to do p2p messaging
       connect: [
