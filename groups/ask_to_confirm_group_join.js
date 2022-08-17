@@ -105,7 +105,7 @@ module.exports = ({ask, lnd}, cbk) => {
         ({getAlias, getBalance, getDetails}, cbk) =>
       {
         // Check to make sure that there are on chain funds for this group
-        if (getBalance.chain_balance < getDetails.capacity) {
+        if (getBalance.chain_balance < getDetails.funding) {
           return cbk([
             400,
             'InsufficientChainFundsAvailableToJoinGroup',

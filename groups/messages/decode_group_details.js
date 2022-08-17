@@ -1,11 +1,13 @@
 const {decodeBigSize} = require('bolt01');
 
 const findRecord = (records, type) => records.find(n => n.type === type);
+const funding = (capacity, count) => count === 2 ? capacity / 2 : capacity;
 const {isArray} = Array;
 const isOdd = n => !!(n % 2);
 const maxCapacityTokens = BigInt(7e14);
 const maxMembersCount = BigInt(650);
 const maxFeeRate = BigInt(1e5);
+const minMembersCount = BigInt(2);
 const typeCapacity = '1';
 const typeCount = '2';
 const typeRate = '3';
@@ -28,6 +30,7 @@ const version = '1';
   {
     capacity: <Channel Capacity Tokens Number>
     count: <Target Members Count Number>
+    funding: <Amount Of Funding Required Tokens Number>
     rate: <Chain Fee Rate Number>
   }
 */
@@ -88,6 +91,10 @@ module.exports = ({records}) => {
     throw new Error('UnexpectedValueForCountInGroupRecords');
   }
 
+  if (BigInt(count) < minMembersCount) {
+    throw new Error('ExpectedHigherMembersCountInGroupDetails');
+  }
+
   const rateRecord = findRecord(records, typeRate);
 
   try {
@@ -105,6 +112,7 @@ module.exports = ({records}) => {
   return {
     capacity: Number(capacity),
     count: Number(count),
+    funding: funding(Number(capacity), Number(count)),
     rate: Number(rate),
   };
 };

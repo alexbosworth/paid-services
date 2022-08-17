@@ -24,6 +24,7 @@ const typeGroupChannelId = '1';
   {
     capacity: <Channel Capacity Tokens Number>
     count: <Target Members Count Number>
+    funding: <Amount Of Funding Required Tokens Number>
     rate: <Chain Fee Rate Number>
   }
 */

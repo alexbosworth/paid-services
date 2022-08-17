@@ -1,5 +1,9 @@
 # Versions
 
+## Version 3.20.2
+
+- `manageGroupJoin`: Allow opening a pair channel when funds are below capacity
+
 ## Version 3.20.1
 
 - `manageTrades`: Fix seller connection when not peered
