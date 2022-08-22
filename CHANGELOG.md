@@ -1,5 +1,9 @@
 # Versions
 
+## Version 3.20.3
+
+- `manageGroupJoin`: Allow coordinating pair when funds are below the capacity
+
 ## Version 3.20.2
 
 - `manageGroupJoin`: Allow opening a pair channel when funds are below capacity
