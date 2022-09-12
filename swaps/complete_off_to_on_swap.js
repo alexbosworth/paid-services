@@ -3,10 +3,14 @@ const {randomBytes} = require('crypto');
 
 const asyncAuto = require('async/auto');
 const asyncMap = require('async/map');
+const asyncMapSeries = require('async/mapSeries');
 const asyncRace = require('async/race');
 const asyncReflect = require('async/reflect');
+const asyncTimeout = require('async/timeout');
 const {bech32m} = require('bech32');
+const {beginGroupSigningSession} = require('ln-service');
 const {broadcastChainTransaction} = require('ln-service');
+const {cancelSwapOut} = require('goldengate');
 const {confirmationFee} = require('goldengate');
 const {controlBlock} = require('p2tr');
 const {createChainAddress} = require('ln-service');
@@ -14,18 +18,22 @@ const {diffieHellmanComputeSecret} = require('ln-service');
 const {findConfirmedOutput} = require('ln-sync');
 const {findDeposit} = require('goldengate');
 const {getChainFeeRate} = require('ln-service');
+const {getCoopSignedTx} = require('goldengate');
 const {getHeight} = require('ln-service');
 const {getIdentity} = require('ln-service');
 const {getNetwork} = require('ln-sync');
 const {getPayment} = require('ln-service');
 const {getPublicKey} = require('ln-service');
 const {hashForTree} = require('p2tr');
+const {lightningLabsSwapAuth} = require('goldengate');
+const {lightningLabsSwapService} = require('goldengate');
 const {networks} = require('bitcoinjs-lib');
 const {parsePaymentRequest} = require('ln-service');
 const {pay} = require('ln-service');
 const {payViaPaymentDetails} = require('ln-service');
 const {pointAdd} = require('tiny-secp256k1');
 const {privateAdd} = require('tiny-secp256k1');
+const {releaseSwapOutSecret} = require('goldengate');
 const {returnResult} = require('asyncjs-util');
 const {script} = require('bitcoinjs-lib');
 const {signTransaction} = require('ln-service');
@@ -39,6 +47,7 @@ const tinysecp = require('tiny-secp256k1');
 const {Transaction} = require('bitcoinjs-lib');
 const {v1OutputScript} = require('p2tr');
 
+const decodeLoopResponse = require('./decode_loop_response');
 const decodeOffToOnRecovery = require('./decode_off_to_on_recovery');
 const decodeOffToOnResponse = require('./decode_off_to_on_response');
 const {typePayMetadata} = require('./swap_field_types');
@@ -53,23 +62,31 @@ const defaultMaxPreimagePushFee = 10;
 const defaultMinSweepBlocks = 20;
 const defaultWaitForChainFundingMs = 1000 * 60 * 60 * 3;
 const encodeAddress = (prefix, data) => bech32m.encode(prefix, data);
+const externalKeyAsOutputScript = key => `5120${key}`;
 const family = 805;
 const {floor} = Math;
 const {from} = Buffer;
 const {fromHex} = Transaction;
 const fuzzBlocks = 100;
+const fuzzTimelock = 1;
+const getLoopCoopSignedTransaction = asyncTimeout(getCoopSignedTx, 1000 * 30);
 const hexAsBuffer = hex => Buffer.from(hex, 'hex');
+const {isArray} = Array;
 const maxClaimMultiple = (r, t) => Math.min(1000, ((1000 + t) / 150) / r);
 const maxCoopMultiple = (r, t) => Math.min(1000, ((1000 + t) / 100) / r);
 const messageRejected = 'PaymentRejectedByDestination';
+const {min} = Math;
 const minTokens = 10000;
 const minBlockMs = 1000 * 60;
 const pollInterval = {btcregtest: 100};
+const ppmRate = (fee, total) => fee * 1e6 / total.tokens;
 const preimageByteLength = 32;
 const pubKeyAsInternalKey = key => Buffer.from(key).slice(1).toString('hex');
+const pushSecret = asyncTimeout(releaseSwapOutSecret, 1000 * 30);
 const sha256 = preimage => createHash('sha256').update(preimage).digest('hex');
 const sighash = Transaction.SIGHASH_DEFAULT;
 const slowConfs = 144 * 7;
+const sumOf = arr => arr.reduce((sum, n) => sum + n, 0);
 const sweepInputIndex = 0;
 const times = n => Array(n).fill(null).map((_, i) => i);
 const tokensForPushPreimage = 1;
@@ -82,6 +99,7 @@ const v1AddressWords = key => [].concat(1).concat(bech32m.toWords(key));
     emitter: <Event Emitter Object>
     [is_avoiding_broadcast]: <Avoid Sweep Broadcast Bool>
     [is_external_funding]: <Externally Fund Swap Bool>
+    [is_loop_service]: <Complete Swap With Lightning Loop Service Bool>
     [is_uncooperative]: <Avoid Cooperative Signing Bool>
     lnd: <Autenticated LND API Object>
     max_fee_deposit: <Max Routing Fee Tokens For Deposit Number>
@@ -94,9 +112,6 @@ const v1AddressWords = key => [].concat(1).concat(bech32m.toWords(key));
   }
 
   @returns via cbk or Promise
-  {
-    transactions: [<Sweep Transaction Hex String>]
-  }
 */
 module.exports = (args, cbk) => {
   return new Promise((resolve, reject) => {
@@ -197,7 +212,35 @@ module.exports = (args, cbk) => {
       }],
 
       // Decode the response details
-      responseDetails: ['getNetwork', ({getNetwork}, cbk) => {
+      responseDetails: [
+        'getNetwork',
+        'requestDetails',
+        ({getNetwork, requestDetails}, cbk) =>
+      {
+        // Exit early when using the Lightning Loop service
+        if (!!args.is_loop_service) {
+          try {
+            const details = decodeLoopResponse({
+              network: getNetwork.bitcoinjs,
+              response: args.response,
+            });
+
+            return cbk(null, {
+              auth_macaroon: details.auth_macaroon,
+              auth_preimage: details.auth_preimage,
+              deposit_id: details.deposit_id,
+              deposit_request: details.deposit_request,
+              funding_hash: details.fund_id,
+              funding_payment: details.fund_payment,
+              request: details.fund_request,
+              refund_public_key: details.remote_public_key,
+              timeout: details.timeout,
+            });
+          } catch (err) {
+            return cbk([400, 'FailedToDecodeLoopResponseDetails', {err}]);
+          }
+        }
+
         try {
           // Decode the response
           const decoded = decodeOffToOnResponse({
@@ -208,6 +251,7 @@ module.exports = (args, cbk) => {
           return cbk(null, {
             coop_private_key_hash: decoded.coop_private_key_hash,
             coop_public_key: decoded.coop_public_key,
+            deposit_id: decoded.coop_private_key_hash,
             deposit_mtokens: decoded.deposit_mtokens,
             deposit_payment: decoded.deposit_payment,
             incoming_peer: decoded.incoming_peer,
@@ -219,6 +263,80 @@ module.exports = (args, cbk) => {
         } catch (err) {
           return cbk([400, 'FailedToDecodeResponseDetails', {err}]);
         }
+      }],
+
+      // Get the deposit payment details
+      getDepositPayment: ['responseDetails', ({responseDetails}, cbk) => {
+        const id = responseDetails.coop_private_key_hash;
+        const request = responseDetails.deposit_request;
+
+        return getPayment({
+          id: id || parsePaymentRequest({request}).id,
+          lnd: args.lnd,
+        },
+        (err, res) => {
+          // Ignore payment not found errors
+          if (isArray(err) && err.slice().shift() === 404) {
+            return cbk(null, {});
+          }
+
+          return cbk(err, res);
+        });
+      }],
+
+      // Get the funding payment details
+      getFundPayment: ['responseDetails', ({responseDetails}, cbk) => {
+        return getPayment({
+          id: parsePaymentRequest({request: responseDetails.request}).id,
+          lnd: args.lnd,
+        },
+        (err, res) => {
+          // Ignore payment not found errors
+          if (isArray(err) && err.slice().shift() === 404) {
+            return cbk(null, {});
+          }
+
+          return cbk(err, res);
+        });
+      }],
+
+      // Check that the swap id matches the request
+      checkSwapId: [
+        'requestDetails',
+        'responseDetails',
+        ({requestDetails, responseDetails}, cbk) =>
+      {
+        const request = responseDetails.request;
+        const swapId = sha256(hexAsBuffer(requestDetails.secret));
+
+        if (parsePaymentRequest({request}).id !== swapId) {
+          return cbk([400, 'IncorrectSwapResponseForSwapRequest']);
+        }
+
+        return cbk();
+      }],
+
+      // Initiate the Loop service connection for swap cosigning and releases
+      loopService: [
+        'getNetwork',
+        'responseDetails',
+        ({getNetwork, responseDetails}, cbk) =>
+      {
+        // Exit early when not using the Lightning Loop service
+        if (!args.is_loop_service) {
+          return cbk();
+        }
+
+        const {metadata} = lightningLabsSwapAuth({
+          macaroon: responseDetails.auth_macaroon,
+          preimage: responseDetails.auth_preimage,
+        });
+
+        const {service} = lightningLabsSwapService({
+          network: getNetwork.network,
+        });
+
+        return cbk(null, {metadata, service});
       }],
 
       // Get the claim public key
@@ -241,9 +359,20 @@ module.exports = (args, cbk) => {
       }],
 
       // Pay the funding request that is locked to the swap hash
-      payToFund: ['responseDetails', asyncReflect(({responseDetails}, cbk) => {
+      payToFund: [
+        'checkSwapId',
+        'getFundPayment',
+        'responseDetails',
+        asyncReflect(({getFundPayment, responseDetails}, cbk) =>
+      {
+        // Exit early when the payment is pending
+        if (!!getFundPayment.payment || !!getFundPayment.pending) {
+          return cbk();
+        }
+
         const request = responseDetails.request;
 
+        // Exit early when not paying to fund in-flow
         if (!!args.is_external_funding) {
           args.emitter.emit('update', {
             external_funding_pay_to_fund_swap_offchain: request,
@@ -263,6 +392,40 @@ module.exports = (args, cbk) => {
         },
         cbk);
       })],
+
+      // Cancel the swap when funding fails to release the deposit hold
+      cancelSwap: [
+        'loopService',
+        'payToFund',
+        'responseDetails',
+        ({loopService, payToFund, responseDetails}, cbk) =>
+      {
+        // Exit early when not using Lightning Loop and no way to cancel swap
+        if (!args.is_loop_service) {
+          return cbk(payToFund.error);
+        }
+
+        // Exit early when there is no need to cancel the swap
+        if (!payToFund.error) {
+          return cbk();
+        }
+
+        const fund = parsePaymentRequest({request: responseDetails.request});
+
+        return cancelSwapOut({
+          id: fund.id,
+          metadata: loopService.metadata,
+          payment: fund.payment,
+          service: loopService.service,
+        },
+        err => {
+          if (!!err) {
+            return cbk(err);
+          }
+
+          return cbk(payToFund.error);
+        });
+      }],
 
       // Calculate the deadline for the swap on-chain HTLC to confirm
       deadline: ['responseDetails', ({responseDetails}, cbk) => {
@@ -288,21 +451,14 @@ module.exports = (args, cbk) => {
         return cbk(null, getHeight.current_block_height - blocksSinceRequest);
       }],
 
-      // Derive swap details
-      swap: [
+      // Derive the swap script branches
+      branches: [
         'ecp',
         'getClaimKey',
         'requestDetails',
         'responseDetails',
         ({ecp, getClaimKey, requestDetails, responseDetails}, cbk) =>
       {
-        const privateKey = requestDetails.coop_private_key;
-
-        const jointPublicKey = pointAdd(
-          ecp.fromPrivateKey(hexAsBuffer(privateKey)).publicKey,
-          hexAsBuffer(responseDetails.coop_public_key)
-        );
-
         const swapScript = swapScriptBranches({
           ecp,
           claim_public_key: getClaimKey.public_key,
@@ -311,25 +467,92 @@ module.exports = (args, cbk) => {
           timeout: responseDetails.timeout,
         });
 
-        const output = v1OutputScript({
+        return cbk(null, {
+          branches: swapScript.branches,
+          claim: swapScript.claim,
           hash: hashForTree({branches: swapScript.branches}).hash,
+          timeout: responseDetails.timeout,
+        });
+      }],
+
+      // Derive the output script
+      joined: [
+        'ecp',
+        'branches',
+        'getClaimKey',
+        'requestDetails',
+        'responseDetails',
+        ({ecp, branches, getClaimKey, requestDetails, responseDetails}, cbk) =>
+      {
+        // Exit early when using MuSig2 with Lightning Loop
+        if (!!args.is_loop_service) {
+          return beginGroupSigningSession({
+            lnd: args.lnd,
+            key_family: family,
+            key_index: requestDetails.key_index,
+            public_keys: [
+              getClaimKey.public_key,
+              responseDetails.refund_public_key,
+            ],
+            root_hash: branches.hash,
+          },
+          cbk);
+        }
+
+        const privateKey = requestDetails.coop_private_key;
+
+        const jointPublicKey = pointAdd(
+          ecp.fromPrivateKey(hexAsBuffer(privateKey)).publicKey,
+          hexAsBuffer(responseDetails.coop_public_key)
+        );
+
+        const output = v1OutputScript({
+          hash: branches.hash,
           internal_key: bufferAsHex(from(jointPublicKey)),
         });
 
         return cbk(null, {
-          claim_script: swapScript.claim,
           external_key: output.external_key,
           internal_key: pubKeyAsInternalKey(jointPublicKey),
           output_script: output.script,
-          script_branches: swapScript.branches,
-          timeout: responseDetails.timeout,
+        });
+      }],
+
+      // Overall swap details
+      swap: ['branches', 'joined', ({branches, joined}, cbk) => {
+        // Exit early when using Lightning Loop swap service
+        if (!!args.is_loop_service) {
+          const output = v1OutputScript({
+            hash: branches.hash,
+            internal_key: joined.internal_key,
+          });
+
+          return cbk(null, {
+            claim_script: branches.claim,
+            external_key: output.external_key,
+            internal_key: joined.internal_key,
+            output_script: externalKeyAsOutputScript(joined.external_key),
+            script_branches: branches.branches,
+            timeout: branches.timeout,
+          });
+        }
+
+        return cbk(null, {
+          claim_script: branches.claim,
+          external_key: joined.external_key,
+          internal_key: joined.internal_key,
+          output_script: joined.output_script,
+          script_branches: branches.branches,
+          timeout: branches.timeout,
         });
       }],
 
       // Lock funds off-chain to the deposit
       payToDeposit: [
+        'checkSwapId',
         'deadline',
         'ecp',
+        'getDepositPayment',
         'getNetwork',
         'requestDetails',
         'responseDetails',
@@ -339,6 +562,7 @@ module.exports = (args, cbk) => {
           deadline,
           ecp,
           getNetwork,
+          getDepositPayment,
           requestDetails,
           responseDetails,
           startHeight,
@@ -346,6 +570,35 @@ module.exports = (args, cbk) => {
         },
         cbk) =>
       {
+        // Exit early when deposit payment is already existing
+        if (!!getDepositPayment.payment || !!getDepositPayment.pending) {
+          return cbk();
+        }
+
+        const request = responseDetails.deposit_request;
+
+        if (!!args.is_external_funding && !!args.is_loop_service) {
+          args.emitter.emit('update', {external_pay_deposit_request: request});
+
+          return cbk();
+        }
+
+        // Exit early when using the Lightning Loop service
+        if (!!args.is_loop_service) {
+          return pay({
+            request,
+            max_fee: args.max_fee_deposit,
+            lnd: args.lnd,
+          },
+          err => {
+            if (!!err) {
+              return cbk([503, 'UnexpectedErrorOnDepositPayment', {err}]);
+            }
+
+            return cbk();
+          });
+        }
+
         return asyncRace([
           // Don't bother waiting for the deposit to be taken
           cbk => {
@@ -364,6 +617,7 @@ module.exports = (args, cbk) => {
               cbk);
             }
 
+            // Look for the HTLC output on chain
             return findConfirmedOutput({
               lnd: args.lnd,
               min_confirmations: args.min_confirmations || defaultConfsCount,
@@ -403,7 +657,21 @@ module.exports = (args, cbk) => {
               payment: responseDetails.deposit_payment,
               routes: to.routes,
             },
-            cbk);
+            err => {
+              // Exit early when there is no error paying the deposit
+              if (!err) {
+                return cbk();
+              }
+
+              const [, message] = err;
+
+              // Exit early and ignore rejections from the destination
+              if (message === 'PaymentRejectedByDestination') {
+                return cbk();
+              }
+
+              return cbk(err);
+            });
           },
         ],
         cbk);
@@ -509,6 +777,7 @@ module.exports = (args, cbk) => {
         cbk) =>
       {
         const period = deadline.max_reveal_height - findOutput.confirm_height;
+        const rates = {};
         const startRate = getFeeRate.tokens_per_vbyte;
 
         const multiplier = maxClaimMultiple(startRate, requestDetails.tokens);
@@ -521,16 +790,15 @@ module.exports = (args, cbk) => {
             fee: startRate,
           });
 
-          return {
-            rate: floor(rate),
-            height: findOutput.confirm_height + blocks,
-          };
+          const feeRate = floor(rate);
+
+          return {rate: feeRate, height: findOutput.confirm_height + blocks};
         });
 
-        const claims = uniqBy(feeRates, 'rate').map(({rate, height}) => {
+        const claims = feeRates.map(({rate, height}) => {
           const {transaction} = taprootClaimTransaction({
             ecp,
-            block_height: height,
+            block_height: height - fuzzTimelock,
             claim_script: swap.claim_script,
             external_key: swap.external_key,
             fee_tokens_per_vbyte: rate,
@@ -547,10 +815,16 @@ module.exports = (args, cbk) => {
             transaction_vout: findOutput.transaction_vout,
           });
 
+          if (!!rates[rate]) {
+            return;
+          }
+
+          rates[rate] = true;
+
           return {height, transaction};
         });
 
-        return cbk(null, claims);
+        return cbk(null, claims.filter(n => !!n));
       }],
 
       // Sign claim transactions
@@ -564,6 +838,8 @@ module.exports = (args, cbk) => {
         if (!!requestDetails.solo_private_key) {
           return cbk(null, claimTxs);
         }
+
+        args.emitter.emit('update', {signing_unilateral_claim_tx: true});
 
         return asyncMap(claimTxs, ({height, transaction}, cbk) => {
           return signTransaction({
@@ -617,11 +893,13 @@ module.exports = (args, cbk) => {
       pushPreimage: [
         'ecp',
         'findOutput',
+        'loopService',
         'requestDetails',
         'responseDetails',
         'signClaims',
         asyncReflect(({
           ecp,
+          loopService,
           requestDetails,
           responseDetails,
           signClaims,
@@ -631,6 +909,25 @@ module.exports = (args, cbk) => {
         const [{transaction}] = signClaims;
 
         args.emitter.emit('update', {unilateral_claim_tx: transaction});
+
+        // Exit early when pushing the preimage to the Lightning Loop service
+        if (!!args.is_loop_service) {
+          args.emitter.emit('update', {releasing_funds: true});
+
+          return pushSecret({
+            is_taproot: true,
+            metadata: loopService.metadata,
+            secret: requestDetails.secret,
+            service: loopService.service,
+          },
+          err => {
+            if (!!err) {
+              return cbk([503, 'UnexpectedErrorPushingSwapSecret', {err}]);
+            }
+
+            return cbk();
+          });
+        }
 
         // Exit early when performing an uncooperative spend swap
         if (!!args.is_uncooperative) {
@@ -677,6 +974,11 @@ module.exports = (args, cbk) => {
         'responseDetails',
         asyncReflect(({responseDetails}, cbk) =>
       {
+        // Exit early when not needing the coop key for Lightning Loop request
+        if (!!args.is_loop_service) {
+          return cbk();
+        }
+
         // Exit early not pursuing a cooperative swap flow
         if (!!args.is_avoiding_broadcast || !!args.is_uncooperative) {
           return cbk();
@@ -715,26 +1017,31 @@ module.exports = (args, cbk) => {
 
       // Generate cooperative sweep transactions
       coopTx: [
+        'branches',
         'createAddress',
         'deadline',
         'ecp',
         'findCoopKey',
         'findOutput',
+        'getClaimKey',
         'getFeeRate',
         'getNetwork',
+        'loopService',
         'payToDeposit',
         'requestDetails',
         'responseDetails',
         'swap',
         asyncReflect(({
+          branches,
           createAddress,
           deadline,
           ecp,
           findCoopKey,
           findOutput,
+          getClaimKey,
           getFeeRate,
           getNetwork,
-          payToDeposit,
+          loopService,
           requestDetails,
           responseDetails,
           swap,
@@ -744,6 +1051,78 @@ module.exports = (args, cbk) => {
         // Exit early when not expecting a cooperative sweep
         if (!!args.is_avoiding_broadcast || !!args.is_uncooperative) {
           return cbk();
+        }
+
+        const period = deadline.max_reveal_height - findOutput.confirm_height;
+        const rates = {};
+        const startRate = getFeeRate.tokens_per_vbyte;
+
+        const multiplier = maxCoopMultiple(startRate, requestDetails.tokens);
+
+        const feeRates = times(period).map(blocks => {
+          const {rate} = confirmationFee({
+            multiplier,
+            before: deadline.max_reveal_height - findOutput.confirm_height,
+            cursor: blocks,
+            fee: startRate,
+          });
+
+          return {
+            height: findOutput.confirm_height + blocks,
+            rate: floor(rate),
+          };
+        });
+
+        // Exit early when using MuSig2 with Loop service
+        if (!!args.is_loop_service) {
+          args.emitter.emit('update', {requesting_coop_signatures: true});
+
+          return asyncMapSeries(feeRates, ({height, rate}, cbk) => {
+            // Exit early when this rate is already signed for
+            if (!!rates[rate]) {
+              return cbk();
+            }
+
+            // Skip signing for this rate in the future
+            rates[rate] = true;
+
+            return getLoopCoopSignedTransaction({
+              fee_tokens_per_vbyte: rate,
+              funding_hash: responseDetails.funding_hash,
+              funding_payment: responseDetails.funding_payment,
+              key_family: family,
+              key_index: requestDetails.key_index,
+              lnd: args.lnd,
+              metadata: loopService.metadata,
+              network: getNetwork.network,
+              output_script: swap.output_script,
+              public_keys: [
+                getClaimKey.public_key,
+                responseDetails.refund_public_key,
+              ],
+              root_hash: branches.hash,
+              script_branches: swap.script_branches,
+              service: loopService.service,
+              sweep_address: createAddress.address,
+              tokens: requestDetails.tokens,
+              transaction_id: findOutput.transaction_id,
+              transaction_vout: findOutput.transaction_vout,
+            },
+            (err, res) => {
+              if (!!err) {
+                return cbk([503, 'UnexpecctedErrorGettingCoopSign', {err}]);
+              }
+
+              return cbk(null, {height, transaction: res.transaction});
+            });
+          },
+          (err, res) => {
+            if (!!err) {
+              return cbk(err);
+            }
+
+            return cbk(null, res.filter(n => !!n));
+          });
         }
 
         if (!findCoopKey.value) {
@@ -769,25 +1148,6 @@ module.exports = (args, cbk) => {
         if (!coopKey.publicKey.equals(jointPublicKey)) {
           return cbk([503, 'ReceivedIncorrectPrivateCoopKey']);
         }
-
-        const period = deadline.max_reveal_height - findOutput.confirm_height;
-        const startRate = getFeeRate.tokens_per_vbyte;
-
-        const multiplier = maxCoopMultiple(startRate, requestDetails.tokens);
-
-        const feeRates = times(period).map(blocks => {
-          const {rate} = confirmationFee({
-            multiplier,
-            before: deadline.max_reveal_height - findOutput.confirm_height,
-            cursor: blocks,
-            fee: startRate,
-          });
-
-          return {
-            height: findOutput.confirm_height + blocks,
-            rate: floor(rate),
-          };
-        });
 
         // Derive sweep transactions at different fee rates
         const coop = feeRates.map(({height, rate}) => {
@@ -835,9 +1195,10 @@ module.exports = (args, cbk) => {
       publish: [
         'findOutput',
         'getNetwork',
+        'requestDetails',
         'swap',
         'sweeps',
-        ({findOutput, getNetwork, swap, sweeps}, cbk) =>
+        ({findOutput, getNetwork, requestDetails, swap, sweeps}, cbk) =>
       {
         // Exit early when avoiding broadcast of the sweep
         if (!!args.is_avoiding_broadcast) {
@@ -878,10 +1239,15 @@ module.exports = (args, cbk) => {
 
           const [{transaction}] = broadcast.reverse();
 
+          const tx = fromHex(transaction);
+
+          const fee = requestDetails.tokens - sumOf(tx.outs.map(n => n.value));
+
           args.emitter.emit('update', {
             blocks_until_potential_funds_forfeit: swap.timeout - block.height,
+            broadcasting_fee_rate: fee / tx.virtualSize(),
             broadcasting_tx_to_resolve_swap: transaction,
-            broadcasting_tx_id: fromHex(transaction).getId(),
+            broadcasting_tx_id: tx.getId(),
           });
 
           return broadcastChainTransaction({
@@ -895,7 +1261,11 @@ module.exports = (args, cbk) => {
 
         // Look for the sweep to confirm
         subSpend.on('confirmation', ({transaction}) => {
-          return done(null, fromHex(transaction).getId());
+          const tx = fromHex(transaction);
+
+          const fee = requestDetails.tokens - sumOf(tx.outs.map(n => n.value));
+
+          return done(null, {fee: fee, rate: fee / tx.virtualSize()});
         });
 
         subSpend.on('error', err => done(err));
@@ -903,34 +1273,48 @@ module.exports = (args, cbk) => {
         return;
       }],
 
-      // Get the funding payment
+      // Get the funding payment if a funding payment was made
       getFunding: ['responseDetails', 'publish', ({responseDetails}, cbk) => {
         const {id} = parsePaymentRequest({request: responseDetails.request});
 
         return getPayment({id, lnd: args.lnd}, cbk);
       }],
 
-      // Get the execution payment
+      // Get the execution payment to see what was paid and what fee
       getDeposit: ['responseDetails', 'publish', ({responseDetails}, cbk) => {
-        const id = responseDetails.coop_private_key_hash;
-
-        return getPayment({id, lnd: args.lnd}, cbk);
+        return getPayment({
+          id: responseDetails.deposit_id,
+          lnd: args.lnd,
+        },
+        cbk);
       }],
 
       // Summarize swap
       summary: [
         'getFunding',
         'getDeposit',
-        ({getFunding, getDeposit}, cbk) =>
+        'publish',
+        'requestDetails',
+        ({getFunding, getDeposit, publish, requestDetails}, cbk) =>
       {
         const deposit = getDeposit.payment || {};
         const funding = getFunding.payment || {};
 
+        const paid = [deposit.tokens, funding.tokens].filter(n => !!n);
+        const routing = [deposit.fee, funding.fee].filter(n => !!n);
+
+        const destinationFee = sumOf(paid) - requestDetails.tokens;
+
+        const allFees = destinationFee + sumOf(routing) + publish.fee;
+
         return cbk(null, {
-          paid_execution_fee: deposit.tokens,
-          paid_execution_routing: deposit.fee || undefined,
-          swap_payment_sent: funding.tokens,
-          swap_payment_routing_fee: funding.fee || undefined,
+          paid_chain_fee: publish.fee,
+          paid_execution_routing_fee: deposit.fee || undefined,
+          paid_funding_routing_fee: funding.fee || undefined,
+          paid_swap_fee: destinationFee || undefined,
+          total_fee: allFees,
+          total_fee_rate: ppmRate(allFees, requestDetails.tokens),
+          transaction_fee_rate: publish.rate,
         });
       }],
     },

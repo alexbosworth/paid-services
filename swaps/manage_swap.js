@@ -11,12 +11,15 @@ const {networks} = require('bitcoinjs-lib');
 const {returnResult} = require('asyncjs-util');
 
 const decodeOffToOnRequest = require('./decode_off_to_on_request');
+const decodeOffToOnRestart = require('./decode_off_to_on_restart');
 const {decodeTrade} = require('./../trades');
 const recoverResponseToSwapOut = require('./recover_response_to_swap_out');
 const requestSwapOut = require('./request_swap_out');
 const respondToSwapOutRequest = require('./respond_to_swap_out_request');
 
+const actionLoopRequest = 'loop-request';
 const actionPushRequest = 'push-request';
+const actionRestartRequest = 'restart-request';
 const allowedNetwork = 'btctestnet';
 const bip86Path = `m/86'/0'/0'`;
 const flatten = arr => [].concat(...arr);
@@ -199,8 +202,16 @@ module.exports = (args, cbk) => {
             value: actionPushRequest,
           },
           {
+            name: 'Request a swap from Lightning Loop (experimental)',
+            value: actionLoopRequest,
+          },
+          {
             name: 'Respond to a swap request',
             value: respondAction,
+          },
+          {
+            name: 'Recovery for swap request',
+            value: actionRestartRequest,
           },
           {
             name: 'Recovery for swap response',
@@ -232,6 +243,21 @@ module.exports = (args, cbk) => {
         ({remote}) => cbk(null, remote));
       }],
 
+      // Ask for a request restart code
+      askForRestart: ['selectAction', ({selectAction}, cbk) => {
+        // Exit early when not restarting a swap request
+        if (selectAction !== actionRestartRequest) {
+          return cbk();
+        }
+
+        return args.ask({
+          message: 'Restart recovery code?',
+          name: 'restart',
+          validate: input => !!input,
+        },
+        ({restart}) => cbk(null, restart));
+      }],
+
       // Find the remote identity key when specified
       findKey: ['askForRemote', ({askForRemote}, cbk) => {
         if (!askForRemote) {
@@ -248,6 +274,7 @@ module.exports = (args, cbk) => {
         ({selectAction}, cbk) =>
       {
         switch (selectAction) {
+        case actionLoopRequest:
         case actionPushRequest:
         case requestAction:
           return args.ask({
@@ -301,29 +328,53 @@ module.exports = (args, cbk) => {
       makeRequest: [
         'askForExternal',
         'askForRemote',
+        'askForRestart',
         'askForSweepAddress',
         'findKey',
+        'getNetwork',
         'hasTr',
         'selectAction',
         ({
           askForExternal,
+          askForRestart,
           askForRemote,
           askForSweepAddress,
           findKey,
+          getNetwork,
           hasTr,
           selectAction,
         },
         cbk) =>
       {
         switch (selectAction) {
+        case actionLoopRequest:
+        case requestAction:
+          break;
+
         case actionPushRequest:
           if (!findKey.public_key) {
             return cbk([400, 'UnknownNodeToPushSwapRequestTo']);
           }
           break;
 
-        case requestAction:
-          break;
+        case actionRestartRequest:
+          const restart = decodeOffToOnRestart({restart: askForRestart});
+
+          return requestSwapOut({
+            ask: args.ask,
+            fund_routing_fee_rate: restart.max_fund_fee_rate,
+            is_external_funding: restart.is_external_funding,
+            is_loop_service: restart.is_loop_service,
+            lnd: args.lnd,
+            logger: args.logger,
+            min_confirmations: restart.min_confirmations,
+            request: !hasTr ? args.request : undefined,
+            swap_recovery: restart.recovery,
+            swap_request: restart.request,
+            swap_response: restart.response,
+            sweep_address: restart.sweep_address,
+          },
+          cbk);
 
         default:
           return cbk();
@@ -332,6 +383,7 @@ module.exports = (args, cbk) => {
         return requestSwapOut({
           ask: args.ask,
           is_external_funding: askForExternal,
+          is_loop_service: selectAction === actionLoopRequest,
           lnd: args.lnd,
           logger: args.logger,
           push_to: findKey.public_key,
@@ -390,6 +442,7 @@ module.exports = (args, cbk) => {
         'selectAction',
         ({hasTr, selectAction}, cbk) =>
       {
+        // Exit early when not recovering on the response side
         if (selectAction !== recoverRespondAction) {
           return cbk();
         }

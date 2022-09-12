@@ -28,6 +28,7 @@ const {typeVersion} = publicTypes;
     coop_private_key: <Cooperative Private Key Hex String>
     key_index: <Claim Key Id Number>
     secret: <Swap Claim Secret Hex String>
+    [solo_private_key]: <Unilateral Private Key Hex String>
     tokens: <Tokens Number>
   }
 */
@@ -37,7 +38,7 @@ module.exports = ({decrypt, recovery}) => {
   }
 
   if (!recovery) {
-    throw new Error('ExpectedResponseToDecodeOffToOnRecovery');
+    throw new Error('ExpectedEncodedRecoveryToDecodeOffToOnRecovery');
   }
 
   try {

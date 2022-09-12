@@ -51,12 +51,14 @@ const fuzzBlocks = 100;
 const hexAsBase64 = hex => Buffer.from(hex, 'hex').toString('base64');
 const hexAsBuffer = hex => Buffer.from(hex, 'hex');
 const historicBlocksRange = 144 * 30;
+const isAnnex = element => element[0] === 0x50;
 const maxRefundMultiple = (r, t) => Math.min(100, ((1000 + t) / 150) / r);
 const {min} = Math;
 const minBlocks = 50;
 const pollInterval = {btcregtest: 100};
 const pubKeyAsInternalKey = key => Buffer.from(key).slice(1).toString('hex');
 const pubKeyAsSecret = hexPublicKey => hexPublicKey.slice(2);
+const removeAnnex = stack => stack.slice(0, -1);
 const sha256 = preimage => createHash('sha256').update(preimage).digest('hex');
 const sighash = Transaction.SIGHASH_DEFAULT;
 const slowTarget = 144 * 7;
@@ -690,15 +692,22 @@ module.exports = (args, cbk) => {
             return input.index === outpoint.vout;
           });
 
+          const [lastElement, nextToLast] = spend.witness.slice().reverse();
+
+          const hasAnnex = isAnnex(lastElement) && !!nextToLast;
+
+          // Only consider the witness stack without the annex element
+          const stack = hasAnnex ? removeAnnex(spend.witness) : spend.witness;
+
           // Exit early when swap is spent with a signature
-          if (spend.witness.length === witnessLengthCoopSweep) {
+          if (stack.length === witnessLengthCoopSweep) {
             args.emitter.emit('update', {swap_coop_success: transaction});
 
             return;
           }
 
           // Exit early when swap is spent with a timeout
-          if (spend.witness.length === witnessLengthTimeoutSweep) {
+          if (stack.length === witnessLengthTimeoutSweep) {
             args.emitter.emit('update', {swap_timeout_complete: transaction});
 
             // Don't bother waiting for swap funding anymore
@@ -713,7 +722,7 @@ module.exports = (args, cbk) => {
 
           args.emitter.emit('update', {swap_peer_solo_success: transaction});
 
-          const [secret] = spend.witness;
+          const [secret] = stack;
 
           return done(null, {secret: bufferAsHex(secret)});
         });

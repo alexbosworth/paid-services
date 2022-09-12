@@ -9,7 +9,7 @@ const decodeNumber = encoded => decodeBigSize({encoded}).decoded;
 const findRecord = (records, type) => records.find(n => n.type === type);
 const isHash = n => n.length === 64;
 const isPublicKey = n => !!n && /^0[2-3][0-9A-F]{64}$/i.test(n); 
-const maxTok = BigInt(21e14);
+const maxNum = BigInt(21e14);
 const paymentNonceLength = 64;
 const startIndex = 0;
 const typeCoopPrivateKeyHash = publicTypes.typeRefundCoopPrivateKeyHash;
@@ -117,7 +117,7 @@ module.exports = ({network, response}) => {
     throw new Error('ExpectedValidDepositAmountInOffToOnResponse');
   }
 
-  if (BigInt(decodeBigSize({encoded: depositAmount}).decoded) > maxTok) {
+  if (BigInt(decodeBigSize({encoded: depositAmount}).decoded) > maxNum) {
     throw new Error('ExpectedSmallerDepositAmountInOffToOnResponse');
   }
 
@@ -156,6 +156,10 @@ module.exports = ({network, response}) => {
 
   if (!timeoutRecord) {
     throw new Error('ExpectedSwapTimeoutInOffToOnResponse');
+  }
+
+  if (BigInt(decodeBigSize({encoded: timeoutRecord.value}).decoded) > maxNum) {
+    throw new Error('ExpectedLowerTimeoutHeightInOffToOnResponse');
   }
 
   try {

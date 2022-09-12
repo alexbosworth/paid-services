@@ -1,5 +1,10 @@
 # Versions
 
+## Version 3.21.0
+
+- `manageSwap`: Add recovery for swap requests
+- `manageSwap`: Add support for experimental Lightning Loop MuSig2 Taproot swap
+
 ## Version 3.20.3
 
 - `manageGroupJoin`: Allow coordinating pair when funds are below the capacity

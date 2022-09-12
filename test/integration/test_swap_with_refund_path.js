@@ -30,6 +30,9 @@ test(`Timeout a swap`, async ({end, equal, strictSame}) => {
 
   const {keys} = await getMasterPublicKeys({lnd});
 
+  // Collect response messages
+  const responder = [];
+
   // Exit early when taproot is not supported
   if (!keys.find(n => n.derivation_path === taprootDerivationPath)) {
     await kill({});
@@ -44,6 +47,8 @@ test(`Timeout a swap`, async ({end, equal, strictSame}) => {
     {
       // Make a channel
       await asyncRetry({interval, times}, async () => {
+        await generate({});
+
         await openChannel({
           lnd,
           local_tokens: capacity,
@@ -117,6 +122,8 @@ test(`Timeout a swap`, async ({end, equal, strictSame}) => {
               lnd: target.lnd,
               logger: {
                 info: async message => {
+                  responder.push(message);
+
                   // Push chain forward to timeout
                   if (!!message.blocks_until_timeout) {
                     return await target.generate({});
@@ -159,8 +166,14 @@ test(`Timeout a swap`, async ({end, equal, strictSame}) => {
       },
     });
   } catch (err) {
-    strictSame(err, null, 'Expected no failure');
+    const [, msg] = err;
+
+    strictSame(msg, 'PaymentRejectedByDestination', 'Expected failed swap');
   }
+
+  const complete = responder.find(n => !!n.swap_timeout_complete);
+
+  strictSame(!!complete, true, 'Swap refund completed');
 
   await kill({});
 

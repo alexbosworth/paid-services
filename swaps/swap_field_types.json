@@ -1,4 +1,13 @@
 {
+  "loopResponseTypes": {
+    "typeVersion": "0",
+    "typeDepositRequest": "1",
+    "typeFundRequest": "2",
+    "typeMacaroon": "3",
+    "typePreimage": "4",
+    "typeRemotePublicKey": "5",
+    "typeTimeout": "6"
+  },
   "privateTypes": {
     "typeAuthTag": "1",
     "typeCipher": "2",
@@ -27,6 +36,22 @@
   "pushTypes": {
     "typeSwapId": "0",
     "typeSwapResponse": "1"
+  },
+  "swapRequestOptions": {
+    "1": "avoiding_broadcast",
+    "2": "external_funding",
+    "3": "loop_service",
+    "4": "uncooperative"
+  },
+  "swapRestartTypes": {
+    "typeMaxDepositFee": "1",
+    "typeMaxFundFeeRate": "2",
+    "typeMinConfirmations": "3",
+    "typeSwapOptions": "4",
+    "typeSwapRecovery": "5",
+    "typeSwapRequest": "6",
+    "typeSwapResponse": "7",
+    "typeSweepAddress": "8"
   },
   "swapVersion": 1,
   "typePayMetadata": "805001"
