@@ -1,5 +1,6 @@
 const asyncAuto = require('async/auto');
 const asyncMap = require('async/map');
+const {getChainBalance} = require('ln-service');
 const {getIdentity} = require('ln-service');
 const {getMethods} = require('ln-service');
 const {getNodeAlias} = require('ln-sync');
@@ -8,6 +9,8 @@ const tinysecp = require('tiny-secp256k1');
 
 const assembleChannelGroup = require('./assemble_channel_group');
 
+const halfOf = n => n / 2;
+const isOdd = n => !!(n % 2);
 const join = arr => arr.join(', ');
 const maxGroupSize = 420;
 const minChannelSize = 2e4;
@@ -44,6 +47,10 @@ module.exports = (args, cbk) => {
           return cbk([400, 'ExpectedChannelCapacityGreaterThanMinChannelSizeToCreateGroup'])
         }
 
+        if (isOdd(args.capacity)) {
+          return cbk([400, 'ExpectedEvenChannelCapacityToCreateGroup']);
+        }
+
         if (!args.count) {
           return cbk([400, 'ExpectedGroupSizeToCreateGroupp']);
         }
@@ -67,6 +74,27 @@ module.exports = (args, cbk) => {
         return cbk();
       },
 
+      // Get onchain balance
+      getBalance: ['validate', ({}, cbk) => {
+        const isPair = args.count === minGroupSize;
+
+        getChainBalance({lnd: args.lnd}, (err, res) => {
+          if (!!err) {
+            return cbk(err);
+          }
+
+          if (!isPair && args.capacity > res.chain_balance) {
+            return cbk([400, 'ExpectedCapacityLowerThanCurrentChainBalance']);
+          }
+
+          if (isPair && halfOf(args.capacity) > res.chain_balance) {
+            return cbk([400, 'ExpectedCapacityLowerThanCurrentChainBalance']);
+          }
+
+          return cbk();
+        });
+      }],
+
       // Get identity public key
       getIdentity: ['validate', ({}, cbk) => getIdentity({lnd: args.lnd}, cbk)],
 
@@ -86,6 +114,7 @@ module.exports = (args, cbk) => {
       create: [
         'ecp',
         'confirmSigner',
+        'getBalance',
         'getIdentity',
         ({ecp, getIdentity}, cbk) =>
       {
