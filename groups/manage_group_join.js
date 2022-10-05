@@ -11,6 +11,7 @@ const halfOf = n => Number(n) / 2;
 const isCode = n => !!n && n.length === 98;
 const isOdd = n => !!(n % 2);
 const joinOption = 'join';
+const maxChainFeeRate = 10;
 const maxGroupSize = 420;
 const minChannelSize = 2e4;
 const minGroupSize = 2;
@@ -67,6 +68,10 @@ module.exports = (args, cbk) => {
 
           if (args.type === createOption && !args.rate) {
             return cbk([400, 'ExpectedFeeRateToManageGroupJoin']);
+          }
+
+          if (args.type === createOption && args.rate > maxChainFeeRate) {
+            return cbk([400, 'ExpectedChainFeeRateBelowMaxAllowedFeeRate']);
           }
 
           if (args.type === createOption && !args.count) {
