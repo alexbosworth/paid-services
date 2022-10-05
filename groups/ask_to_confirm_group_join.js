@@ -20,7 +20,9 @@ const tokensAsBigUnit = tokens => (tokens / 1e8).toFixed(8);
 
   {
     ask: <Ask Function>
+    [code]: <Invite Code String>
     lnd: <Authenticated LND API Object>
+    logger: <Winston Logger Object>
   }
 
   @returns via cbk or Promise
@@ -32,7 +34,7 @@ const tokensAsBigUnit = tokens => (tokens / 1e8).toFixed(8);
     rate: <Chain Fee Tokens Per VByte Number>
   }
 */
-module.exports = ({ask, lnd}, cbk) => {
+module.exports = ({ask, code, lnd, logger}, cbk) => {
   return new Promise((resolve, reject) => {
     return asyncAuto({
       // Check arguments
@@ -45,11 +47,20 @@ module.exports = ({ask, lnd}, cbk) => {
           return cbk([400, 'ExpectedAuthenticatedLndToConfirmGroupJoin']);
         }
 
+        if (!logger) {
+          return cbk([400, 'ExpectedWinstonLoggerToConfirmGroupJoin']);
+        }
+
         return cbk();
       },
 
       // Ask for the group entry code
       askForCode: ['validate', ({}, cbk) => {
+        // Exit early if join code is already present
+        if (!!code) {
+          return cbk(null, code);
+        }
+
         return ask({
           name: 'code',
           message: 'Enter a group join code to join a group',
@@ -117,6 +128,18 @@ module.exports = ({ask, lnd}, cbk) => {
         const members = `${getDetails.count} member group`;
         const size = `with ${tokensAsBigUnit(getDetails.capacity)} channels`;
         const rate = `${getDetails.rate}/vbyte chain fee`;
+
+        // Skip confirmation if non-interactive open
+        if (!!code) {
+          logger.info({
+            coordinatedBy,
+            members,
+            size,
+            rate
+          });
+
+          return cbk(null, true);
+        }
 
         return ask({
           name: 'join',

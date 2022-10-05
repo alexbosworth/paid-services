@@ -13,7 +13,9 @@ const niceName = ({alias, id}) => `${alias} ${id}`.trim();
 
   {
     ask: <Ask Function>
+    [code]: <Invite Code String>
     lnd: <Authenticated LND API Object>
+    logger: <Winston Logger Object>
   }
 
   @returns via cbk or Promise
@@ -21,7 +23,7 @@ const niceName = ({alias, id}) => `${alias} ${id}`.trim();
     id: <Transaction Id Hex String>
   }
 */
-module.exports = ({ask, lnd, logger}, cbk) => {
+module.exports = ({ask, code, lnd, logger}, cbk) => {
   return new Promise((resolve, reject) => {
     return asyncAuto({
       // Check arguments
@@ -43,7 +45,7 @@ module.exports = ({ask, lnd, logger}, cbk) => {
 
       // Ask for group details to parse and confirm
       askForDetails: ['validate', ({}, cbk) => {
-        return askToConfirmGroupJoin({ask, lnd}, cbk);
+        return askToConfirmGroupJoin({ask, code, lnd, logger}, cbk);
       }],
 
       // Join the channel group

@@ -15,8 +15,11 @@ const niceName = ({alias, id}) => `${alias} ${id}`.trim();
 
   {
     ask: <Ask Function>
+    [capacity]: <Channel Capacity Number>
+    [count]: <Group Size Number>
     lnd: <Authenticated LND API Object>
     logger: <Winston Logger Object>
+    [rate]: <Opening Fee Rate Number>
   }
 
   @returns via cbk or Promise
@@ -25,7 +28,7 @@ const niceName = ({alias, id}) => `${alias} ${id}`.trim();
     transaction: <Raw Transaction Hex String>
   }
 */
-module.exports = ({ask, lnd, logger}, cbk) => {
+module.exports = ({ask, capacity, count, lnd, logger, rate}, cbk) => {
   return new Promise((resolve, reject) => {
     return asyncAuto({
       // Import ECPair library
@@ -50,6 +53,11 @@ module.exports = ({ask, lnd, logger}, cbk) => {
 
       // Ask for group details
       askForDetails: ['validate', ({}, cbk) => {
+        // Exit early if coordinating non-interactive open
+        if (!!capacity && !!count && !!rate) {
+          return cbk(null, {capacity, count, rate});
+        }
+        
         return askForGroupDetails({ask, lnd}, cbk);
       }],
 
