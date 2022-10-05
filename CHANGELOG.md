@@ -1,5 +1,14 @@
 # Versions
 
+## Version 4.0.0
+
+- `createGroupChannel`: Add method to coordinate a channel group
+- `joinGroupChannel`: Add method to join a channel group
+
+### Breaking Changes
+
+- Node.js version 14 or higher is now required
+
 ## Version 3.21.0
 
 - `manageSwap`: Add recovery for swap requests
