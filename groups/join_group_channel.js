@@ -15,23 +15,25 @@ const signPsbtEndpoint = '/walletrpc.WalletKit/SignPsbt';
 /** Join a channel group
 
   {
-    ask: <Ask Function>
     code: <Group Invite Code String>
     lnd: <Authenticated LND API Object>
     logger: <Winston Logger Object>
-    max_rate: <Max Opening Fee Rate Number>
+    max_rate: <Max Opening Chain Fee Tokens Per VByte Fee Rate Number>
   }
 
   @returns via cbk or Promise
+  {
+    transaction_id: <Channel Funding Transaction Id Hex String>
+  }
 */
 module.exports = (args, cbk) => {
   return new Promise((resolve, reject) => {
     return asyncAuto({
       // Check arguments
-      validate: cbk => {    
+      validate: cbk => {
         if (!isCode(args.code)) {
           return cbk([400, 'ExpectedValidJoinCodeToJoinGroup']);
-        }  
+        }
 
         if (!args.lnd) {
           return cbk([400, 'ExpectedAuthenticatedLndToJoinGroup']);
@@ -54,31 +56,31 @@ module.exports = (args, cbk) => {
       // Make sure that partially signing a PSBT is valid
       confirmSigner: ['getMethods', ({getMethods}, cbk) => {
         if (!getMethods.methods.find(n => n.endpoint === signPsbtEndpoint)) {
-          return cbk([400, 'ExpectedLndSupportingPartialPsbtSigning']);
+          return cbk([400, 'ExpectedLndSupportingPartialPsbtSigningToJoin']);
         }
 
         return cbk();
       }],
 
-      // Decode the code and get group details
+      // Decode the group invite code and get group details
       getJoinDetails: ['confirmSigner', ({}, cbk) => {
         return getJoinDetails({
-          code: args.code, 
-          lnd: args.lnd, 
+          code: args.code,
+          lnd: args.lnd,
           logger: args.logger,
-        }, 
-        cbk)
+        },
+        cbk);
       }],
 
       // Join the channel group
       join: [
-        'confirmSigner', 
+        'confirmSigner',
         'getMethods',
-        'getJoinDetails', 
-        ({getJoinDetails}, cbk) => 
+        'getJoinDetails',
+        ({getJoinDetails}, cbk) =>
       {
         if (getJoinDetails.rate > args.max_rate) {
-          return cbk(['400', 'ExpectedHigherMaxFeeRateToJoinGroup']);
+          return cbk([400, 'ExpectedHigherMaxFeeRateToJoinGroup']);
         }
 
         args.logger.info({waiting_for_other_members: true});
@@ -95,6 +97,7 @@ module.exports = (args, cbk) => {
         join.once('end', ({id}) => cbk(null, {transaction_id: id}));
         join.once('error', err => cbk(err));
 
+        // After the group is filled the members are matched and peer up
         join.once('peering', async ({inbound, outbound}) => {
           const nodes = await asyncMap([inbound, outbound], async id => {
             return niceName(await getNodeAlias({id, lnd: args.lnd}));
@@ -103,6 +106,7 @@ module.exports = (args, cbk) => {
           return args.logger.info({peering_with: formatNodes(nodes)});
         });
 
+        // Once everyone is peered then the channel tx is made
         join.once('publishing', ({refund, signed}) => {
           return args.logger.info({refund, signed});
         });

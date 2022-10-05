@@ -12,6 +12,7 @@ const groupIdFromJoinCode = n => n.slice(66);
 const interval = 500;
 const isCode = n => !!n && n.length === 98;
 const isPublicKey = n => !!n && /^0[2-3][0-9A-F]{64}$/i.test(n);
+const join = arr => arr.join(' ');
 const niceName = n => `${n.alias} ${n.id}`.trim();
 const times = 2 * 60;
 const tokensAsBigUnit = tokens => (tokens / 1e8).toFixed(8);
@@ -39,11 +40,11 @@ module.exports = ({code, lnd, logger}, cbk) => {
       // Check arguments
       validate: cbk => {
         if (!isCode(code)) {
-          return cbk([400, 'ExpectedInviteCodeToGetJoinDetails']);
+          return cbk([400, 'ExpectedChannelGroupInviteCodeToGetJoinDetails']);
         }
 
         if (!lnd) {
-          return cbk([400, 'ExpectedAuthenticatedLndToGetJoinDetails']);
+          return cbk([400, 'ExpectedAuthenticatedLndToGetJoinGroupDetails']);
         }
 
         if (!logger) {
@@ -77,7 +78,7 @@ module.exports = ({code, lnd, logger}, cbk) => {
         cbk);
       }],
 
-      // Get the coordinator node alias
+      // Get the coordinator node alias to log it out
       getAlias: ['group', ({group}, cbk) => {
         return getNodeAlias({lnd, id: group.coordinator}, cbk);
       }],
@@ -92,33 +93,28 @@ module.exports = ({code, lnd, logger}, cbk) => {
         cbk);
       }],
 
-      // Log the details
+      // Log the details of the group being joined
       log: [
         'getAlias',
         'getBalance',
         'getDetails',
         ({getAlias, getBalance, getDetails}, cbk) =>
       {
+        const coordinatedBy = `coordinated by ${niceName(getAlias)}`;
+        const members = `${getDetails.count} member group`;
+        const size = `with ${tokensAsBigUnit(getDetails.capacity)} channels`;
+        const rate = `and paying ${getDetails.rate}/vbyte chain fee`;
+
+        logger.info({joining: join([members, coordinatedBy, size, rate])});
+
         // Check to make sure that there are on chain funds for this group
         if (getBalance.chain_balance < getDetails.funding) {
           return cbk([
             400,
             'InsufficientChainFundsAvailableToJoinGroup',
-            {channel_capacity: tokensAsBigUnit(getDetails.capacity)},
+            {chain_balance: getBalance.chain_balance},
           ]);
         }
-
-        const coordinatedBy = `coordinated by ${niceName(getAlias)}`;
-        const members = `${getDetails.count} member group`;
-        const size = `with ${tokensAsBigUnit(getDetails.capacity)} channels`;
-        const rate = `${getDetails.rate}/vbyte chain fee`;
-
-        logger.info({
-          coordinatedBy,
-          members,
-          size,
-          rate,
-        });
 
         return cbk();
       }],

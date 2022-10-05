@@ -21,15 +21,17 @@ const signPsbtEndpoint = '/walletrpc.WalletKit/SignPsbt';
 /** Join a channel group
 
   {
-    ask: <Ask Function>
-    capacity: <Channel Capacity Number>
-    count: <Size Of Group Number>
+    capacity: <Channel Capacity Tokens Number>
+    count: <Group Member Count Number>
     lnd: <Authenticated LND API Object>
     logger: <Winston Logger Object>
-    rate: <Opening Fee Rate Number>
+    rate: <Opening Chain Fee Tokens Per VByte Rate Number>
   }
 
   @returns via cbk or Promise
+  {
+    transaction_id: <Transaction Id Hex String>
+  }
 */
 module.exports = (args, cbk) => {
   return new Promise((resolve, reject) => {
@@ -40,59 +42,43 @@ module.exports = (args, cbk) => {
       // Check arguments
       validate: cbk => {
         if (!args.capacity) {
-          return cbk([400, 'ExpectedChannelCapacityToCreateGroup']);
+          return cbk([400, 'ExpectedChannelCapacityToCreateChannelGroup']);
         }
 
         if (args.capacity < minChannelSize) {
-          return cbk([400, 'ExpectedChannelCapacityGreaterThanMinChannelSizeToCreateGroup'])
+          return cbk([400, 'ExpectedCapacityGreaterThanMinSizeToCreateGroup']);
         }
 
         if (isOdd(args.capacity)) {
-          return cbk([400, 'ExpectedEvenChannelCapacityToCreateGroup']);
+          return cbk([400, 'ExpectedEvenChannelCapacityToCreateChannelGroup']);
         }
 
         if (!args.count) {
-          return cbk([400, 'ExpectedGroupSizeToCreateGroupp']);
+          return cbk([400, 'ExpectedGroupSizeToCreateChannelGroup']);
         }
 
         if (args.count < minGroupSize || args.count > maxGroupSize) {
-          return cbk([400, 'ExpectedValidGroupSizeToCreateGroup']);
+          return cbk([400, 'ExpectedValidGroupSizeToCreateChannelGroup']);
         }
 
         if (!args.lnd) {
-          return cbk([400, 'ExpectedAuthenticatedLndToCreateGroup']);
+          return cbk([400, 'ExpectedAuthenticatedLndToCreateChannelGroup']);
         }
 
         if (!args.logger) {
-          return cbk([400, 'ExpectedWinstonLoggerToCreateGroupp']);
+          return cbk([400, 'ExpectedWinstonLoggerToCreateChannelGroup']);
         }
 
         if (!args.rate) {
-          return cbk([400, 'ExpectedOpeningFeeRateToCreateGroup']);
+          return cbk([400, 'ExpectedOpeningFeeRateToCreateChannelGroup']);
         }
 
         return cbk();
       },
 
-      // Get onchain balance
+      // Get the on-chain balance to sanity check group creation
       getBalance: ['validate', ({}, cbk) => {
-        const isPair = args.count === minGroupSize;
-
-        getChainBalance({lnd: args.lnd}, (err, res) => {
-          if (!!err) {
-            return cbk(err);
-          }
-
-          if (!isPair && args.capacity > res.chain_balance) {
-            return cbk([400, 'ExpectedCapacityLowerThanCurrentChainBalance']);
-          }
-
-          if (isPair && halfOf(args.capacity) > res.chain_balance) {
-            return cbk([400, 'ExpectedCapacityLowerThanCurrentChainBalance']);
-          }
-
-          return cbk();
-        });
+        return getChainBalance({lnd: args.lnd}, cbk);
       }],
 
       // Get identity public key
@@ -101,7 +87,23 @@ module.exports = (args, cbk) => {
       // Get methods to confim partial signing is supported
       getMethods: ['validate', ({}, cbk) => getMethods({lnd: args.lnd}, cbk)],
 
-      // Make sure that partially signing a PSBT is valid
+      // Sanity check the on-chain balance is reasonable to create a group
+      confirmBalance: ['getBalance', ({getBalance}, cbk) => {
+        // A pair group requires half the amount of capital
+        const isPair = args.count === minGroupSize;
+
+        if (!isPair && args.capacity > getBalance.chain_balance) {
+          return cbk([400, 'ExpectedCapacityLowerThanCurrentChainBalance']);
+        }
+
+        if (isPair && halfOf(args.capacity) > getBalance.chain_balance) {
+          return cbk([400, 'ExpectedCapacityLowerThanCurrentChainBalance']);
+        }
+
+        return cbk();
+      }],
+
+      // Make sure that partially signing a PSBT is a known method
       confirmSigner: ['getMethods', ({getMethods}, cbk) => {
         if (!getMethods.methods.find(n => n.endpoint === signPsbtEndpoint)) {
           return cbk([400, 'ExpectedLndSupportingPartialPsbtSigning']);
@@ -113,6 +115,7 @@ module.exports = (args, cbk) => {
       // Fund and assemble the group
       create: [
         'ecp',
+        'confirmBalance',
         'confirmSigner',
         'getBalance',
         'getIdentity',
@@ -143,7 +146,9 @@ module.exports = (args, cbk) => {
         });
 
         // Once filled, members will connect with their partners
-        coordinate.events.once('connected', () => args.logger.info({peered: true}));
+        coordinate.events.once('connected', () => {
+          return args.logger.info({peered: true});
+        });
 
         // Members will propose pending channels to each other
         coordinate.events.once('proposed', () => {
@@ -151,14 +156,16 @@ module.exports = (args, cbk) => {
         });
 
         // Once all pending channels are in place, signatures will be received
-        coordinate.events.once('signed', () => args.logger.info({signed: true}));
+        coordinate.events.once('signed', () => {
+          return args.logger.info({signed: true});
+        });
 
         // Finally the open channel tx will be broadcast
         coordinate.events.once('broadcasting', broadcast => {
           return args.logger.info({publishing: broadcast.transaction});
         });
 
-        // Finally the open channel tx is broadcast
+        // After broadcasting the channels transaction needs to confirm
         coordinate.events.once('broadcast', broadcast => {
           coordinate.events.removeAllListeners();
 
