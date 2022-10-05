@@ -30,6 +30,7 @@ const tokensAsBigUnit = tokens => (tokens / 1e8).toFixed(8);
     coordinator: <Group Coordinator Identity Public Key Hex String>
     count: <Group Members Count>
     id: <Group Id Hex String>
+    rate: <Chain Fee Tokens Per VByte Number>
   }
 */
 module.exports = ({code, lnd, logger}, cbk) => {
