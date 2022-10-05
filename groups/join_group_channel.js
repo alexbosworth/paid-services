@@ -66,7 +66,6 @@ module.exports = (args, cbk) => {
           code: args.code, 
           lnd: args.lnd, 
           logger: args.logger,
-          rate: args.max_rate
         }, 
         cbk)
       }],

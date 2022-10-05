@@ -19,11 +19,9 @@ const tokensAsBigUnit = tokens => (tokens / 1e8).toFixed(8);
 /** Ask to confirm joining a group
 
   {
-    ask: <Ask Function>
     code: <Group Invite Code String>
     lnd: <Authenticated LND API Object>
     logger: <Winston Logger Object>
-    rate: <Max Fee Rate For Open Number>
   }
 
   @returns via cbk or Promise
@@ -32,10 +30,9 @@ const tokensAsBigUnit = tokens => (tokens / 1e8).toFixed(8);
     coordinator: <Group Coordinator Identity Public Key Hex String>
     count: <Group Members Count>
     id: <Group Id Hex String>
-    rate: <Chain Fee Tokens Per VByte Number>
   }
 */
-module.exports = ({code, lnd, logger, rate}, cbk) => {
+module.exports = ({code, lnd, logger}, cbk) => {
   return new Promise((resolve, reject) => {
     return asyncAuto({
       // Check arguments
@@ -50,10 +47,6 @@ module.exports = ({code, lnd, logger, rate}, cbk) => {
 
         if (!logger) {
           return cbk([400, 'ExpectedWinstonLoggerObjectToGetJoinDetails']);
-        }
-
-        if (!rate) {
-          return cbk([400, 'ExpectedMaxAllowedFeeRateToGetJoinDetails']);
         }
 
         return cbk();
