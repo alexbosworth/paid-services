@@ -138,27 +138,31 @@ module.exports = ({capacity, count, ecp, identity, lnd, rate}) => {
 
     const basePsbt = decodePsbt({ecp, psbt: coordinator.unsigned()});
 
-    // Sign the unsigned funding transaction
-    const signed = await signAndFundGroupChannel({
-      lnd,
-      id: pending.id,
-      psbt: coordinator.unsigned(),
-      utxos: pending.utxos,
-    });
-
-    // Make sure there is an incoming channel
-    await asyncRetry({interval, times}, async () => {
-      return await confirmIncomingChannel({
-        capacity,
+    try {
+      // Sign the unsigned funding transaction
+      const signed = await signAndFundGroupChannel({
         lnd,
-        from: coordinator.partners(identity).inbound,
-        id: fromHex(basePsbt.unsigned_transaction).getId(),
-        to: coordinator.partners(identity).outbound || undefined,
+        id: pending.id,
+        psbt: coordinator.unsigned(),
+        utxos: pending.utxos,
       });
-    });
 
-    // Register the signature with the coordinator
-    return coordinator.sign({id: identity, signed: signed.psbt});
+      // Make sure there is an incoming channel
+      await asyncRetry({interval, times}, async () => {
+        return await confirmIncomingChannel({
+          capacity,
+          lnd,
+          from: coordinator.partners(identity).inbound,
+          id: fromHex(basePsbt.unsigned_transaction).getId(),
+          to: coordinator.partners(identity).outbound || undefined,
+        });
+      });
+
+      // Register the signature with the coordinator
+      return coordinator.sign({id: identity, signed: signed.psbt});
+    } catch (err) {
+      return errored(err);
+    }
   });
 
   // Group members have submitted their partial signatures
