@@ -2,6 +2,7 @@ const {randomBytes} = require('crypto');
 
 const asyncAuto = require('async/auto');
 const asyncReflect = require('async/reflect');
+const asyncRetry = require('async/retry');
 const {returnResult} = require('asyncjs-util');
 
 const connectToSeller = require('./connect_to_seller');
@@ -16,7 +17,7 @@ const findBasicRecord = records => records.find(n => n.type === '1');
 const findIdRecord = records => records.find(n => n.type === '0');
 const {isArray} = Array;
 const makeRequestId = () => randomBytes(32).toString('hex');
-const requestTradesTimeoutMs = 1000 * 30;
+const requestTradesTimeoutMs = 1000 * 45;
 const tradesRequestIdType = '1';
 const uniqBy = (a,b) => a.filter((e,i) => a.findIndex(n => n[b] == e[b]) == i);
 const waitForTradesMs = 1000 * 5;
@@ -72,7 +73,10 @@ module.exports = ({ask, id, lnd, logger, nodes}, cbk) => {
 
       // Connect to the seller
       connect: ['validate', ({}, cbk) => {
-        return connectToSeller({lnd, logger, nodes}, cbk);
+        return asyncRetry({}, cbk => {
+          return connectToSeller({lnd, logger, nodes}, cbk);
+        },
+        cbk);
       }],
 
       // Send request to node with public key identity

@@ -1,5 +1,9 @@
 # Versions
 
+## Version 4.0.2
+
+- `manageTrades`: Fix connection to seller failing
+
 ## Version 4.0.1
 
 - `createGroupChannel`: Add method to coordinate a channel group

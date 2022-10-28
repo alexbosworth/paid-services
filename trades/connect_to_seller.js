@@ -15,7 +15,7 @@ const {returnResult} = require('asyncjs-util');
 
 const interval = 1000;
 const {isArray} = Array;
-const times = 10;
+const times = 20;
 const uniq = arr => Array.from(new Set(arr));
 
 /** Connect to a seller
@@ -213,7 +213,7 @@ module.exports = ({lnd, logger, nodes}, cbk) => {
 
         // Try and connect to a referenced node
         return asyncDetect(getNodes.filter(n => !!n), (node, cbk) => {
-          logger.info({connecting_to: node.id});
+          logger.info({finalizing_connection_to: node.id});
 
           // Attempt referenced sockets to establish p2p connection
           return asyncDetectSeries(node.sockets, (socket, cbk) => {
@@ -243,6 +243,8 @@ module.exports = ({lnd, logger, nodes}, cbk) => {
             }
 
             const peer = res.peers.find(n => n.public_key === connect.id);
+
+            logger.info({peer_connection_pending: connect.id});
 
             if (!peer) {
               return cbk([503, 'FailedToConnectToPeer']);
