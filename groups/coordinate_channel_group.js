@@ -91,12 +91,12 @@ module.exports = ({ask, lnd, logger}, cbk) => {
         coordinate.events.once('connected', () => logger.info({peered: true}));
 
         // Members will propose pending channels to each other
-        coordinate.events.once('proposed', () => {
-          return logger.info({proposed: true});
+        coordinate.events.once('proposed', ({unsigned}) => {
+          return logger.info({proposed: unsigned});
         });
 
         // Once all pending channels are in place, signatures will be received
-        coordinate.events.once('signed', () => logger.info({signed: true}));
+        coordinate.events.once('signed', signed => logger.info({signed}));
 
         // Finally the open channel tx will be broadcast
         coordinate.events.once('broadcasting', broadcast => {

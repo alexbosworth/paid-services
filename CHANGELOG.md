@@ -1,6 +1,6 @@
 # Versions
 
-## Version 4.0.2
+## Version 4.0.3
 
 - `manageTrades`: Fix connection to seller failing
 

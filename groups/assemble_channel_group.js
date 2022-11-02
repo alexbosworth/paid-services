@@ -134,11 +134,11 @@ module.exports = ({capacity, count, ecp, identity, lnd, rate}) => {
 
   // Group members have proposed channels to each other
   coordinator.events.once('funded', async () => {
-    emitter.emit('proposed', {});
-
-    const basePsbt = decodePsbt({ecp, psbt: coordinator.unsigned()});
+    emitter.emit('proposed', {unsigned: coordinator.unsigned()});
 
     try {
+      const basePsbt = decodePsbt({ecp, psbt: coordinator.unsigned()});
+
       // Sign the unsigned funding transaction
       const signed = await signAndFundGroupChannel({
         lnd,
@@ -167,21 +167,21 @@ module.exports = ({capacity, count, ecp, identity, lnd, rate}) => {
 
   // Group members have submitted their partial signatures
   coordinator.events.once('signed', async () => {
-    emitter.emit('signed', {});
-
     // Collect all the partially signed PSBTs
     const psbts = coordinator.signed().map(n => n.signed);
 
-    // Merge partial PSBTs into a single PSBT
-    const combined = combinePsbts({ecp, psbts});
-
-    // Finalize the PSBT to convert partial signatures to full final signatures
-    const finalized = finalizePsbt({ecp, psbt: combined.psbt});
-
-    // Pull out the raw transaction from the PSBT
-    const {transaction} = extractTransaction({ecp, psbt: finalized.psbt});
+    emitter.emit('signed', {psbts});
 
     try {
+      // Merge partial PSBTs into a single PSBT
+      const combined = combinePsbts({ecp, psbts});
+
+      // Finalize the PSBT to convert partial signatures to final signatures
+      const finalized = finalizePsbt({ecp, psbt: combined.psbt});
+
+      // Pull out the raw transaction from the PSBT
+      const {transaction} = extractTransaction({ecp, psbt: finalized.psbt});
+
       emitter.emit('broadcasting', ({transaction}));
 
       const {id} = await broadcastChainTransaction({lnd, transaction});
