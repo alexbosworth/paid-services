@@ -208,6 +208,16 @@ module.exports = ({id, lnd, psbt, utxos}, cbk) => {
       finalizePsbt: ['ecp', 'signPsbt', ({ecp, signPsbt}, cbk) => {
         const signatures = decodePsbt({ecp, psbt: signPsbt.psbt});
 
+        // Select the transaction inputs that have a signature
+        const inputsWithSignatures = signatures.inputs.filter(input => {
+          return !!input.partial_sig || !!input.taproot_key_spend_sig;
+        });
+
+        // Exit early with error when there are no signatures
+        if (!inputsWithSignatures.length) {
+          return cbk([503, 'UnexpectedFailureToPartiallySignPsbt']);
+        }
+
         // Create a template transaction to use for the finalized PSBT
         const tx = fromHex(signatures.unsigned_transaction);
 
