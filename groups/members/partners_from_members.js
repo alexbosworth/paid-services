@@ -4,6 +4,7 @@ const minGroupCount = 2;
 
   {
     group: {
+      allowed: [<Allowed Public Key Id Hex String>]
       ids: [<Public Key Id Hex String>]
     }
     id: <Identity Public Key Hex String>
@@ -21,11 +22,13 @@ module.exports = ({group, id}) => {
     return {inbound: group.ids.find(n => n !== id)};
   }
 
-  const [first] = group.ids;
-  const reversed = group.ids.slice().reverse();
+  const ids = group.allowed || group.ids;
+
+  const [first] = ids;
+  const reversed = ids.slice().reverse();
 
   const [last] = reversed;
-  const [, next] = group.ids.slice(group.ids.indexOf(id));
+  const [, next] = ids.slice(ids.indexOf(id));
 
   const [, previous] = reversed.slice(reversed.indexOf(id));
 

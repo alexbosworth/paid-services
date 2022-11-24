@@ -1,5 +1,9 @@
 # Versions
 
+## Version 4.1.0
+
+- `createGroupChannel`: Add `members` to restrict and order group membership
+
 ## Version 4.0.5
 
 - `manageTrades`: Fix connection to seller failing

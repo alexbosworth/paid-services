@@ -27,6 +27,7 @@ const times = 2 * 60 * 10;
     ecp: <ECPair Library Object>
     identity: <Coordinator Identity Public Key Hex String>
     lnd: <Authenticated LND API Object>
+    [members]: [<Member Identity Public Key Hex String>]
     rate: <Chain Fee Tokens Per VByte Number>
   }
 
@@ -68,12 +69,20 @@ const times = 2 * 60 * 10;
   @event 'signed'
   {}
 */
-module.exports = ({capacity, count, ecp, identity, lnd, rate}) => {
+module.exports = ({capacity, count, ecp, identity, lnd, members, rate}) => {
   if (count < minGroupCount) {
     throw new Error('ExpectedHigherGroupCountToAssembleChannelGroup');
   }
 
-  const coordinator = coordinateGroup({capacity, count, identity, lnd, rate});
+  const coordinator = coordinateGroup({
+    capacity,
+    count,
+    identity,
+    lnd,
+    members,
+    rate,
+  });
+
   const emitter = new EventEmitter();
   const pending = {};
 

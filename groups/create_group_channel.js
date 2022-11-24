@@ -10,7 +10,10 @@ const tinysecp = require('tiny-secp256k1');
 const assembleChannelGroup = require('./assemble_channel_group');
 
 const halfOf = n => n / 2;
+const {isArray} = Array;
+const isPublicKey = n => !!n && /^0[2-3][0-9A-F]{64}$/i.test(n);
 const isOdd = n => !!(n % 2);
+const isValidMembersCount = (n, count) => !n.length || n.length === count - 1;
 const join = arr => arr.join(', ');
 const maxGroupSize = 420;
 const minChannelSize = 2e4;
@@ -18,13 +21,14 @@ const minGroupSize = 2;
 const niceName = ({alias, id}) => `${alias} ${id}`.trim();
 const signPsbtEndpoint = '/walletrpc.WalletKit/SignPsbt';
 
-/** Join a channel group
+/** Create a channel group
 
   {
     capacity: <Channel Capacity Tokens Number>
     count: <Group Member Count Number>
     lnd: <Authenticated LND API Object>
     logger: <Winston Logger Object>
+    [members]: [<Member Identity Public Key Hex String>]
     rate: <Opening Chain Fee Tokens Per VByte Rate Number>
   }
 
@@ -67,6 +71,18 @@ module.exports = (args, cbk) => {
 
         if (!args.logger) {
           return cbk([400, 'ExpectedWinstonLoggerToCreateChannelGroup']);
+        }
+
+        if (!isArray(args.members)) {
+          return cbk([400, 'ExpectedArrayOfGroupMembersToCreateChannelGroup']);
+        }
+
+        if (!isValidMembersCount(args.members, args.count)) {
+          return cbk([400, 'ExpectedCompleteSetOfAllowedGroupMembers']);
+        }
+
+        if (!!args.members.filter(n => !isPublicKey(n)).length) {
+          return cbk([400, 'ExpectedNodeIdentityPublicKeysForChannelGroup']);
         }
 
         if (!args.rate) {
@@ -121,12 +137,15 @@ module.exports = (args, cbk) => {
         'getIdentity',
         ({ecp, getIdentity}, cbk) =>
       {
+        const members = [getIdentity.public_key].concat(args.members);
+
         const coordinate = assembleChannelGroup({
           ecp,
           capacity: args.capacity,
           count: args.count,
           identity: getIdentity.public_key,
           lnd: args.lnd,
+          members: !!args.members.length ? members : undefined,
           rate: args.rate,
         });
 

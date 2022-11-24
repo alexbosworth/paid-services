@@ -142,6 +142,7 @@ module.exports = ({capacity, proposed, rate}, cbk) => {
           .map(utxo => ({
             id: utxo.transaction_id,
             non_witness_utxo: utxo.non_witness_utxo,
+            sequence: Number(),
             vout: utxo.transaction_vout,
             witness_utxo: utxo.witness_utxo,
           }))

@@ -25,6 +25,7 @@ const minGroupCount = 2;
 const now = () => new Date().toISOString();
 const staleDate = () => new Date(Date.now() - (1000 * 60 * 10)).toISOString();
 const typeGroupId = '1';
+const uniq = arr => Array.from(new Set(arr));
 
 /** Coordinate channel group
 
@@ -33,6 +34,7 @@ const typeGroupId = '1';
     count: <Group Members Count Number>
     identity: <Coordinator Identity Public Key Hex String>
     lnd: <Authenticated LND API Object>
+    [members]: [<Member Node Id Public Key Hex String>]
     rate: <Chain Fee Rate Number>
   }
 
@@ -87,7 +89,7 @@ const typeGroupId = '1';
   // All members have submitted their partial signatures
   @event 'signed'
 */
-module.exports = ({capacity, count, identity, lnd, rate}) => {
+module.exports = ({capacity, count, identity, lnd, members, rate}) => {
   if (count < minGroupCount) {
     throw new Error('ExpectedHigherGroupMembersCountToCoordinateGroup');
   }
@@ -100,8 +102,13 @@ module.exports = ({capacity, count, identity, lnd, rate}) => {
     throw new Error('ExpectedAuthenticatedLndToCoordinateGroup');
   }
 
+  if (!!members && uniq(members).length !== count) {
+    throw new Error('ExpectedCompleteSetOfAllowedMembers');
+  }
+
   // Instantiate the group with self as a member
   const group = {
+    allowed: members,
     connected: [],
     emitter: new EventEmitter(),
     members: [{id: identity}],
@@ -150,6 +157,11 @@ module.exports = ({capacity, count, identity, lnd, rate}) => {
     // Exit early when this request is for a different group
     if (idRecord.value !== id) {
       return;
+    }
+
+    // Exit early when group member is not allowed
+    if (!!group.allowed && !group.allowed.includes(req.from)) {
+      return res.failure([403, 'AccessDeniedToGroup']);
     }
 
     // Emit event that someone is joining

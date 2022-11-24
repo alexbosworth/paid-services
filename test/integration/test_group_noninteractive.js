@@ -82,6 +82,7 @@ test(`Setup joint channel group`, async ({end, equal, strictSame}) => {
           count: nodes.length,
           lnd: control.lnd,
           logger: {info: line => createLog.push(line)},
+          members: [],
           rate: feeRate,
         });
       },
