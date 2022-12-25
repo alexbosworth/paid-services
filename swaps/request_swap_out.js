@@ -31,6 +31,7 @@ const defaultFeeRate = 5000;
 const defaultMaxAmount = 21e14;
 const defaultMaxFeeForDeposit = 1337;
 const defaultSwapAmount = 2500000;
+const feeAsPpm = (fee, total) => Math.ceil(fee * 1e6 / total);
 const findRecord = (r, type) => (r.find(n => n.type === type) || {}).value;
 const {floor} = Math;
 const hexAsBuffer = hex => Buffer.from(hex, 'hex');
@@ -421,14 +422,19 @@ module.exports = (args, cbk) => {
 
         const deposit = mtokensAsTokens(response.deposit_mtokens);
 
+        const combinedFee = tokens - askForTokens + deposit;
         const serviceFee = tokensAsBigUnit(deposit);
         const totalFee = tokensAsBigUnit(tokens - askForTokens + deposit);
+
+        const ppmTotal = feeAsPpm(combinedFee, askForTokens);
+
+        const feeInfo = `total fee is ${totalFee}, est PPM ${ppmTotal}`
 
         return cbk(null, {
           deposit,
           fee: tokens - askForTokens,
           incoming_peer: response.incoming_peer,
-          pricing: `Execution cost ${serviceFee}, total fee is ${totalFee}`,
+          pricing: `Execution cost ${serviceFee}, ${feeInfo}`,
           rate: rateForFee(askForTokens, deposit + (tokens - askForTokens)),
           timeout: response.timeout,
         });

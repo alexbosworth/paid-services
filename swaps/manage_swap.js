@@ -13,6 +13,7 @@ const {returnResult} = require('asyncjs-util');
 const decodeOffToOnRequest = require('./decode_off_to_on_request');
 const decodeOffToOnRestart = require('./decode_off_to_on_restart');
 const {decodeTrade} = require('./../trades');
+const outputScriptForAddress = require('./output_script_for_address');
 const recoverResponseToSwapOut = require('./recover_response_to_swap_out');
 const requestSwapOut = require('./request_swap_out');
 const respondToSwapOutRequest = require('./respond_to_swap_out_request');
@@ -310,7 +311,10 @@ module.exports = (args, cbk) => {
               }
 
               try {
-                return !!toOutputScript(input, networks[getNetwork.bitcoinjs]);
+                return !!outputScriptForAddress({
+                  address: input,
+                  network: getNetwork.bitcoinjs,
+                });
               } catch (err) {
                 return 'Unsupported on-chain address format';
               }

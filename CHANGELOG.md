@@ -1,5 +1,9 @@
 # Versions
 
+## Version 4.2.0
+
+- `manageSwap`: Add support for P2TR output addresses
+
 ## Version 4.1.0
 
 - `createGroupChannel`: Add `members` to restrict and order group membership

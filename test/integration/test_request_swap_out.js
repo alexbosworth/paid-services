@@ -53,7 +53,7 @@ test(`Start offchain swap`, async ({end, equal, strictSame}) => {
       });
 
       await asyncRetry({interval, times}, async () => {
-        const {channels} = await getChannels({lnd, is_actve: true});
+        const {channels} = await getChannels({lnd, is_active: true});
 
         if (!!channels.length) {
           return channels;

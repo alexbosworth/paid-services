@@ -42,9 +42,11 @@ const {typePayMetadata} = require('./swap_field_types');
 const bufferAsHex = buffer => buffer.toString('hex');
 const defaultMaxFundingConfirmationDelay = 12;
 const defaultMinDelta = 60;
+const estimatedSize = 150;
 const family = 805;
 const flatten = arr => [].concat(...arr);
 const {floor} = Math;
+const format = 'p2tr';
 const {from} = Buffer;
 const {fromHex} = Transaction;
 const fuzzBlocks = 100;
@@ -126,7 +128,7 @@ module.exports = (args, cbk) => {
 
       // Get an address to sweep out to
       getSweepAddress: ['validate', ({}, cbk) => {
-        return createChainAddress({lnd: args.lnd}, cbk);
+        return createChainAddress({format, lnd: args.lnd}, cbk);
       }],
 
       // Get the encryption key to decode the recovery secrets
@@ -370,6 +372,11 @@ module.exports = (args, cbk) => {
         });
 
         const refunds = uniqBy(feeRates, 'rate').map(({rate, height}) => {
+          // Exit early when there is nothing to recover
+          if (rate * estimatedSize > recoveryDetails.tokens) {
+            return;
+          }
+
           return taprootRefundTransaction({
             ecp,
             block_height: height,
@@ -388,7 +395,7 @@ module.exports = (args, cbk) => {
           });
         });
 
-        return cbk(null, refunds.map(n => n.transaction));
+        return cbk(null, refunds.filter(n => !!n).map(n => n.transaction));
       }],
 
       // Sign the refund transactions

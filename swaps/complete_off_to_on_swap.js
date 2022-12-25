@@ -65,6 +65,7 @@ const encodeAddress = (prefix, data) => bech32m.encode(prefix, data);
 const externalKeyAsOutputScript = key => `5120${key}`;
 const family = 805;
 const {floor} = Math;
+const format = 'p2tr';
 const {from} = Buffer;
 const {fromHex} = Transaction;
 const fuzzBlocks = 100;
@@ -79,7 +80,7 @@ const {min} = Math;
 const minTokens = 10000;
 const minBlockMs = 1000 * 60;
 const pollInterval = {btcregtest: 100};
-const ppmRate = (fee, total) => fee * 1e6 / total.tokens;
+const ppmRate = (fee, total) => fee * 1e6 / total;
 const preimageByteLength = 32;
 const pubKeyAsInternalKey = key => Buffer.from(key).slice(1).toString('hex');
 const pushSecret = asyncTimeout(releaseSwapOutSecret, 1000 * 30);
@@ -155,7 +156,7 @@ module.exports = (args, cbk) => {
           return cbk(null, {address: args.sweep_address});
         }
 
-        return createChainAddress({lnd: args.lnd}, cbk);
+        return createChainAddress({format, lnd: args.lnd}, cbk);
       }],
 
       // Get the current chain fee rate for the sweep fee rate calculation
