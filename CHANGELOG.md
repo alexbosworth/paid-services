@@ -1,6 +1,6 @@
 # Versions
 
-## Version 4.2.1
+## Version 4.2.2
 
 - `manageSwap`: Add support for P2TR output addresses
 

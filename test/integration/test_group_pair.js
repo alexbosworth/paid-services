@@ -119,8 +119,6 @@ test(`Setup joint channel group`, async ({end, equal, strictSame}) => {
     // Finished, wait for the channels to activate
     await generate({count});
 
-    const {getPendingChannels} = require('ln-service');
-
     await asyncRetry({interval, times}, async () => {
       await generate({});
 
