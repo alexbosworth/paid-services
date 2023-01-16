@@ -80,6 +80,12 @@ const uniq = arr => Array.from(new Set(arr));
     ids: [<Joined Member Public Key Hex String>]
   }
 
+  // A member signaled they were present
+  @event 'present'
+  {
+    id: <Present Member Public Key Hex String>
+  }
+
   // A member submitted their partial signature
   @event 'signing'
   {
@@ -181,6 +187,9 @@ module.exports = ({capacity, count, identity, lnd, members, rate}) => {
 
     // Add the group member details to the group
     group.members.push({id: req.from, last_joined: new Date().toISOString()});
+
+    // Notify that the member is present
+    group.emitter.emit('present', {id: req.from});
 
     // Exit with failure when a member dropped out after being locked in
     if (!!group.ids && group.members.length < count) {

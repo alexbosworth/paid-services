@@ -1,5 +1,9 @@
 # Versions
 
+## Version 4.3.0
+
+- `createGroupChannel`: Show members that are present
+
 ## Version 4.2.2
 
 - `manageSwap`: Add support for P2TR output addresses

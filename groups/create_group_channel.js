@@ -19,7 +19,9 @@ const maxGroupSize = 420;
 const minChannelSize = 2e4;
 const minGroupSize = 2;
 const niceName = ({alias, id}) => `${alias} ${id}`.trim();
+const {now} = Date;
 const signPsbtEndpoint = '/walletrpc.WalletKit/SignPsbt';
+const staleMs = 1000 * 60 * 5;
 
 /** Create a channel group
 
@@ -137,6 +139,7 @@ module.exports = (args, cbk) => {
         'getIdentity',
         ({ecp, getIdentity}, cbk) =>
       {
+        const announced = [];
         const members = [getIdentity.public_key].concat(args.members);
 
         const coordinate = assembleChannelGroup({
@@ -152,6 +155,29 @@ module.exports = (args, cbk) => {
         const code = getIdentity.public_key + coordinate.id;
 
         args.logger.info({group_invite_code: code});
+
+        // Members will join the group
+        coordinate.events.on('present', async ({id}) => {
+          const alreadyAnnounced = announced.slice().reverse().find(node => {
+            return node.id === id;
+          });
+
+          // Exit early when already announced
+          if (!!alreadyAnnounced && (now() - alreadyAnnounced.at) < staleMs) {
+            return;
+          }
+
+          announced.push({at: now(), id});
+
+          // Maintain a fixed size of announced members
+          if (announced.length > args.count) {
+            announced.shift();
+          }
+
+          const joined = await getNodeAlias({id, lnd: args.lnd});
+
+          return args.logger.info({at: new Date(), ready: niceName(joined)});
+        });
 
         // The group must fill up with participants first
         coordinate.events.once('filled', async ({ids}) => {

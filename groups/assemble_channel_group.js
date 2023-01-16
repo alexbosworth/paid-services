@@ -61,6 +61,12 @@ const times = 2 * 60 * 10;
     ids: [<Group Member Identity Public Key Hex String>]
   }
 
+  // Member is present
+  @event 'present'
+  {
+    id: <Present Member Public Id Hex String>
+  }
+
   // Members proposed channels to each other
   @event 'proposed'
   {}
@@ -173,6 +179,9 @@ module.exports = ({capacity, count, ecp, identity, lnd, members, rate}) => {
       return errored(err);
     }
   });
+
+  // Relay presence notifications
+  coordinator.events.on('present', ({id}) => emitter.emit('present', {id}));
 
   // Group members have submitted their partial signatures
   coordinator.events.once('signed', async () => {
