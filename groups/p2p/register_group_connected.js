@@ -8,7 +8,7 @@ const {makePeerRequest} = require('./../../p2p');
 const {serviceTypeConfirmConnected} = require('./../../service_types');
 
 const defaultIntervalMs = 500;
-const defaultPollTimes = 2 * 60 * 10;
+const defaultPollTimes = 2 * 60 * 30;
 const defaultRequestTimeoutMs = 1000 * 60;
 const missingGroupPartners = 'NoGroupPartnersFound';
 const typeGroupChannelId = '1';

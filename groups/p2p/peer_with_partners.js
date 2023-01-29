@@ -4,7 +4,7 @@ const {connectPeer} = require('ln-sync');
 const {returnResult} = require('asyncjs-util');
 
 const interval = 500;
-const times = 2 * 60 * 5;
+const times = 2 * 60 * 30;
 
 /** Peer up with group channel partners
 

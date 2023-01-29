@@ -16,7 +16,7 @@ const {signAndFundGroupChannel} = require('./../funding');
 
 const bufferAsHex = buffer => buffer.toString('hex');
 const defaultIntervalMs = 500;
-const defaultPollTimes = 2 * 60 * 10;
+const defaultPollTimes = 2 * 60 * 30;
 const defaultRequestTimeoutMs = 1000 * 60;
 const {fromHex} = Transaction;
 const hexAsBuffer = hex => Buffer.from(hex, 'hex');
