@@ -67,6 +67,11 @@ module.exports = ({coordinator, count, group, lnd, signed}, cbk) => {
           errorFilter: err => {
             const [code, message] = err;
 
+            // Retry when there was a local error
+            if (!code) {
+              return true;
+            }
+
             // Continue retrying when there are others still signing
             if (message === missingGroupPartners) {
               return true;

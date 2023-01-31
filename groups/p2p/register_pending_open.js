@@ -104,12 +104,17 @@ module.exports = (args, cbk) => {
         return asyncRetry({
           errorFilter: err => {
             const [code, message] = err;
-        
+
+            // Retry when there was a local error
+            if (!code) {
+              return true;
+            }
+
             // Continue retrying when there are others still proposing
             if (message === missingGroupPartners) {
               return true;
             }
-        
+
             return false;
           },
           interval: defaultIntervalMs,

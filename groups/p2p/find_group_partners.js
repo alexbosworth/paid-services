@@ -66,7 +66,12 @@ module.exports = ({coordinator, count, id, lnd}, cbk) => {
           errorFilter: err => {
             const [code, message] = err;
 
-            // Continue retrying only when there are no group partners yet
+            // Retry when there was a local error
+            if (!code) {
+              return true;
+            }
+
+            // Continue retrying when there are no group partners yet
             if (message === missingGroupPartners) {
               return true;
             }
