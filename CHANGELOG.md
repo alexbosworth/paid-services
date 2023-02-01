@@ -1,6 +1,6 @@
 # Versions
 
-## Version 4.3.2
+## Version 4.3.3
 
 - `createGroupChannel`: Show members that are present
 

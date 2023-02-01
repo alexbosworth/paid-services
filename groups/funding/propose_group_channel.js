@@ -1,5 +1,6 @@
 const asyncAuto = require('async/auto');
 const asyncEach = require('async/each');
+const {connectPeer} = require('ln-sync');
 const {fundPsbtDisallowingInputs} = require('ln-sync');
 const {getNetwork} = require('ln-sync');
 const {getUtxos} = require('ln-service');
@@ -84,8 +85,18 @@ module.exports = ({capacity, count, lnd, rate, to}, cbk) => {
       // Get the bitcoinjs network name for dummy output derivation
       getNetwork: ['validate', ({}, cbk) => getNetwork({lnd}, cbk)],
 
+      // Make sure the peer is connected
+      connect: ['getNetwork', ({}, cbk) => {
+        // Exit early when this is a pair group
+        if (!to) {
+          return cbk();
+        }
+
+        return connectPeer({lnd, id: to}, cbk);
+      }],
+
       // Propose the channel to get an address to fund
-      propose: ['getNetwork', ({getNetwork}, cbk) => {
+      propose: ['connect', 'getNetwork', ({getNetwork}, cbk) => {
         const tokens = halfOf(capacity);
 
         // Exit early when there is a shared proposal due to a pair group
