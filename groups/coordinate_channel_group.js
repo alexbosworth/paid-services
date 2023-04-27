@@ -1,5 +1,6 @@
 const asyncAuto = require('async/auto');
 const asyncMap = require('async/map');
+const {broadcastTransaction} = require('ln-sync');
 const {getIdentity} = require('ln-service');
 const {getNodeAlias} = require('ln-sync');
 const {returnResult} = require('asyncjs-util');
@@ -8,6 +9,7 @@ const tinysecp = require('tiny-secp256k1');
 const askForGroupDetails = require('./ask_for_group_details');
 const assembleChannelGroup = require('./assemble_channel_group');
 
+const descriptionForGroup = 'group channel open';
 const join = arr => arr.join(', ');
 const niceName = ({alias, id}) => `${alias} ${id}`.trim();
 
@@ -20,10 +22,6 @@ const niceName = ({alias, id}) => `${alias} ${id}`.trim();
   }
 
   @returns via cbk or Promise
-  {
-    id: <Transaction Id Hex String>
-    transaction: <Raw Transaction Hex String>
-  }
 */
 module.exports = ({ask, lnd, logger}, cbk) => {
   return new Promise((resolve, reject) => {
@@ -107,7 +105,15 @@ module.exports = ({ask, lnd, logger}, cbk) => {
         coordinate.events.once('broadcast', broadcast => {
           coordinate.events.removeAllListeners();
 
-          return cbk(null, {transaction_id: broadcast.id});
+          logger.info({transaction_id: broadcast.id});
+
+          return broadcastTransaction({
+            lnd,
+            logger,
+            description: descriptionForGroup,
+            transaction: broadcast.transaction,
+          },
+          cbk);
         });
 
         coordinate.events.once('error', err => {

@@ -84,6 +84,18 @@ test(`Timeout a swap`, async ({end, equal, strictSame}) => {
       await target.generate({count: maturity});
     }
 
+    // Make sure control can pay off chain to target
+    {
+      await asyncRetry({interval, times}, async () => {
+        await generate({});
+
+        return await pay({
+          lnd,
+          request: (await createInvoice({tokens, lnd: target.lnd})).request,
+        });
+      });
+    }
+
     // Collect request messages
     const messages = [];
 

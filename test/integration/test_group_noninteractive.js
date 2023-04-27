@@ -81,9 +81,22 @@ test(`Setup joint channel group`, async ({end, equal, strictSame}) => {
           capacity,
           count: nodes.length,
           lnd: control.lnd,
-          logger: {info: line => createLog.push(line)},
+          logger: {info: line => {createLog.push(line)}},
           members: [],
           rate: feeRate,
+        });
+      },
+
+      // Make blocks to activate the channel
+      generate: async () => {
+        await asyncRetry({interval, times}, async () => {
+          await generate({});
+
+          const {channels} = await getChannels({lnd, is_active: true});
+
+          if (!channels.length) {
+            throw new Error('ExpectedChannelActivation');
+          }
         });
       },
 
@@ -107,21 +120,6 @@ test(`Setup joint channel group`, async ({end, equal, strictSame}) => {
     });
 
     const ids = [group.join.transaction_id, group.create.transaction_id];
-
-    // Finished, wait for the channels to activate
-    await generate({count});
-
-    const {getPendingChannels} = require('ln-service');
-
-    await asyncRetry({interval, times}, async () => {
-      await generate({});
-
-      const {channels} = await getChannels({lnd, is_active: true});
-
-      if (!channels.length) {
-        throw new Error('ExpectedChannelActivation');
-      }
-    });
 
     strictSame(ids.length, nodes.length, 'Got tx ids');
   } catch (err) {

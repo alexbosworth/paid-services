@@ -1,4 +1,5 @@
 const asyncRetry = require('async/retry');
+const {broadcastChainTransaction} = require('ln-service');
 const {createChainAddress} = require('ln-service');
 const {createInvoice} = require('ln-service');
 const {getChannelBalance} = require('ln-service');
@@ -79,6 +80,16 @@ test(`Start offchain swap`, async ({end, equal, strictSame}) => {
       await target.generate({count: maturity});
     }
 
+    // Make sure control can pay off chain to target
+    {
+      await asyncRetry({interval, times}, async () => {
+        return await pay({
+          lnd,
+          request: (await createInvoice({tokens, lnd: target.lnd})).request,
+        });
+      });
+    }
+
     // Collect request messages
     const messages = [];
 
@@ -116,6 +127,14 @@ test(`Start offchain swap`, async ({end, equal, strictSame}) => {
             lnd: target.lnd,
             logger: {
               info: async message => {
+                // Make sure that target gets the funding transaction
+                if (message.funding_transaction) {
+                  await broadcastChainTransaction({
+                    lnd: target.lnd,
+                    transaction: message.funding_transaction,
+                  });
+                }
+
                 if (!!message.response) {
                   return cbk({response: message.response});
                 }

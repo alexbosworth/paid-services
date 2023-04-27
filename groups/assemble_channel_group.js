@@ -47,7 +47,6 @@ const times = 2 * 60 * 10;
   // Open is publishing
   @event 'broadcasting'
   {
-    id: <Transaction Id Hex String>
     transaction: <Transaction Hex String>
   }
 

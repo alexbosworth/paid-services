@@ -1,4 +1,5 @@
 const asyncRetry = require('async/retry');
+const {broadcastChainTransaction} = require('ln-service');
 const {createChainAddress} = require('ln-service');
 const {createInvoice} = require('ln-service');
 const {getChannelBalance} = require('ln-service');
@@ -51,6 +52,18 @@ test(`Swap with claim path`, async ({end, equal, strictSame}) => {
           partner_socket: target.socket,
         });
       });
+
+      // Make sure control can pay off chain to target
+      {
+        await asyncRetry({interval, times}, async () => {
+          await generate({});
+
+          return await pay({
+            lnd,
+            request: (await createInvoice({tokens, lnd: target.lnd})).request,
+          });
+        });
+      }
 
       await asyncRetry({interval, times}, async () => {
         const {channels} = await getChannels({lnd, is_active: true});
@@ -116,6 +129,14 @@ test(`Swap with claim path`, async ({end, equal, strictSame}) => {
             lnd: target.lnd,
             logger: {
               info: async message => {
+                // Make sure that target gets the funding transaction
+                if (message.funding_transaction) {
+                  await broadcastChainTransaction({
+                    lnd: target.lnd,
+                    transaction: message.funding_transaction,
+                  });
+                }
+
                 if (!!message.response) {
                   return cbk({response: message.response});
                 }

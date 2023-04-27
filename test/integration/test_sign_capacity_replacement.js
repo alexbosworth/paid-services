@@ -71,8 +71,9 @@ test(`Sign capacity replacement`, async ({end, equal, strictSame}) => {
     // Close the channel
     const channelClose = await closeChannel({
       lnd,
-      id: channel.id,
       is_force_close: true,
+      transaction_id: channel.transaction_id,
+      transaction_vout: channel.transaction_vout,
     });
 
     // Find the open tx
@@ -124,6 +125,7 @@ test(`Sign capacity replacement`, async ({end, equal, strictSame}) => {
     });
 
     await broadcastChainTransaction({transaction, lnd});
+    await broadcastChainTransaction({transaction, lnd: target.lnd});
 
     await generate({count: maturity});
 

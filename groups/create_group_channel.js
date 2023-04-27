@@ -1,5 +1,6 @@
 const asyncAuto = require('async/auto');
 const asyncMap = require('async/map');
+const {broadcastTransaction} = require('ln-sync');
 const {getChainBalance} = require('ln-service');
 const {getIdentity} = require('ln-service');
 const {getMethods} = require('ln-service');
@@ -9,6 +10,7 @@ const tinysecp = require('tiny-secp256k1');
 
 const assembleChannelGroup = require('./assemble_channel_group');
 
+const descriptionForGroup = 'group channel open';
 const halfOf = n => n / 2;
 const {isArray} = Array;
 const isPublicKey = n => !!n && /^0[2-3][0-9A-F]{64}$/i.test(n);
@@ -214,7 +216,21 @@ module.exports = (args, cbk) => {
         coordinate.events.once('broadcast', broadcast => {
           coordinate.events.removeAllListeners();
 
-          return cbk(null, {transaction_id: broadcast.id});
+          args.logger.info({transaction_id: broadcast.id});
+
+          return broadcastTransaction({
+            description: descriptionForGroup,
+            lnd: args.lnd,
+            logger: args.logger,
+            transaction: broadcast.transaction,
+          },
+          err => {
+            if (!!err) {
+              return cbk(err);
+            }
+
+            return cbk(null, {transaction_id: broadcast.id});
+          });
         });
 
         coordinate.events.once('error', err => {

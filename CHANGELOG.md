@@ -1,5 +1,13 @@
 # Versions
 
+## Version 5.0.0
+
+- 'createGroupChannel': Repeatedly broadcast chain transaction
+
+### Breaking Changes
+
+- node.js 14 is no longer supported, node.js 16+ required
+
 ## Version 4.3.5
 
 - `createGroupChannel`: Show members that are present

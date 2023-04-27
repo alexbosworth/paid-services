@@ -80,7 +80,11 @@ module.exports = (args, cbk) => {
         ({getJoinDetails}, cbk) =>
       {
         if (getJoinDetails.rate > args.max_rate) {
-          return cbk([400, 'ExpectedHigherMaxFeeRateToJoinGroup']);
+          return cbk([
+            400,
+            'ExpectedHigherMaxFeeRateToJoinGroup',
+            {needed_max_fee_rate: getJoinDetails.rate},
+          ]);
         }
 
         args.logger.info({waiting_for_other_members: true});

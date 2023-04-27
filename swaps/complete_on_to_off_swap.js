@@ -584,6 +584,7 @@ module.exports = (args, cbk) => {
         const vout = tx.outs.findIndex(n => n.script.equals(script));
 
         args.emitter.emit('update', {
+          funding_transaction: signFunding.transaction,
           funding_transaction_id: id,
           funding_transaction_vout: vout,
         });
