@@ -21,13 +21,14 @@ const typeGroupChannelId = '1';
 
   {
     coordinator: <Group Coordinator Identity Public Key Hex String>
+    count: <Group Member Count Number>
     id: <Group Identifier Hex String>
     lnd: <Authenticated LND API Object>
   }
 
   @returns via cbk or Promise
   {
-    inbound: <Inbound Peer Public Key Identity Hex String>
+    [inbound]: <Inbound Peer Public Key Identity Hex String>
     outbound: <Outbound Peer Public Key Identity Hex String>
   }
 */

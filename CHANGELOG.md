@@ -1,5 +1,10 @@
 # Versions
 
+## Version 5.0.1
+
+- `createGroupChannel`, `joinGroupChannel`, `manageGroupJoin`: Double check
+    open channel acceptance when peering
+
 ## Version 5.0.0
 
 - 'createGroupChannel': Repeatedly broadcast chain transaction

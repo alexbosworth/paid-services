@@ -104,16 +104,20 @@ module.exports = ({capacity, count, ecp, identity, lnd, members, rate}) => {
   coordinator.events.once('joined', async ({ids}) => {
     emitter.emit('filled', {ids});
 
-    // Exit early when this is a pair group
-    if (count === minGroupCount) {
-      return coordinator.connected();
-    }
-
-    const {inbound, outbound} = coordinator.partners(identity);
-
-    // Connect to the inbound and outbound partners
     try {
-      await peerWithPartners({inbound, lnd, outbound});
+      // Exit early when this is a pair group
+      if (count === minGroupCount) {
+        const [outbound] = ids.filter(n => n !== identity);
+
+        await peerWithPartners({capacity, lnd, outbound});
+
+        return coordinator.connected();
+      }
+
+      const {inbound, outbound} = coordinator.partners(identity);
+
+      // Connect to the inbound and outbound partners
+      await peerWithPartners({capacity, inbound, lnd, outbound});
 
       // Register as connected
       return coordinator.connected();

@@ -107,6 +107,7 @@ module.exports = ({capacity, coordinator, count, id, lnd, rate}, cbk) => {
       });
 
       return peerWithPartners({
+        capacity,
         lnd,
         inbound: partners.inbound,
         outbound: partners.outbound,
