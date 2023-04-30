@@ -1,5 +1,6 @@
 const asyncAuto = require('async/auto');
 const asyncRetry = require('async/retry');
+const asyncTimeout = require('async/timeout');
 const {connectPeer} = require('ln-sync');
 const {getChainBalance} = require('ln-service');
 const {getNodeAlias} = require('ln-sync');
@@ -8,6 +9,7 @@ const {returnResult} = require('asyncjs-util');
 const {getGroupDetails} = require('./p2p');
 
 const coordinatorFromJoinCode = n => n.slice(0, 66);
+const defaultConnectRetryMs = 1000 * 60;
 const groupIdFromJoinCode = n => n.slice(66);
 const interval = 500;
 const isCode = n => !!n && n.length === 98;
@@ -77,7 +79,11 @@ module.exports = ({ask, lnd}, cbk) => {
       // Connect to the coordinator
       connect: ['group', ({group}, cbk) => {
         return asyncRetry({interval, times}, cbk => {
-          return connectPeer({lnd, id: group.coordinator}, cbk);
+          return asyncTimeout(connectPeer, defaultConnectRetryMs)({
+            lnd,
+            id: group.coordinator,
+          },
+          cbk);
         },
         cbk);
       }],
@@ -88,11 +94,14 @@ module.exports = ({ask, lnd}, cbk) => {
       }],
 
       // Get the group details from the coordinator
-      getDetails: ['group', ({group}, cbk) => {
-        return getGroupDetails({
-          lnd,
-          coordinator: group.coordinator,
-          id: group.id,
+      getDetails: ['connect', 'group', ({group}, cbk) => {
+        return asyncRetry({interval, times}, cbk => {
+          return asyncTimeout(getGroupDetails, defaultConnectRetryMs)({
+            lnd,
+            coordinator: group.coordinator,
+            id: group.id,
+          },
+          cbk);
         },
         cbk);
       }],

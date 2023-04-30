@@ -1,6 +1,6 @@
 # Versions
 
-## Version 5.0.1
+## Version 5.0.2
 
 - `createGroupChannel`, `joinGroupChannel`, `manageGroupJoin`: Double check
     open channel acceptance when peering
