@@ -150,6 +150,10 @@ module.exports = ({lnd, logger, nodes}, cbk) => {
         'getPeered',
         ({getChannels, getNodes, getPeered}, cbk) =>
       {
+        if (!getNodes.filter(n => !!n).length) {
+          return cbk([404, 'FailedToFindSellerNodeDetails']);
+        }
+
         const ids = getChannels.channels.map(n => n.partner_public_key);
 
         return asyncEach(getNodes, (node, cbk) => {
