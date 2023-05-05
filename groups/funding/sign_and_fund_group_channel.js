@@ -7,6 +7,7 @@ const {decodePsbt} = require('psbt');
 const {extendPsbt} = require('psbt');
 const {fundPendingChannels} = require('ln-service');
 const {getChainFeeRate} = require('ln-service');
+const {getHeight} = require('ln-service');
 const {getMaxFundAmount} = require('ln-sync');
 const {getPendingChannels} = require('ln-service');
 const {partiallySignPsbt} = require('ln-service');
@@ -19,6 +20,7 @@ const {unextractTransaction} = require('psbt');
 
 const bufferAsHex = buffer => buffer.toString('hex');
 const {concat} = Buffer;
+const defaultBlocksBuffer = 18;
 const dummySignature = Buffer.alloc(1);
 const format = 'p2wpkh';
 const {from} = Buffer;
@@ -30,6 +32,7 @@ const hexAsBuf = hex => Buffer.from(hex, 'hex');
 const inputAsOutpoint = n => `${n.transaction_id}:${n.transaction_vout}`;
 const interval = 10;
 const {isArray} = Array;
+const minSequence = 0;
 const notEmpty = arr => arr.filter(n => !!n);
 const {p2wpkh} = payments;
 const {random} = Math;
@@ -94,6 +97,9 @@ module.exports = ({id, lnd, psbt, utxos}, cbk) => {
         return createChainAddress({format, lnd}, cbk);
       }],
 
+      // Get the current block height to use in transaction nlocktime
+      getHeight: ['validate', ({}, cbk) => getHeight({lnd}, cbk)],
+
       // Get the conflicting tx fee rate
       getRate: ['validate', ({}, cbk) => {
         return getChainFeeRate({lnd, confirmation_target: slowConf}, cbk);
@@ -125,7 +131,8 @@ module.exports = ({id, lnd, psbt, utxos}, cbk) => {
         'createConflictAddress',
         'ecp',
         'getConflictAmount',
-        ({createConflictAddress, ecp, getConflictAmount}, cbk) =>
+        'getHeight',
+        ({createConflictAddress, ecp, getConflictAmount, getHeight}, cbk) =>
       {
         const hash = fromBech32(createConflictAddress.address).data;
         const [input] = utxos;
@@ -135,8 +142,10 @@ module.exports = ({id, lnd, psbt, utxos}, cbk) => {
             script: bufferAsHex(p2wpkh({hash}).output),
             tokens: getConflictAmount.max_tokens,
           }],
+          timelock: getHeight.current_block_height + defaultBlocksBuffer,
           utxos: [{
             id: input.transaction_id,
+            sequence: minSequence,
             vout: input.transaction_vout,
           }],
         });
