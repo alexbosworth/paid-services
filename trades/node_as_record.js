@@ -90,7 +90,7 @@ module.exports = ({channels, id, sockets}) => {
   }
 
   if (!!torV3) {
-    records.push({type: torV3SocketsType, value: ipV6});
+    records.push({type: torV3SocketsType, value: torV3});
   }
 
   // Return the node identity key and network sockets
