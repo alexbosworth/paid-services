@@ -31,7 +31,10 @@
     "typeRequest": "11",
     "typeTimeout": "12",
     "typeTokens": "13",
-    "typeInboundPeer": "14"
+    "typeInboundPeer": "14",
+    "typeRefundCoopPublicKey": "15",
+    "typeRefundCoopPublicKeyHash": "16",
+    "typeClaimCoopPublicKey": "17"
   },
   "pushTypes": {
     "typeSwapId": "0",

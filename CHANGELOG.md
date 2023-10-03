@@ -1,5 +1,9 @@
 # Versions
 
+## Version 5.0.5
+
+- `manageTrades`: Fix advertising trades with a TorV3 network address
+
 ## Version 5.0.4
 
 - `createGroupChannel`, `joinGroupChannel`, `manageGroupJoin`: Double check

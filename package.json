@@ -7,25 +7,26 @@
     "url": "https://github.com/alexbosworth/paid-services/issues"
   },
   "dependencies": {
-    "@alexbosworth/fiat": "1.0.4",
+    "@alexbosworth/blockchain": "1.7.0",
+    "@alexbosworth/fiat": "2.0.0",
     "async": "3.2.4",
-    "asyncjs-util": "1.2.11",
+    "asyncjs-util": "1.2.12",
     "bech32": "2.0.0",
-    "bolt01": "1.2.6",
-    "bolt07": "1.8.3",
+    "bolt01": "2.0.0",
+    "bolt07": "1.8.4",
     "ecpair": "2.1.0",
-    "goldengate": "12.0.5",
-    "invoices": "2.2.3",
-    "ln-service": "56.3.0",
-    "ln-sync": "5.2.0",
-    "psbt": "2.7.2",
-    "p2tr": "1.3.3",
-    "tiny-secp256k1": "2.2.1"
+    "goldengate": "13.0.2",
+    "invoices": "3.0.0",
+    "ln-service": "56.14.0",
+    "ln-sync": "5.2.3",
+    "psbt": "3.0.0",
+    "p2tr": "2.0.0",
+    "tiny-secp256k1": "2.2.3"
   },
   "description": "Lightning Paid Services library",
   "devDependencies": {
     "@alexbosworth/tap": "15.0.12",
-    "ln-docker-daemons": "5.0.2",
+    "ln-docker-daemons": "5.1.3",
     "mock-lnd": "1.4.4",
     "secp256k1": "5.0.0"
   },
@@ -44,8 +45,8 @@
     "url": "https://github.com/alexbosworth/paid-services.git"
   },
   "scripts": {
-    "integration-tests": "tap -j 2 --branches=1 --functions=1 --lines=1 --statements=1 -t 180 test/integration/*.js",
+    "integration-tests": "tap -j 2 --branches=1 --functions=1 --lines=1 --statements=1 -t 2700 test/integration/*.js",
     "test": "tap --branches=1 --functions=1 --lines=1 --statements=1 -t 60 test/actions/*.js test/balanced/*.js test/capacity/*.js test/client/*.js test/config/*.js test/p2p/*.js test/records/*.js test/respond/*.js test/server/*.js test/swaps/*.js test/services/*.js test/trades/*.js"
   },
-  "version": "5.0.4"
+  "version": "5.0.5"
 }
