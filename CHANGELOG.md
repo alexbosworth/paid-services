@@ -1,5 +1,11 @@
 # Versions
 
+## Version 6.0.0
+
+### Breaking Changes
+
+- node.js 16 is no longer supported, node.js 18+ required
+
 ## Version 5.0.5
 
 - `manageTrades`: Fix advertising trades with a TorV3 network address

@@ -102,6 +102,7 @@ module.exports = ({lnd}) => {
   return {
     end: cbk => service.end = cbk,
     error: cbk => service.error = cbk,
+    receivers: () => sub.listenerCount('message_received'),
     request: ({type}, cbk) => listeners[type] = cbk,
     stop: ({}) => sub.removeAllListeners(),
   };
