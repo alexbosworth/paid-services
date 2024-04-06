@@ -299,6 +299,7 @@ module.exports = (args, cbk) => {
         ({getNetwork, selectAction}, cbk) =>
       {
         switch (selectAction) {
+        case actionLoopRequest:
         case actionPushRequest:
         case requestAction:
           return args.ask({
