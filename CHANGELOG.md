@@ -1,6 +1,6 @@
 # Versions
 
-## Version 6.1.3
+## Version 6.1.4
 
 - `manageSwap`: Add support for Loop Out to external address
 
