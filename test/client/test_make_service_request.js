@@ -4,7 +4,6 @@ const {makeInvoiceSubscription} = require('mock-lnd');
 const {makeLnd} = require('mock-lnd');
 const {makePaySubscription} = require('mock-lnd');
 const {makePayViaRoutesResponse} = require('mock-lnd');
-const {makePaymentRequest} = require('mock-lnd');
 const {test} = require('@alexbosworth/tap');
 
 const messagesForResponse = require('./../../respond/messages_for_response');
@@ -14,7 +13,6 @@ const responseForSchema = require('./../../services/response_for_schema');
 const encode = records => encodeTlvStream({records: [records]}).encoded;
 const id1 = Buffer.alloc(32).toString('hex');
 const id2 = Buffer.alloc(32, 1).toString('hex');
-const {request} = makePaymentRequest({});
 
 const makeArgs = overrides => {
   let requests = 0;
