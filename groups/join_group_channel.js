@@ -7,7 +7,9 @@ const {returnResult} = require('asyncjs-util');
 const joinChannelGroup = require('./join_channel_group');
 const getJoinDetails = require('./get_join_details');
 
+const asOutpoint = n => `${n.transaction_id}:${n.transaction_vout}`;
 const formatNodes = arr => arr.join(', ');
+const {isArray} = Array;
 const isCode = n => !!n && n.length === 98;
 const niceName = ({alias, id}) => `${alias} ${id}`.trim();
 const signPsbtEndpoint = '/walletrpc.WalletKit/SignPsbt';
@@ -19,6 +21,8 @@ const signPsbtEndpoint = '/walletrpc.WalletKit/SignPsbt';
     lnd: <Authenticated LND API Object>
     logger: <Winston Logger Object>
     max_rate: <Max Opening Chain Fee Tokens Per VByte Fee Rate Number>
+    skipchannels: <Skip Channels Creation Bool>
+    utxos: [<Outpoints String>]
   }
 
   @returns via cbk or Promise
@@ -47,6 +51,10 @@ module.exports = (args, cbk) => {
           return cbk([400, 'ExpectedMaxOpeningFeeRateToJoinGroup']);
         }
 
+        if (!isArray(args.utxos)) {
+          return cbk([400, 'ExpectedArrayOfUtxosToJoinGroup']);
+        }
+
         return cbk();
       },
 
@@ -68,6 +76,7 @@ module.exports = (args, cbk) => {
           code: args.code,
           lnd: args.lnd,
           logger: args.logger,
+          skipchannels: args.skipchannels,
         },
         cbk);
       }],
@@ -94,8 +103,10 @@ module.exports = (args, cbk) => {
           coordinator: getJoinDetails.coordinator,
           count: getJoinDetails.count,
           id: getJoinDetails.id,
+          inputs: args.utxos,
           lnd: args.lnd,
           rate: getJoinDetails.rate,
+          skipchannels: args.skipchannels,
         });
 
         join.once('end', ({id}) => cbk(null, {transaction_id: id}));

@@ -19,6 +19,7 @@ const isValidMembersCount = (n, count) => !n.length || n.length === count - 1;
 const join = arr => arr.join(', ');
 const maxGroupSize = 420;
 const minChannelSize = 2e4;
+const minNoChannelsGroupSize = 3;
 const minGroupSize = 2;
 const niceName = ({alias, id}) => `${alias} ${id}`.trim();
 const {now} = Date;
@@ -34,6 +35,8 @@ const staleMs = 1000 * 60 * 5;
     logger: <Winston Logger Object>
     [members]: [<Member Identity Public Key Hex String>]
     rate: <Opening Chain Fee Tokens Per VByte Rate Number>
+    skipchannels: <Skip Channels Creation Bool>
+    utxos: [<Outpoints String>]
   }
 
   @returns via cbk or Promise
@@ -93,6 +96,14 @@ module.exports = (args, cbk) => {
           return cbk([400, 'ExpectedOpeningFeeRateToCreateChannelGroup']);
         }
 
+        if (!!args.skipchannels && args.count < minNoChannelsGroupSize) {
+          return cbk([400, 'ExpectedHigherGroupSizeForSkippingChannels']);
+        }
+
+        if (!isArray(args.utxos)) {
+          return cbk([400, 'ExpectedArrayOfUtxosToCreateChannelGroup']);
+        }
+
         return cbk();
       },
 
@@ -149,9 +160,11 @@ module.exports = (args, cbk) => {
           capacity: args.capacity,
           count: args.count,
           identity: getIdentity.public_key,
+          inputs: args.utxos,
           lnd: args.lnd,
           members: !!args.members.length ? members : undefined,
           rate: args.rate,
+          skipchannels: args.skipchannels,
         });
 
         const code = getIdentity.public_key + coordinate.id;

@@ -2,7 +2,6 @@ const EventEmitter = require('events');
 const {randomBytes} = require('crypto');
 
 const assembleUnsignedPsbt = require('./assemble_unsigned_psbt');
-const {decodeGroupDetails} = require('./../messages');
 const {decodePendingProposal} = require('./../messages');
 const {decodeSignedFunding} = require('./../messages');
 const {encodeConnectedRecords} = require('./../messages');
@@ -36,6 +35,7 @@ const uniq = arr => Array.from(new Set(arr));
     lnd: <Authenticated LND API Object>
     [members]: [<Member Node Id Public Key Hex String>]
     rate: <Chain Fee Rate Number>
+    [skipchannels]: <Skip Channels Creation Bool>
   }
 
   @returns
@@ -95,7 +95,7 @@ const uniq = arr => Array.from(new Set(arr));
   // All members have submitted their partial signatures
   @event 'signed'
 */
-module.exports = ({capacity, count, identity, lnd, members, rate}) => {
+module.exports = ({capacity, count, identity, lnd, members, rate, skipchannels}) => {
   if (count < minGroupCount) {
     throw new Error('ExpectedHigherGroupMembersCountToCoordinateGroup');
   }
@@ -145,7 +145,7 @@ module.exports = ({capacity, count, identity, lnd, members, rate}) => {
       return;
     }
 
-    return res.success(encodeGroupDetails({capacity, count, rate}));
+    return res.success(encodeGroupDetails({capacity, count, rate, skipchannels}));
   });
 
   // Listen for and respond to find member requests

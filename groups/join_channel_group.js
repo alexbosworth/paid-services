@@ -21,6 +21,7 @@ const {registerSignedOpen} = require('./p2p');
 const {fromHex} = Transaction;
 const hexAsBuffer = hex => Buffer.from(hex, 'hex');
 const interval = 1000;
+const {isArray} = Array;
 const times = 60 * 10;
 
 /** Join a channel group
@@ -30,8 +31,10 @@ const times = 60 * 10;
     coordinator: <Channel Group Coordinator Public Key Hex String>
     count: <Group Members Number>
     id: <Group Id Hex String>
+    inputs: [<Outpoints String>]
     lnd: <Authenticated LND API Object>
     rate: <Chain Fee Tokens Per VByte Number>
+    [skipchannels]: <Skip Channels Creation Bool>
   }
 
   @returns
@@ -52,7 +55,7 @@ const times = 60 * 10;
   @event 'publishing'
   {}
 */
-module.exports = ({capacity, coordinator, count, id, lnd, rate}, cbk) => {
+module.exports = ({capacity, coordinator, count, id, inputs, lnd, rate, skipchannels}, cbk) => {
   const emitter = new EventEmitter();
 
   asyncAuto({
@@ -75,6 +78,10 @@ module.exports = ({capacity, coordinator, count, id, lnd, rate}, cbk) => {
 
       if (!id) {
         return cbk([400, 'ExpectedGroupIdToJoinChannelGroup']);
+      }
+
+      if (!isArray(inputs)) {
+        return cbk([400, 'ExpectedArrayOfInputsToJoinChannelGroup']);
       }
 
       if (!lnd) {
@@ -111,6 +118,7 @@ module.exports = ({capacity, coordinator, count, id, lnd, rate}, cbk) => {
         lnd,
         inbound: partners.inbound,
         outbound: partners.outbound,
+        skipchannels,
       },
       cbk);
     }],
@@ -126,8 +134,10 @@ module.exports = ({capacity, coordinator, count, id, lnd, rate}, cbk) => {
         capacity,
         count,
         lnd,
+        inputs,
         rate,
         to: partners.outbound,
+        skipchannels,
       },
       cbk);
     }],
@@ -180,6 +190,10 @@ module.exports = ({capacity, coordinator, count, id, lnd, rate}, cbk) => {
         return cbk();
       }
 
+      if (!!skipchannels) {
+        return cbk();
+      }
+
       // Make sure that there is an inbound channel
       return asyncRetry({interval, times}, cbk => {
         return confirmIncomingChannel({
@@ -204,6 +218,10 @@ module.exports = ({capacity, coordinator, count, id, lnd, rate}, cbk) => {
     {
       // Exit early when incoming channel is seen
       if (!incoming.error) {
+        return cbk();
+      }
+
+      if (!!skipchannels) {
         return cbk();
       }
 

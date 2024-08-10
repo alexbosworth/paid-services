@@ -25,6 +25,7 @@ const tokensAsBigUnit = tokens => (tokens / 1e8).toFixed(8);
     code: <Group Invite Code String>
     lnd: <Authenticated LND API Object>
     logger: <Winston Logger Object>
+    [skipchannels]: <Skip Channels Creation Bool>
   }
 
   @returns via cbk or Promise
@@ -36,7 +37,7 @@ const tokensAsBigUnit = tokens => (tokens / 1e8).toFixed(8);
     rate: <Chain Fee Tokens Per VByte Number>
   }
 */
-module.exports = ({code, lnd, logger}, cbk) => {
+module.exports = ({code, lnd, logger, skipchannels}, cbk) => {
   return new Promise((resolve, reject) => {
     return asyncAuto({
       // Check arguments
@@ -98,6 +99,7 @@ module.exports = ({code, lnd, logger}, cbk) => {
 
           return getGroupDetails({
             lnd,
+            skipchannels,
             coordinator: group.coordinator,
             id: group.id,
           },

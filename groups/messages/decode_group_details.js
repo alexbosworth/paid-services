@@ -12,6 +12,7 @@ const typeCapacity = '1';
 const typeCount = '2';
 const typeRate = '3';
 const typeVersion = '0';
+const versionSkipChannels = '4';
 const version = '1';
 
 /** Decode group details
@@ -21,6 +22,7 @@ const version = '1';
       type: <Type Number String>
       value: <Value Hex String>
     }]
+    [skipchannels]: <Skip Channels Creation Bool>
   }
 
   @throws
@@ -34,7 +36,7 @@ const version = '1';
     rate: <Chain Fee Rate Number>
   }
 */
-module.exports = ({records}) => {
+module.exports = ({records, skipchannels}) => {
   if (!isArray(records)) {
     throw new Error('ExpectedArrayOfRecordsToDecodeGroupDetails');
   }
@@ -42,6 +44,8 @@ module.exports = ({records}) => {
   if (!isArray(records)) {
     throw new Error('ExpectedArrayOfRecordsToDecodeGroupDetails');
   }
+
+  const versionValue = !!skipchannels ? versionSkipChannels : version;
 
   const versionRecord = findRecord(records, typeVersion);
 
@@ -55,7 +59,7 @@ module.exports = ({records}) => {
     throw new Error('ExpectedValidVersionNumberInGroupRecords');
   }
 
-  if (decodeBigSize({encoded: versionRecord.value}).decoded !== version) {
+  if (decodeBigSize({encoded: versionRecord.value}).decoded !== versionValue) {
     throw new Error('UnsupportedGroupVersion');
   }
 

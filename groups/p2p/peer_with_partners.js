@@ -14,11 +14,12 @@ const times = 2 * 60 * 30;
     [inbound]: <Inbound Identity Public Key Hex String>
     lnd: <Authenticated LND API Object>
     outbound: <Outbound Identity Public Key Hex String>
+    [skipchannels]: <Skip Channels Creation Bool>
   }
 
   @returns via cbk or Promise
 */
-module.exports = ({capacity, inbound, lnd, outbound}, cbk) => {
+module.exports = ({capacity, inbound, lnd, outbound, skipchannels}, cbk) => {
   return new Promise((resolve, reject) => {
     return asyncAuto({
       // Check arguments
@@ -61,6 +62,10 @@ module.exports = ({capacity, inbound, lnd, outbound}, cbk) => {
 
       // Test if outbound peer would accept a channel
       getAcceptance: ['connectOutbound', ({}, cbk) => {
+        if (!!skipchannels) {
+          return cbk(null, {is_accepted: true});
+        }
+
         return acceptsChannelOpen({
           capacity,
           lnd,

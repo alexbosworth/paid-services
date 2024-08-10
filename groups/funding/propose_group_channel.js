@@ -3,6 +3,7 @@ const asyncEach = require('async/each');
 const {connectPeer} = require('ln-sync');
 const {fundPsbtDisallowingInputs} = require('ln-sync');
 const {getNetwork} = require('ln-sync');
+const {createChainAddress} = require('ln-service');
 const {getUtxos} = require('ln-service');
 const {openChannels} = require('ln-service');
 const {networks} = require('bitcoinjs-lib');
@@ -10,9 +11,11 @@ const {payments} = require('bitcoinjs-lib');
 const {returnResult} = require('asyncjs-util');
 const {unlockUtxo} = require('ln-service');
 
+const asOutpoint = n => `${n.transaction_id}:${n.transaction_vout}`;
 const dummyKeys = () => ([Buffer.alloc(33, 2), Buffer.alloc(33, 3)]);
 const fuzzSize = 1;
 const halfOf = n => n / 2;
+const {isArray} = Array;
 const isEven = n => !(n % 2);
 const minGroupCount = 2;
 const nestedSegWitAddressFormat = 'np2wpkh';
@@ -22,9 +25,12 @@ const nestedSegWitPath = "m/49'/";
 
   {
     capacity: <Channel Capacity Tokens Number>
+    inputs: [<Outpoints String>]
     lnd: <Authenticated LND API Object>
+    inputs: [<Outpoints String>]
     rate: <Fee Rate Number>
     [to]: <Peer Id Public Key Hex String>
+    [skipchannels]: <Skip Channels Creation Bool>
   }
 
   @returns via cbk or Promise
@@ -51,7 +57,7 @@ const nestedSegWitPath = "m/49'/";
     }]
   }
 */
-module.exports = ({capacity, count, lnd, rate, to}, cbk) => {
+module.exports = ({capacity, count, inputs, lnd, rate, to, skipchannels}, cbk) => {
   return new Promise((resolve, reject) => {
     return asyncAuto({
       // Check arguments
@@ -62,6 +68,10 @@ module.exports = ({capacity, count, lnd, rate, to}, cbk) => {
 
         if (!count) {
           return cbk([400, 'ExpectedGroupCountToProposeGroupChannel']);
+        }
+
+        if (!isArray(inputs)) {
+          return cbk([400, 'ExpectedArrayOfInputsToProposeGroupChannel']);
         }
 
         if (!isEven(capacity)) {
@@ -79,11 +89,48 @@ module.exports = ({capacity, count, lnd, rate, to}, cbk) => {
         return cbk();
       },
 
-      // Get inputs to figure out which cannot be used for a group funding
-      getInputs: ['validate', ({}, cbk) => getUtxos({lnd}, cbk)],
-
       // Get the bitcoinjs network name for dummy output derivation
       getNetwork: ['validate', ({}, cbk) => getNetwork({lnd}, cbk)],
+
+      // Get utxos
+      getInputs: ['validate', ({}, cbk) => getUtxos({lnd}, cbk)],
+
+      getFilteredInputs: ['getInputs', ({getInputs}, cbk) => {
+        if (!inputs.length) {
+          return cbk(null, getInputs);
+        }
+
+        const outpoints = getInputs.utxos.map(n => {
+          return asOutpoint(n);
+        });
+
+        // Exit early when outpoints are not present in your utxos
+        inputs.forEach(n => {
+          if (!outpoints.includes(n)) {
+            return cbk([400, 'ExpectedValidUtxosToProposeChannelGroup'])
+          };
+        });
+
+        // Filter the utxos passed as args from getInputs and return them
+        const filteredUtxos = getInputs.utxos.map(n => {
+          const outpoint = asOutpoint(n);
+
+          if (inputs.includes(outpoint) && n.address_format === nestedSegWitAddressFormat) {
+            return cbk([400, 'ExpectedNonNestedSegwitAddressToProposeChannelGroup']);
+          }
+
+          return inputs.includes(outpoint) ? n : undefined;
+        }).filter(n => !!n);
+
+        const tokens = count === 2 ? halfOf(capacity) : capacity;
+
+        // Exit early when there are not enough utxos to fund
+        if (filteredUtxos.reduce((sum, n) => sum + n.tokens, 0) <= tokens) {
+          return cbk([400, 'ExpectedUtoxsAmountAboveCapacityToProposeChannelGroup']);
+        }
+
+        return cbk(null, {utxos: filteredUtxos});
+      }],
 
       // Make sure the peer is connected
       connect: ['getNetwork', ({}, cbk) => {
@@ -97,7 +144,17 @@ module.exports = ({capacity, count, lnd, rate, to}, cbk) => {
 
       // Propose the channel to get an address to fund
       propose: ['connect', 'getNetwork', ({getNetwork}, cbk) => {
-        const tokens = halfOf(capacity);
+        if (!!skipchannels) {
+          return createChainAddress({lnd, format: "p2wpkh"}, (err, res) => {
+            if (!!err) {
+              return cbk(err);
+            }
+  
+            return cbk(null, {pending: [{address: res.address, tokens: capacity}]})
+          });  
+        }
+
+        const tokens = halfOf(capacity)
 
         // Exit early when there is a shared proposal due to a pair group
         if (!to) {
@@ -142,9 +199,9 @@ module.exports = ({capacity, count, lnd, rate, to}, cbk) => {
       }],
 
       // Fund the address to populate UTXOs that can be used
-      fund: ['getInputs', 'propose', ({getInputs, propose}, cbk) => {
+      fund: ['getFilteredInputs', 'propose', ({getFilteredInputs, propose}, cbk) => {
         // Nested SegWit can't be used because LND 0.15.0 can't sign with it
-        const nestedSegWitInputs = getInputs.utxos.filter(utxo => {
+        const nestedSegWitInputs = getFilteredInputs.utxos.filter(utxo => {
           return utxo.address_format === nestedSegWitAddressFormat;
         });
 

@@ -19,11 +19,12 @@ const niceName = ({alias, id}) => `${alias} ${id}`.trim();
     ask: <Ask Function>
     lnd: <Authenticated LND API Object>
     logger: <Winston Logger Object>
+    skipchannels: <Skip Channels Creation Bool>
   }
 
   @returns via cbk or Promise
 */
-module.exports = ({ask, lnd, logger}, cbk) => {
+module.exports = ({ask, lnd, logger, skipchannels}, cbk) => {
   return new Promise((resolve, reject) => {
     return asyncAuto({
       // Import ECPair library
@@ -48,7 +49,7 @@ module.exports = ({ask, lnd, logger}, cbk) => {
 
       // Ask for group details
       askForDetails: ['validate', ({}, cbk) => {
-        return askForGroupDetails({ask, lnd}, cbk);
+        return askForGroupDetails({ask, lnd, skipchannels}, cbk);
       }],
 
       // Get identity public key
@@ -64,6 +65,7 @@ module.exports = ({ask, lnd, logger}, cbk) => {
         const coordinate = assembleChannelGroup({
           ecp,
           lnd,
+          skipchannels,
           capacity: askForDetails.capacity,
           count: askForDetails.count,
           identity: getIdentity.public_key,

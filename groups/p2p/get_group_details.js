@@ -26,9 +26,10 @@ const typeGroupChannelId = '1';
     count: <Target Members Count Number>
     funding: <Amount Of Funding Required Tokens Number>
     rate: <Chain Fee Rate Number>
+    [skipchannels]: <Skip Channels Creation Bool>
   }
 */
-module.exports = ({coordinator, id, lnd}, cbk) => {
+module.exports = ({coordinator, id, lnd, skipchannels}, cbk) => {
   return new Promise((resolve, reject) => {
     return asyncAuto({
       // Check arguments
@@ -71,7 +72,7 @@ module.exports = ({coordinator, id, lnd}, cbk) => {
       // Parse the group details records
       group: ['request', ({request}, cbk) => {
         try {
-          return cbk(null, decodeGroupDetails({records: request.records}));
+          return cbk(null, decodeGroupDetails({skipchannels, records: request.records}));
         } catch (err) {
           return cbk([503, err.message]);
         }

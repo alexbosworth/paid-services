@@ -26,9 +26,11 @@ const times = 2 * 60 * 10;
     count: <Channel Members Count Number>
     ecp: <ECPair Library Object>
     identity: <Coordinator Identity Public Key Hex String>
+    inputs: [<Outpoints String>]
     lnd: <Authenticated LND API Object>
     [members]: [<Member Identity Public Key Hex String>]
     rate: <Chain Fee Tokens Per VByte Number>
+    [skipchannels]: <Skip Channels Creation Bool>
   }
 
   @returns
@@ -74,7 +76,7 @@ const times = 2 * 60 * 10;
   @event 'signed'
   {}
 */
-module.exports = ({capacity, count, ecp, identity, lnd, members, rate}) => {
+module.exports = ({capacity, count, ecp, identity, inputs, lnd, members, rate, skipchannels}) => {
   if (count < minGroupCount) {
     throw new Error('ExpectedHigherGroupCountToAssembleChannelGroup');
   }
@@ -86,6 +88,7 @@ module.exports = ({capacity, count, ecp, identity, lnd, members, rate}) => {
     lnd,
     members,
     rate,
+    skipchannels,
   });
 
   const emitter = new EventEmitter();
@@ -109,7 +112,7 @@ module.exports = ({capacity, count, ecp, identity, lnd, members, rate}) => {
       if (count === minGroupCount) {
         const [outbound] = ids.filter(n => n !== identity);
 
-        await peerWithPartners({capacity, lnd, outbound});
+        await peerWithPartners({capacity, lnd, outbound, skipchannels});
 
         return coordinator.connected();
       }
@@ -117,7 +120,7 @@ module.exports = ({capacity, count, ecp, identity, lnd, members, rate}) => {
       const {inbound, outbound} = coordinator.partners(identity);
 
       // Connect to the inbound and outbound partners
-      await peerWithPartners({capacity, inbound, lnd, outbound});
+      await peerWithPartners({capacity, inbound, lnd, outbound, skipchannels});
 
       // Register as connected
       return coordinator.connected();
@@ -135,8 +138,10 @@ module.exports = ({capacity, count, ecp, identity, lnd, members, rate}) => {
       const {change, funding, id, utxos} = await proposeGroupChannel({
         capacity,
         count,
+        inputs,
         lnd,
         rate,
+        skipchannels,
         to: coordinator.partners(identity).outbound,
       });
 
@@ -164,6 +169,11 @@ module.exports = ({capacity, count, ecp, identity, lnd, members, rate}) => {
         psbt: coordinator.unsigned(),
         utxos: pending.utxos,
       });
+
+
+      if (!!skipchannels) {
+        return coordinator.sign({id: identity, signed: signed.psbt});
+      }
 
       // Make sure there is an incoming channel
       await asyncRetry({interval, times}, async () => {
