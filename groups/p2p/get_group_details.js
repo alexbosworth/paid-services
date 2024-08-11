@@ -18,6 +18,7 @@ const typeGroupChannelId = '1';
     coordinator: <Group Coordinator Identity Public Key Hex String>
     id: <Group Identifier Hex String>
     lnd: <Authenticated LND API Object>
+    [service_type_get_details]: <Get Details Service Type Number>
   }
 
   @returns via cbk or Promise
@@ -28,20 +29,20 @@ const typeGroupChannelId = '1';
     rate: <Chain Fee Rate Number>
   }
 */
-module.exports = ({coordinator, id, lnd}, cbk) => {
+module.exports = (args, cbk) => {
   return new Promise((resolve, reject) => {
     return asyncAuto({
       // Check arguments
       validate: cbk => {
-        if (!coordinator) {
+        if (!args.coordinator) {
           return cbk([400, 'ExpectedCoordinatorToGetGroupDetails']);
         }
 
-        if (!id) {
+        if (!args.id) {
           return cbk([400, 'ExpectedGroupIdToGetGroupDetails']);
         }
 
-        if (!lnd) {
+        if (!args.lnd) {
           return cbk([400, 'ExpectedAuthenticatedLndToGetGroupDetails']);
         }
 
@@ -50,18 +51,18 @@ module.exports = ({coordinator, id, lnd}, cbk) => {
 
       // Connect to the coordinator to request the group details
       connect: ['validate', ({}, cbk) => {
-        return connectPeer({lnd, id: coordinator}, cbk);
+        return connectPeer({id: args.coordinator, lnd: args.lnd}, cbk);
       }],
 
       // Send the request for group details
       request: ['connect', ({}, cbk) => {
         return asyncRetry({interval, times}, cbk => {
           return makePeerRequest({
-            lnd,
-            records: [{type: typeGroupChannelId, value: id}],
+            lnd: args.lnd,
+            records: [{type: typeGroupChannelId, value: args.id}],
             timeout: defaultRequestTimeoutMs,
-            to: coordinator,
-            type: serviceTypeGetGroupDetails,
+            to: args.coordinator,
+            type: args.service_type_get_details || serviceTypeGetGroupDetails,
           },
           cbk);
         },

@@ -35,6 +35,7 @@ const typeGroupChannelId = '1';
     lnd: <Authenticated LND API Object>
     overflow: <Expected Minimum Change Amount Tokens Number>
     [pending]: <Pending Channel Id Hex String>
+    [service]: <Pending Service Type Number>
     utxos: [{
       [non_witness_utxo]: <Non Witness Transaction Hex String>
       transaction_id: <Transaction Id Hex String>
@@ -126,7 +127,7 @@ module.exports = (args, cbk) => {
             lnd: args.lnd,
             timeout: defaultRequestTimeoutMs,
             to: args.coordinator,
-            type: serviceTypeRegisterPendingOpen,
+            type: args.service || serviceTypeRegisterPendingOpen,
           },
           (err, res) => {
             if (!!err) {

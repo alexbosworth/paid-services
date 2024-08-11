@@ -24,32 +24,33 @@ const typeSignedFunding = '2';
     group: <Group Id Hex String>
     lnd: <Authenticated LND API Object>
     signed: <Signed PSBT Hex String>
+    [service]: <Signed Service Type Number>
   }
 
   @returns via cbk or Promise
 */
-module.exports = ({coordinator, count, group, lnd, signed}, cbk) => {
+module.exports = (args, cbk) => {
   return new Promise((resolve, reject) => {
     return asyncAuto({
       // Check arguments
       validate: cbk => {
-        if (!coordinator) {
+        if (!args.coordinator) {
           return cbk([400, 'ExpectedCoordinatorToRegisterSignedOpen']);
         }
 
-        if (!count) {
+        if (!args.count) {
           return cbk([400, 'ExpectedMembersCountToRegisterSignedOpen']);
         }
 
-        if (!group) {
+        if (!args.group) {
           return cbk([400, 'ExpectedGroupIdentifierToRegisterSignedOpen']);
         }
 
-        if (!lnd) {
+        if (!args.lnd) {
           return cbk([400, 'ExpectedLndToRegisterSignedFundingOpen']);
         }
 
-        if (!signed) {
+        if (!args.signed) {
           return cbk([400, 'ExpectedSignedPsbtToRegisterSignedOpen']);
         }
 
@@ -58,7 +59,7 @@ module.exports = ({coordinator, count, group, lnd, signed}, cbk) => {
 
       // Connect to the coordinator to send the registered pending message
       connect: ['validate', ({}, cbk) => {
-        return connectPeer({lnd, id: coordinator}, cbk);
+        return connectPeer({id: args.coordinator, lnd: args.lnd}, cbk);
       }],
 
       // Send connection confirmation request
@@ -84,14 +85,14 @@ module.exports = ({coordinator, count, group, lnd, signed}, cbk) => {
         },
         cbk => {
           return makePeerRequest({
-            lnd,
+            lnd: args.lnd,
             records: [
-              {type: typeGroupChannelId, value: group},
-              {type: typeSignedFunding, value: signed},
+              {type: typeGroupChannelId, value: args.group},
+              {type: typeSignedFunding, value: args.signed},
             ],
             timeout: defaultRequestTimeoutMs,
-            to: coordinator,
-            type: serviceTypeRegisterSignedOpen,
+            to: args.coordinator,
+            type: args.service || serviceTypeRegisterSignedOpen,
           },
           (err, res) => {
             if (!!err) {
@@ -108,7 +109,7 @@ module.exports = ({coordinator, count, group, lnd, signed}, cbk) => {
             const signed = decodeSignedRecords({records: res.records});
 
             // Exit with error when connections are missing
-            if (signed.count !== count) {
+            if (signed.count !== args.count) {
               return cbk([503, missingGroupPartners]);
             }
 

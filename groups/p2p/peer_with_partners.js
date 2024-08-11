@@ -12,26 +12,27 @@ const times = 2 * 60 * 30;
   {
     capacity: <Channel Capacity Tokens Number>
     [inbound]: <Inbound Identity Public Key Hex String>
+    [skip_acceptance_check]: <Skip Channel Acceptance Check Bool>
     lnd: <Authenticated LND API Object>
     outbound: <Outbound Identity Public Key Hex String>
   }
 
   @returns via cbk or Promise
 */
-module.exports = ({capacity, inbound, lnd, outbound}, cbk) => {
+module.exports = (args, cbk) => {
   return new Promise((resolve, reject) => {
     return asyncAuto({
       // Check arguments
       validate: cbk => {
-        if (!capacity) {
+        if (!args.capacity) {
           return cbk([400, 'ExpectedChannelCapacityToPeerWithPartners']);
         }
 
-        if (!lnd) {
+        if (!args.lnd) {
           return cbk([400, 'ExpectedAuthenticatedLndToConnectTo']);
         }
 
-        if (!outbound) {
+        if (!args.outbound) {
           return cbk([400, 'ExpectedOutboundPeerIdentityToConnectTo']);
         }
 
@@ -41,12 +42,12 @@ module.exports = ({capacity, inbound, lnd, outbound}, cbk) => {
       // Attempt connecting to the inbound peer
       connectInbound: ['validate', ({}, cbk) => {
         // Exit early when there is no inbound peer
-        if (!inbound) {
+        if (!args.inbound) {
           return cbk();
         }
 
         return asyncRetry({interval, times}, cbk => {
-          return connectPeer({lnd, id: inbound}, cbk);
+          return connectPeer({id: args.inbound, lnd: args.lnd}, cbk);
         },
         cbk);
       }],
@@ -54,17 +55,22 @@ module.exports = ({capacity, inbound, lnd, outbound}, cbk) => {
       // Attempt connecting to the outbound peer
       connectOutbound: ['validate', ({}, cbk) => {
         return asyncRetry({interval, times}, cbk => {
-          return connectPeer({lnd, id: outbound}, cbk);
+          return connectPeer({id: args.outbound, lnd: args.lnd}, cbk);
         },
         cbk);
       }],
 
       // Test if outbound peer would accept a channel
       getAcceptance: ['connectOutbound', ({}, cbk) => {
+        // Exit early when skipping acceptance check
+        if (!!args.skip_acceptance_check) {
+          return cbk(null, {is_accepted: true});
+        }
+
         return acceptsChannelOpen({
-          capacity,
-          lnd,
-          partner_public_key: outbound,
+          capacity: args.capacity,
+          lnd: args.lnd,
+          partner_public_key: args.outbound,
         },
         cbk);
       }],
@@ -72,7 +78,7 @@ module.exports = ({capacity, inbound, lnd, outbound}, cbk) => {
       // Check that the proposal would be accepted
       checkAcceptance: ['getAcceptance', ({getAcceptance}, cbk) => {
         if (!getAcceptance.is_accepted) {
-          return cbk([503, 'PeerRejectedChanOpenRequest', {peer: outbound}]);
+          return cbk([503, 'PeerRejectedChanOpenRequest', {peer: args.outbound}]);
         }
 
         return cbk();

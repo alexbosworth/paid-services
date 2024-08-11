@@ -24,6 +24,7 @@ const typeGroupChannelId = '1';
     count: <Group Member Count Number>
     id: <Group Identifier Hex String>
     lnd: <Authenticated LND API Object>
+    [service]: <Service Type Number>
   }
 
   @returns via cbk or Promise
@@ -32,7 +33,7 @@ const typeGroupChannelId = '1';
     outbound: <Outbound Peer Public Key Identity Hex String>
   }
 */
-module.exports = ({coordinator, count, id, lnd}, cbk) => {
+module.exports = ({coordinator, count, id, lnd, service}, cbk) => {
   return new Promise((resolve, reject) => {
     return asyncAuto({
       // Check arguments
@@ -88,7 +89,7 @@ module.exports = ({coordinator, count, id, lnd}, cbk) => {
             records: [{type: typeGroupChannelId, value: id}],
             timeout: defaultRequestTimeoutMs,
             to: coordinator,
-            type: serviceTypeFindGroupPartners,
+            type: service || serviceTypeFindGroupPartners,
           },
           (err, res) => {
             if (!!err) {

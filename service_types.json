@@ -2,12 +2,16 @@
   "serviceTypeAcceptCapacityChange": "8050002",
   "serviceTypeChangeCapacity": "8050001",
   "serviceTypeConfirmConnected": "8050012",
+  "serviceTypeFindFanoutPartners": "8050015",
   "serviceTypeFindGroupPartners": "8050011",
+  "serviceTypeGetFanoutDetails": "8050016",
   "serviceTypeGetGroupDetails": "8050010",
   "serviceTypeReceiveTrades": "8050006",
   "serviceTypeRequestTrades": "8050005",
   "serviceTypeReceiveChannelSale": "8050008",
+  "serviceTypeRegisterPendingFanout": "8050017",
   "serviceTypeRegisterPendingOpen": "8050013",
+  "serviceTypeRegisterSignedFanout": "8050018",
   "serviceTypeRegisterSignedOpen": "8050014",
   "serviceTypeRequestChannelSale": "8050007",
   "serviceTypeSignCapacityChange": "8050004",
@@ -27,6 +31,10 @@
     "8050011": "serviceTypeFindGroupPartners",
     "8050012": "serviceTypeConfirmConnected",
     "8050013": "serviceTypeRegisterPendingOpen",
-    "8050014": "serviceTypeRegisterSignedOpen"
+    "8050014": "serviceTypeRegisterSignedOpen",
+    "8050015": "serviceTypeFindFanoutPartners",
+    "8050016": "serviceTypeGetFanoutDetails",
+    "8050017": "serviceTypeRegisterPendingFanout",
+    "8050018": "serviceTypeRegisterSignedFanout"
   }
 }
