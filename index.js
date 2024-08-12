@@ -3,12 +3,14 @@ const {changeChannelCapacity} = require('./capacity');
 const {confirmServiceUse} = require('./client');
 const {createAnchoredTrade} = require('./trades');
 const {createGroupChannel} = require('./groups');
+const {createGroupFanout} = require('./fanout');
 const {decodeTrade} = require('./trades');
 const {encodeTrade} = require('./trades');
 const {getAnchoredTrade} = require('./trades');
 const {getServiceSchema} = require('./client');
 const {getServicesList} = require('./client');
 const {joinGroupChannel} = require('./groups');
+const {joinGroupFanout} = require('./fanout');
 const {makePeerRequest} = require('./p2p');
 const {makeServiceRequest} = require('./client');
 const {manageGroupJoin} = require('./groups');
@@ -27,12 +29,14 @@ module.exports = {
   confirmServiceUse,
   createAnchoredTrade,
   createGroupChannel,
+  createGroupFanout,
   decodeTrade,
   encodeTrade,
   getAnchoredTrade,
   getServiceSchema,
   getServicesList,
   joinGroupChannel,
+  joinGroupFanout,
   makePeerRequest,
   makeServiceRequest,
   manageGroupJoin,

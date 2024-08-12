@@ -140,7 +140,7 @@ module.exports = (args, cbk) => {
       // Generate addresses to fund
       propose: ['connect', ({}, cbk) => {
         return asyncMap(Array(args.output_count).fill(), (_, cbk) => {
-          return createChainAddress({is_unused: true, lnd: args.lnd}, (err, res) => {
+          return createChainAddress({is_unused: false, lnd: args.lnd}, (err, res) => {
             if (err) {
               return cbk(err);
             }
@@ -158,7 +158,6 @@ module.exports = (args, cbk) => {
 
       // Fund the address to populate UTXOs that can be used
       fund: ['getFilteredInputs', 'propose', ({getFilteredInputs, propose}, cbk) => {
-        console.log(propose);
         // Nested SegWit can't be used because LND 0.15.0 can't sign with it
         const nestedSegWitInputs = getFilteredInputs.utxos.filter(utxo => {
           return utxo.address_format === nestedSegWitAddressFormat;
