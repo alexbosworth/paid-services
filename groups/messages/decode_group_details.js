@@ -12,7 +12,7 @@ const typeCapacity = '1';
 const typeCount = '2';
 const typeRate = '3';
 const typeVersion = '0';
-const version = '1';
+const version = '2';
 
 /** Decode group details
 
