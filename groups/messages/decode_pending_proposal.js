@@ -163,5 +163,13 @@ module.exports = ({records}) => {
     };
   });
 
-  return {utxos, change: changeRecord.value, funding: fundingRecord.value};
+  try {
+    decodeTlvStream({encoded: fundingRecord.value});
+  } catch (err) {
+    throw new Error('ExpectedValidTlvStreamForFundingOutputsToDecodePendingProposal');
+  }
+
+  const funding = decodeTlvStream({encoded: fundingRecord.value}).records.map(({value}) => value);
+
+  return {funding, utxos, change: changeRecord.value};
 };

@@ -41,8 +41,9 @@ module.exports = ({change, funding, id, utxos}) => {
   // Encode change output script when present
   const changeRecord = !change ? undefined : {type: typeChange, value: change};
 
+  const encodedFunding = encodeTlv(funding.map((n,i) => ({type: i.toString(), value: n})));
   // Encode funding output script
-  const fundingRecord = {type: typeFunding, value: funding};
+  const fundingRecord = {type: typeFunding, value: encodedFunding};
 
   // Encode the group id
   const idRecord = {type: typeId, value: id};

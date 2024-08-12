@@ -204,7 +204,18 @@ module.exports = (args, cbk) => {
         }));
 
         const change = outputs.find(n => n.script === args.change);
-        const funding = outputs.find(n => n.script === args.funding);
+
+        // Check if all funding outputs are present
+        const allFundingPresent = args.funding.every(fund => 
+          outputs.find(n => n.script === fund)
+        );
+
+        // Sum the tokens of all funding outputs
+        const totalCapacity = args.funding.map(fund => 
+          outputs.find(n => n.script === fund).tokens
+        ).reduce((sum, n) => sum + n, 0);
+
+        const capacity = !!args.output_count ? args.capacity * args.output_count : args.capacity;
 
         // When there is overflow to receive, require a change output
         if (!!args.overflow && !change) {
@@ -217,12 +228,12 @@ module.exports = (args, cbk) => {
         }
 
         // The funding output should be represented in the outputs
-        if (!funding) {
+        if (!allFundingPresent) {
           return cbk([503, 'FailedToFindFundingOutputInUnsignedGroupPsbt']);
         }
 
         // Funding should match the channel capacity
-        if (funding.tokens !== args.capacity) {
+        if (totalCapacity !== capacity) {
           return cbk([503, 'IncorrectFundingOutputValueInUnsignedGroupPsbt']);
         }
 

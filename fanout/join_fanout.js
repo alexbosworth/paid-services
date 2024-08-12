@@ -165,6 +165,7 @@ module.exports = (args, cbk) => {
         group: args.id,
         lnd: args.lnd,
         overflow: propose.overflow,
+        output_count: args.output_count,
         pending: propose.id,
         service: serviceTypeRegisterPendingFanout,
         utxos: propose.utxos,

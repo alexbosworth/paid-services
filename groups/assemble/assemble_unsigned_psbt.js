@@ -83,9 +83,15 @@ module.exports = ({capacity, proposed, rate}, cbk) => {
 
           const inputsOffset = tx.ins.length;
 
-          [member.change, member.funding].filter(n => !!n).forEach(out => {
-            return tx.addOutput(hexAsBuffer(out), capacity);
-          });
+          if (!!member.change) {
+            tx.addOutput(hexAsBuffer(member.change), capacity);
+          }
+
+          if (!!member.funding && !!member.funding.length) {
+            member.funding.forEach(out => {
+              tx.addOutput(hexAsBuffer(out), capacity);
+            });
+          }
 
           member.utxos.forEach(utxo => {
             return tx.addInput(
@@ -114,16 +120,20 @@ module.exports = ({capacity, proposed, rate}, cbk) => {
 
           const funded = sumOf(member.utxos.map(n => n.witness_utxo.tokens));
 
-          return [
-            {
-              script: member.funding,
-              tokens: capacity,
-            },
-            {
-              script: member.change,
-              tokens: funded - committed(capacity, proposed) - (vbytes * rate),
-            },
-          ];
+          // Collect all member outputs including all fundings and change
+          const fundingOutputs = !!member.funding 
+            ? member.funding.map(out => ({
+                script: out, 
+                tokens: capacity,
+              }))
+            : [];
+
+          const changeOutput = {
+            script: member.change,
+            tokens: funded - committed(capacity, proposed) - (vbytes * rate),
+          };
+
+          return [...fundingOutputs, changeOutput];
         });
 
         // Collect outputs and shuffle them

@@ -211,13 +211,13 @@ module.exports = (args, cbk) => {
         // Find the change output
         const change = fund.outputs.find(n => n.is_change);
 
-        // Find the funding output
-        const funding = fund.outputs.find(n => !n.is_change);
+        // Gather the funding output scripts
+        const funding = fund.outputs.filter(n => !n.is_change).map(n => n.output_script);
 
         // UTXOs have been selected
         return cbk(null, {
           change: !!change ? change.output_script : undefined,
-          funding: !!args.to ? funding.output_script : undefined,
+          funding: !!args.to ? funding : undefined,
           id: proposal.id,
           overflow: !!change ? change.tokens : undefined,
           utxos: fund.inputs.map(input => ({
