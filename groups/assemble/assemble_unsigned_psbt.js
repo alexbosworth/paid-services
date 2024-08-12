@@ -120,6 +120,15 @@ module.exports = ({capacity, proposed, rate}, cbk) => {
 
           const funded = sumOf(member.utxos.map(n => n.witness_utxo.tokens));
 
+          const fee = vbytes * rate;
+
+          // Calculate total output amount (including funding outputs)
+          const memberlength = !!member.funding ? (member.funding.length - 1) : 0;
+          const totalOutputAmount = memberlength * capacity + committed(capacity, proposed);
+
+          // Calculate change amount
+          const changeAmount = funded - totalOutputAmount - fee;
+
           // Collect all member outputs including all fundings and change
           const fundingOutputs = !!member.funding 
             ? member.funding.map(out => ({
@@ -130,7 +139,7 @@ module.exports = ({capacity, proposed, rate}, cbk) => {
 
           const changeOutput = {
             script: member.change,
-            tokens: funded - committed(capacity, proposed) - (vbytes * rate),
+            tokens: changeAmount,
           };
 
           return [...fundingOutputs, changeOutput];
