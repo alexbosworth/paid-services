@@ -4,6 +4,7 @@ const {broadcastTransaction} = require('ln-sync');
 const {getChainBalance} = require('ln-service');
 const {getIdentity} = require('ln-service');
 const {getMethods} = require('ln-service');
+const {getUtxos} = require('ln-service');
 const {getNodeAlias} = require('ln-sync');
 const {returnResult} = require('asyncjs-util');
 const tinysecp = require('tiny-secp256k1');
@@ -11,7 +12,8 @@ const tinysecp = require('tiny-secp256k1');
 const assembleFanoutGroup = require('./assemble_fanout_group');
 
 const descriptionForGroup = 'group fanout';
-const halfOf = n => n / 2;
+const asBigUnit = n => (n / 1e8).toFixed(8);
+const asOutpoint = utxo => `${utxo.transaction_id}:${utxo.transaction_vout}`;
 const {isArray} = Array;
 const isNumber = n => !isNaN(n);
 const isPublicKey = n => !!n && /^0[2-3][0-9A-F]{64}$/i.test(n);
@@ -25,13 +27,16 @@ const niceName = ({alias, id}) => `${alias} ${id}`.trim();
 const {now} = Date;
 const signPsbtEndpoint = '/walletrpc.WalletKit/SignPsbt';
 const staleMs = 1000 * 60 * 5;
+const sumOf = arr => arr.reduce((sum, n) => sum + n, Number());
 
 /** Create a collaborative fanout
 
   {
+    ask: <Ask Function>
     capacity: <Output Capacity Tokens Number>
     count: <Group Member Count Number>
     [inputs]: [<Utxo Outpoint String>]
+    [is_selecting_utxos]: <Interactively Select UTXOs to Spend Bool>
     lnd: <Authenticated LND API Object>
     logger: <Winston Logger Object>
     [members]: [<Member Identity Public Key Hex String>]
@@ -52,6 +57,10 @@ module.exports = (args, cbk) => {
 
       // Check arguments
       validate: cbk => {
+        if (!args.ask) {
+          return cbk([400, 'ExpectedAskFunctionToCreateGroupFanout']);
+        }
+
         if (!args.capacity) {
           return cbk([400, 'ExpectedChannelCapacityToCreateGroupFanout']);
         }
@@ -112,6 +121,9 @@ module.exports = (args, cbk) => {
         return getChainBalance({lnd: args.lnd}, cbk);
       }],
 
+      // Get UTXOs to use for input selection and final fee rate calculation
+      getUtxos: ['validate', ({}, cbk) => getUtxos({lnd: args.lnd}, cbk)],
+
       // Get identity public key
       getIdentity: ['validate', ({}, cbk) => getIdentity({lnd: args.lnd}, cbk)],
 
@@ -138,6 +150,58 @@ module.exports = (args, cbk) => {
         return cbk();
       }],
 
+      // Select inputs to spend
+      utxos: ['getUtxos', ({getUtxos}, cbk) => {
+        // Exit early when UTXOs are all specified already
+        if (!!args.inputs.length) {
+          return cbk(null, args.inputs);
+        }
+
+        // Exit early when not selecting UTXOs interactively
+        if (!args.is_selecting_utxos) {
+          return cbk(null, []);
+        }
+
+        // Only selecting confirmed utxos is supported
+        const utxos = getUtxos.utxos.filter(n => !!n.confirmation_count);
+
+        // Make sure there are some UTXOs to select
+        if (!utxos.length) {
+          return cbk([400, 'WalletHasZeroConfirmedUtxos']);
+        }
+
+        return args.ask({
+          choices: utxos.map(utxo => ({
+            name: `${asBigUnit(utxo.tokens)} ${asOutpoint(utxo)}`,
+            value: asOutpoint(utxo),
+          })),
+          loop: false,
+          name: 'inputs',
+          type: 'checkbox',
+          validate: input => {
+            // A selection is required
+            if (!input.length) {
+              return false;
+            }
+
+            const tokens = sumOf(input.map(utxo => {
+              return utxos.find(n => asOutpoint(n) === utxo.value).tokens;
+            }));
+
+            const capacity = args.capacity * args.output_count;
+
+            const missingTok = asBigUnit(capacity - tokens);
+
+            if (tokens < capacity) {
+              return `Selected ${asBigUnit(tokens)}, need ${missingTok} more`;
+            }
+
+            return true;
+          }
+        },
+        ({inputs}) => cbk(null, inputs));
+      }],
+
       // Fund and assemble the group
       create: [
         'ecp',
@@ -145,7 +209,8 @@ module.exports = (args, cbk) => {
         'confirmSigner',
         'getBalance',
         'getIdentity',
-        ({ecp, getIdentity}, cbk) =>
+        'utxos',
+        ({ecp, getIdentity, utxos}, cbk) =>
       {
         const announced = [];
         const members = [getIdentity.public_key].concat(args.members);
@@ -155,7 +220,7 @@ module.exports = (args, cbk) => {
           capacity: args.capacity,
           count: args.count,
           identity: getIdentity.public_key,
-          inputs: args.inputs,
+          inputs: utxos,
           lnd: args.lnd,
           members: !!args.members.length ? members : undefined,
           output_count: args.output_count,
