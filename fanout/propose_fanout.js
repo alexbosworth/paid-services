@@ -1,12 +1,16 @@
 const asyncAuto = require('async/auto');
 const asyncEach = require('async/each');
 const asyncMap = require('async/map');
+
 const {connectPeer} = require('ln-sync');
-const {fundPsbtDisallowingInputs} = require('ln-sync');
 const {createChainAddress} = require('ln-service');
+const {fundPsbt} = require('ln-service');
+const {decodePsbt} = require('psbt');
 const {getUtxos} = require('ln-service');
+const {lockUtxo} = require('ln-service');
 const {returnResult} = require('asyncjs-util');
 const {unlockUtxo} = require('ln-service');
+const tinysecp = require('tiny-secp256k1');
 
 const asOutpoint = n => `${n.transaction_id}:${n.transaction_vout}`;
 const {isArray} = Array;
@@ -53,6 +57,9 @@ const nestedSegWitPath = "m/49'/";
 module.exports = (args, cbk) => {
   return new Promise((resolve, reject) => {
     return asyncAuto({
+      // Import ECPair library
+      ecp: async () => (await import('ecpair')).ECPairFactory(tinysecp),
+
       // Check arguments
       validate: cbk => {
         if (!args.capacity) {
@@ -156,15 +163,32 @@ module.exports = (args, cbk) => {
         });
       }],
 
-      // Fund the address to populate UTXOs that can be used
-      fund: ['getFilteredInputs', 'propose', ({getFilteredInputs, propose}, cbk) => {
+      // Lock nested segwit inputs
+      lockUtxos: ['getFilteredInputs', ({getFilteredInputs}, cbk) => {
         // Nested SegWit can't be used because LND 0.15.0 can't sign with it
         const nestedSegWitInputs = getFilteredInputs.utxos.filter(utxo => {
           return utxo.address_format === nestedSegWitAddressFormat;
         });
 
-        return fundPsbtDisallowingInputs({
-          disallow_inputs: nestedSegWitInputs.map(input => ({
+        return asyncEach(nestedSegWitInputs, (input, cbk) => {
+          return lockUtxo({
+            lnd: args.lnd,
+            transaction_id: input.transaction_id,
+            transaction_vout: input.transaction_vout,
+          },
+          cbk);
+        },
+        cbk);
+      }],
+
+      // Fund the address to populate UTXOs that can be used
+      fund: [
+      'getFilteredInputs',
+      'lockUtxos',
+      'propose',
+      ({getFilteredInputs, propose}, cbk) => {
+        return fundPsbt({
+          inputs: getFilteredInputs.utxos.map(input => ({
             transaction_id: input.transaction_id,
             transaction_vout: input.transaction_vout,
           })),
@@ -193,11 +217,13 @@ module.exports = (args, cbk) => {
       }],
 
       // Final funding elements
-      funding: ['fund', 'propose', ({fund, propose}, cbk) => {
+      funding: ['ecp', 'fund', 'propose', 'unlock', ({ecp, fund, propose}, cbk) => {
+        const {inputs} = decodePsbt({ecp, psbt: fund.psbt});
+
         const [proposal] = propose.pending;
 
         // Look for a nested input that was selected to confirm there are none
-        const nested = fund.inputs.find(input => {
+        const nested = inputs.find(input => {
           return input.bip32_derivations.find(derivation => {
             return derivation.path.startsWith(nestedSegWitPath);
           });
@@ -220,13 +246,13 @@ module.exports = (args, cbk) => {
           funding: !!args.to ? funding : undefined,
           id: proposal.id,
           overflow: !!change ? change.tokens : undefined,
-          utxos: fund.inputs.map(input => ({
-            bip32_derivations: input.bip32_derivations,
+          utxos: fund.inputs.map((input, vin) => ({
+            bip32_derivations: inputs[vin].bip32_derivations,
             lock_id: input.lock_id,
-            non_witness_utxo: input.non_witness_utxo,
+            non_witness_utxo: inputs[vin].non_witness_utxo,
             transaction_id: input.transaction_id,
             transaction_vout: input.transaction_vout,
-            witness_utxo: input.witness_utxo,
+            witness_utxo: inputs[vin].witness_utxo,
           })),
         });
       }],
