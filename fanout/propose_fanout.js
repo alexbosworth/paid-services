@@ -187,11 +187,13 @@ module.exports = (args, cbk) => {
       'lockUtxos',
       'propose',
       ({getFilteredInputs, propose}, cbk) => {
+        const inputs = !!args.inputs.length ? getFilteredInputs.utxos.map(input => ({
+          transaction_id: input.transaction_id,
+          transaction_vout: input.transaction_vout,
+        })) : [];
+
         return fundPsbt({
-          inputs: getFilteredInputs.utxos.map(input => ({
-            transaction_id: input.transaction_id,
-            transaction_vout: input.transaction_vout,
-          })),
+          inputs,
           fee_tokens_per_vbyte: args.rate,
           lnd: args.lnd,
           outputs: propose.pending.map(output => ({
