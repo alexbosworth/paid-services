@@ -127,7 +127,7 @@ test(`Setup joint fanout group`, async ({end, equal, strictSame}) => {
         lnd,
         coordinator: control.id,
         id: assemble.id,
-        service_type_get_details: serviceTypeGetFanoutDetails,
+        service: serviceTypeGetFanoutDetails,
       });
 
       const join = joinFanout({

@@ -18,7 +18,7 @@ const typeGroupChannelId = '1';
     coordinator: <Group Coordinator Identity Public Key Hex String>
     id: <Group Identifier Hex String>
     lnd: <Authenticated LND API Object>
-    [service_type_get_details]: <Get Details Service Type Number>
+    [service]: <Get Details Service Type Number>
   }
 
   @returns via cbk or Promise
@@ -62,7 +62,7 @@ module.exports = (args, cbk) => {
             records: [{type: typeGroupChannelId, value: args.id}],
             timeout: defaultRequestTimeoutMs,
             to: args.coordinator,
-            type: args.service_type_get_details || serviceTypeGetGroupDetails,
+            type: args.service || serviceTypeGetGroupDetails,
           },
           cbk);
         },

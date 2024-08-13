@@ -107,7 +107,7 @@ module.exports = (args, cbk) => {
             coordinator: group.coordinator,
             id: group.id,
             lnd: args.lnd,
-            service_type_get_details: serviceTypeGetFanoutDetails,
+            service: serviceTypeGetFanoutDetails,
           },
           cbk);
         },
