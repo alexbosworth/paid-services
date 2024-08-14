@@ -18,6 +18,7 @@ const {getGroupDetails} = require('./../../groups/p2p');
 const joinFanout = require('./../../fanout/join_fanout');
 const {serviceTypeGetFanoutDetails} = require('./../../service_types')
 
+const asOutpoint = utxo => `${utxo.transaction_id}:${utxo.transaction_vout}`;
 const capacity = 1e5;
 const count = 101;
 const feeRate = 1;
@@ -102,6 +103,9 @@ test(`Setup joint fanout group`, async ({end, equal, strictSame}) => {
       socket: control.socket,
     });
 
+    // Get utxos of the coordinator
+    const controlUtxos = await getUtxos({lnd: control.lnd});
+
     // Start Group Coordination
 
     // Start the coordination
@@ -110,7 +114,7 @@ test(`Setup joint fanout group`, async ({end, equal, strictSame}) => {
       ecp,
       count: nodes.length,
       identity: control.id,
-      inputs: [],
+      inputs: controlUtxos.utxos.map(n => asOutpoint(n)),
       lnd: control.lnd,
       output_count: outputCount,
       rate: feeRate,
@@ -130,13 +134,15 @@ test(`Setup joint fanout group`, async ({end, equal, strictSame}) => {
         service: serviceTypeGetFanoutDetails,
       });
 
+      const utxos = await getUtxos({lnd});
+
       const join = joinFanout({
         lnd,
         capacity: group.capacity,
         coordinator: control.id,
         count: group.count,
         id: assemble.id,
-        inputs: [],
+        inputs: utxos.utxos.map(n => asOutpoint(n)),
         output_count: outputCount,
         rate: group.rate,
       });

@@ -70,7 +70,7 @@ module.exports = (args, cbk) => {
           return cbk([400, 'ExpectedGroupCountToProposeFanout']);
         }
 
-        if (!isArray(args.inputs)) {
+        if (!isArray(args.inputs) || !args.inputs.length) {
           return cbk([400, 'ExpectedArrayOfInputsToProposeFanout']);
         }
 
@@ -97,10 +97,6 @@ module.exports = (args, cbk) => {
       getInputs: ['validate', ({}, cbk) => getUtxos({lnd: args.lnd}, cbk)],
 
       getFilteredInputs: ['getInputs', ({getInputs}, cbk) => {
-        if (!args.inputs.length) {
-          return cbk(null, getInputs);
-        }
-
         const capacity = args.capacity * args.output_count;
 
         const outpoints = getInputs.utxos.map(n => {
@@ -187,13 +183,11 @@ module.exports = (args, cbk) => {
       'lockUtxos',
       'propose',
       ({getFilteredInputs, propose}, cbk) => {
-        const inputs = !!args.inputs.length ? getFilteredInputs.utxos.map(input => ({
-          transaction_id: input.transaction_id,
-          transaction_vout: input.transaction_vout,
-        })) : [];
-
         return fundPsbt({
-          inputs,
+          inputs: getFilteredInputs.utxos.map(input => ({
+            transaction_id: input.transaction_id,
+            transaction_vout: input.transaction_vout,
+          })),
           fee_tokens_per_vbyte: args.rate,
           lnd: args.lnd,
           outputs: propose.pending.map(output => ({

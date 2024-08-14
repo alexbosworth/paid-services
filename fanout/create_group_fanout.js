@@ -81,6 +81,14 @@ module.exports = (args, cbk) => {
           return cbk([400, 'ExpectedValidGroupSizeToCreateGroupFanout']);
         }
 
+        if (!isArray(args.inputs)) {
+          return cbk([400, 'ExpectedArrayOfUtxosToCreateGroupFanout']);
+        }
+
+        if (!args.inputs.length && !args.is_selecting_utxos) {
+          return cbk([400, 'ExpectedToSelectUtxosToCreateGroupFanout']);
+        }
+
         if (!args.lnd) {
           return cbk([400, 'ExpectedAuthenticatedLndToCreateGroupFanout']);
         }
@@ -107,10 +115,6 @@ module.exports = (args, cbk) => {
 
         if (!args.rate) {
           return cbk([400, 'ExpectedOpeningFeeRateToCreateGroupFanout']);
-        }
-
-        if (!isArray(args.inputs)) {
-          return cbk([400, 'ExpectedArrayOfUtxosToCreateGroupFanout']);
         }
 
         return cbk();

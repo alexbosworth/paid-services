@@ -82,6 +82,10 @@ module.exports = (args, cbk) => {
         return cbk([400, 'ExpectedGroupIdToJoinFanout']);
       }
 
+      if (!args.inputs.length) {
+        return cbk([400, 'ExpectedArrayOfUtxosToJoinFanout']);
+      }
+
       if (!args.lnd) {
         return cbk([400, 'ExpectedAuthenticatedLndToJoinFanout']);
       }

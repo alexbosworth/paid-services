@@ -53,6 +53,10 @@ module.exports = (args, cbk) => {
           return cbk([400, 'ExpectedValidJoinCodeToJoinGroupFanout']);
         }
 
+        if (!args.inputs.length && !args.is_selecting_utxos) {
+          return cbk([400, 'ExpectedToSelectUtxosToJoinGroupFanout']);
+        }
+
         if (!args.lnd) {
           return cbk([400, 'ExpectedAuthenticatedLndToJoinGroupFanout']);
         }
