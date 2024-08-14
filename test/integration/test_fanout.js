@@ -134,7 +134,7 @@ test(`Setup joint fanout group`, async ({end, equal, strictSame}) => {
         service: serviceTypeGetFanoutDetails,
       });
 
-      const utxos = await getUtxos({lnd});
+      const {utxos} = await getUtxos({lnd});
 
       const join = joinFanout({
         lnd,
@@ -142,7 +142,7 @@ test(`Setup joint fanout group`, async ({end, equal, strictSame}) => {
         coordinator: control.id,
         count: group.count,
         id: assemble.id,
-        inputs: utxos.utxos.map(n => asOutpoint(n)),
+        inputs: utxos.map(n => asOutpoint(n)),
         output_count: outputCount,
         rate: group.rate,
       });
