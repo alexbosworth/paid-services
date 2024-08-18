@@ -2,15 +2,12 @@ const EventEmitter = require('events');
 const {randomBytes} = require('crypto');
 
 const assembleUnsignedPsbt = require('./../groups/assemble/assemble_unsigned_psbt');
-const {decodeGroupDetails} = require('./../groups/messages');
 const {decodePendingProposal} = require('./../groups/messages');
 const {decodeSignedFunding} = require('./../groups/messages');
 const {encodeConnectedRecords} = require('./../groups/messages');
 const {encodeGroupDetails} = require('./../groups/messages');
 const {encodeSignedRecords} = require('./../groups/messages');
 const {encodeUnsignedFunding} = require('./../groups/messages');
-const {encodePartnersRecords} = require('./../groups/messages');
-const {partnersFromMembers} = require('./../groups/members');
 const {servicePeerRequests} = require('./../p2p');
 const {serviceTypeConfirmConnected} = require('./../service_types');
 const {serviceTypeGetFanoutDetails} = require('./../service_types');

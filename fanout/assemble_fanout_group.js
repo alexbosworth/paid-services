@@ -1,6 +1,5 @@
 const EventEmitter = require('events');
 
-const asyncRetry = require('async/retry');
 const {broadcastChainTransaction} = require('ln-service');
 const {combinePsbts} = require('psbt');
 const {decodePsbt} = require('psbt');

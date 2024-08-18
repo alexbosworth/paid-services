@@ -5,9 +5,7 @@ const {decodePsbt} = require('psbt');
 const tinysecp = require('tiny-secp256k1');
 const {Transaction} = require('bitcoinjs-lib');
 
-const {findGroupPartners} = require('./../groups/p2p');
 const getFundingDetails = require('./get_funding_details');
-const {peerWithPartners} = require('./../groups/p2p');
 const {registerGroupConnected} = require('./../groups/p2p');
 const {registerPendingOpen} = require('./../groups/p2p');
 const {registerSignedOpen} = require('./../groups/p2p');
