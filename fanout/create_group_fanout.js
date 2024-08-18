@@ -23,6 +23,7 @@ const join = arr => arr.join(', ');
 const maxGroupSize = 420;
 const minOutputSize = 2e4;
 const minGroupSize = 3;
+const nestedSegWitAddressFormat = 'np2wpkh';
 const niceName = ({alias, id}) => `${alias} ${id}`.trim();
 const {now} = Date;
 const signPsbtEndpoint = '/walletrpc.WalletKit/SignPsbt';
@@ -165,9 +166,12 @@ module.exports = (args, cbk) => {
         if (!args.is_selecting_utxos) {
           return cbk(null, []);
         }
+        console.log(getUtxos.utxos);
 
         // Only selecting confirmed utxos is supported
-        const utxos = getUtxos.utxos.filter(n => !!n.confirmation_count);
+        const utxos = getUtxos.utxos
+        .filter(n => !!n.confirmation_count)
+        .filter(n => n.address_format !== nestedSegWitAddressFormat);
 
         // Make sure there are some UTXOs to select
         if (!utxos.length) {

@@ -14,6 +14,7 @@ const formatNodes = arr => arr.join(', ');
 const {isArray} = Array;
 const isCode = n => !!n && n.length === 98;
 const isNumber = n => !isNaN(n);
+const nestedSegWitAddressFormat = 'np2wpkh';
 const niceName = ({alias, id}) => `${alias} ${id}`.trim();
 const signPsbtEndpoint = '/walletrpc.WalletKit/SignPsbt';
 const sumOf = arr => arr.reduce((sum, n) => sum + n, Number());
@@ -104,7 +105,9 @@ module.exports = (args, cbk) => {
         }
 
         // Only selecting confirmed utxos is supported
-        const utxos = getUtxos.utxos.filter(n => !!n.confirmation_count);
+        const utxos = getUtxos.utxos
+        .filter(n => !!n.confirmation_count)
+        .filter(n => n.address_format !== nestedSegWitAddressFormat);
 
         // Make sure there are some UTXOs to select
         if (!utxos.length) {
