@@ -123,8 +123,21 @@ module.exports = ({capacity, proposed, rate}, cbk) => {
           const fee = vbytes * rate;
 
           // Calculate total output amount (including funding outputs)
-          const memberlength = !!member.funding ? (member.funding.length - 1) : 0;
-          const totalOutputAmount = memberlength * capacity + committed(capacity, proposed);
+          // Group channel opens have only one funding output
+          // Fanouts have multiple funding outputs
+          const calculateTotalOutputAmount = (member, capacity, proposed) => {
+            const fundingOutputsCount = !!member.funding ? (member.funding.length - 1) : 0;
+            const fundingOutputsAmount = fundingOutputsCount * capacity;
+            const committedAmount = committed(capacity, proposed);
+            
+            return fundingOutputsAmount + committedAmount;
+          };
+          
+          const totalOutputAmount = calculateTotalOutputAmount(member, capacity, proposed);
+
+
+          // const memberlength = !!member.funding ? (member.funding.length - 1) : 0;
+          // const totalOutputAmount = memberlength * capacity + committed(capacity, proposed);
 
           // Calculate change amount
           const changeAmount = funded - totalOutputAmount - fee;

@@ -2,12 +2,10 @@ const asyncAuto = require('async/auto');
 const asyncEach = require('async/each');
 const asyncMap = require('async/map');
 
-const {connectPeer} = require('ln-sync');
 const {createChainAddress} = require('ln-service');
 const {fundPsbt} = require('ln-service');
 const {decodePsbt} = require('psbt');
 const {getUtxos} = require('ln-service');
-const {lockUtxo} = require('ln-service');
 const {returnResult} = require('asyncjs-util');
 const {unlockUtxo} = require('ln-service');
 const tinysecp = require('tiny-secp256k1');
@@ -19,10 +17,10 @@ const isNumber = n => !isNaN(n);
 const nestedSegWitAddressFormat = 'np2wpkh';
 const nestedSegWitPath = "m/49'/";
 
-/** Fund and propose a fanout to a peer
+/** Get fanout funding details
 
   {
-    capacity: <Channel Capacity Tokens Number>
+    capacity: <Fanout Output Capacity Tokens Number>
     lnd: <Authenticated LND API Object>
     inputs: [<Outpoints String>]
     output_count: <Output Count Number>
@@ -61,31 +59,31 @@ module.exports = (args, cbk) => {
       // Check arguments
       validate: cbk => {
         if (!args.capacity) {
-          return cbk([400, 'ExpectedCapacityToProposeFanout']);
+          return cbk([400, 'ExpectedCapacityToGetFundingDetails']);
         }
 
         if (!args.count) {
-          return cbk([400, 'ExpectedGroupCountToProposeFanout']);
+          return cbk([400, 'ExpectedGroupCountToGetFundingDetails']);
         }
 
         if (!isArray(args.inputs) || !args.inputs.length) {
-          return cbk([400, 'ExpectedArrayOfInputsToProposeFanout']);
+          return cbk([400, 'ExpectedArrayOfInputsToGetFundingDetails']);
         }
 
         if (!isEven(args.capacity)) {
-          return cbk([400, 'ExpectedEventCapacityToProposeFanout']);
+          return cbk([400, 'ExpectedEventCapacityToGetFundingDetails']);
         }
 
         if (!args.lnd) {
-          return cbk([400, 'ExpectedAuthenticatedLndToProposeFanout']);
+          return cbk([400, 'ExpectedAuthenticatedLndToGetFundingDetails']);
         }
 
         if (!args.output_count || !isNumber(args.output_count)) {
-          return cbk([400, 'ExpectedOutputCountToProposeFanout']);
+          return cbk([400, 'ExpectedOutputCountToGetFundingDetails']);
         }
 
         if (!args.rate) {
-          return cbk([400, 'ExpectedChainFeeRateToProposeFanout']);
+          return cbk([400, 'ExpectedChainFeeRateToGetFundingDetails']);
         }
 
         return cbk();
@@ -152,28 +150,9 @@ module.exports = (args, cbk) => {
         });
       }],
 
-      // Lock nested segwit inputs
-      lockUtxos: ['getFilteredInputs', ({getFilteredInputs}, cbk) => {
-        // Nested SegWit can't be used because LND 0.15.0 can't sign with it
-        const nestedSegWitInputs = getFilteredInputs.utxos.filter(utxo => {
-          return utxo.address_format === nestedSegWitAddressFormat;
-        });
-
-        return asyncEach(nestedSegWitInputs, (input, cbk) => {
-          return lockUtxo({
-            lnd: args.lnd,
-            transaction_id: input.transaction_id,
-            transaction_vout: input.transaction_vout,
-          },
-          cbk);
-        },
-        cbk);
-      }],
-
       // Fund the address to populate UTXOs that can be used
       fund: [
       'getFilteredInputs',
-      'lockUtxos',
       'propose',
       ({getFilteredInputs, propose}, cbk) => {
         return fundPsbt({
@@ -218,7 +197,7 @@ module.exports = (args, cbk) => {
 
         // Make sure there were no nested inputs that were selected
         if (!!nested) {
-          return cbk([503, 'FailedToSelectNativeSegWitnInputsForChannel']);
+          return cbk([503, 'FailedToSelectNativeSegWitnInputsForFanout']);
         }
 
         // Find the change output

@@ -9,8 +9,7 @@ const {finalizePsbt} = require('psbt');
 const {Transaction} = require('bitcoinjs-lib');
 
 const coordinateFanout = require('./coordinate_fanout');
-const {peerWithPartners} = require('./../groups/p2p');
-const proposeFanout = require('./propose_fanout');
+const getFundingDetails = require('./get_funding_details');
 const {signAndFundGroupChannel} = require('../groups/funding');
 
 const {fromHex} = Transaction;
@@ -22,7 +21,7 @@ const times = 2 * 60 * 10;
 
   {
     capacity: <Output Capacity Tokens Number>
-    count: <Channel Members Count Number>
+    count: <Fanout Members Count Number>
     ecp: <ECPair Library Object>
     identity: <Coordinator Identity Public Key Hex String>
     inputs: [<Utxo Outpoint String>]
@@ -67,7 +66,7 @@ const times = 2 * 60 * 10;
     id: <Present Member Public Id Hex String>
   }
 
-  // Members proposed channels to each other
+  // Members have proposed fanout to the coordinator
   @event 'proposed'
   {}
 
@@ -106,13 +105,13 @@ module.exports = (args) => {
     emitter.emit('filled', {ids});
   });
 
-  // Group members have connected to each other
+  // Group members have connected to the coordinator
   coordinator.events.once('connected', async () => {
     emitter.emit('connected', {});
 
     try {
-      // Fund and propose the pending fanout
-      const {change, funding, utxos} = await proposeFanout({
+      // Get the funding details for the fanout
+      const {change, funding, utxos} = await getFundingDetails({
         capacity: args.capacity,
         count: args.count,
         inputs: args.inputs,
@@ -130,7 +129,7 @@ module.exports = (args) => {
     }
   });
 
-  // Group members have proposed channels to each other
+  // Group members have proposed fanout to the coordinator
   coordinator.events.once('funded', async () => {
     emitter.emit('proposed', {unsigned: coordinator.unsigned()});
 

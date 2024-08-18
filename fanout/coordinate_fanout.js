@@ -29,7 +29,7 @@ const uniq = arr => Array.from(new Set(arr));
 /** Coordinate fanout
 
   {
-    capacity: <Channel Capacity Tokens Number>
+    capacity: <Fanout Output Capacity Tokens Number>
     count: <Group Members Count Number>
     identity: <Coordinator Identity Public Key Hex String>
     lnd: <Authenticated LND API Object>
@@ -41,10 +41,8 @@ const uniq = arr => Array.from(new Set(arr));
   {
     events: <Event Emitter Object>
     id: <Group Id Hex String>
-    connected: <Add Connected Identity Public Key Hex String>
-    partners: <Get Channel Partners Function>
-    proposed: <Add Proposed Channel Function>
-    sign: <Add Signed Channel Function>
+    proposed: <Add Proposed Fanout Function>
+    sign: <Add Signed Fanout Function>
     signed: <Get Signed PSBTs Function>
     unsigned: <Get Unsigned PSBT Function>
   }
@@ -328,7 +326,6 @@ module.exports = ({capacity, count, identity, lnd, members, rate}) => {
   return {
     id,
     events: group.emitter,
-    partners: id => !!group.ids ? partnersFromMembers({group, id}) : undefined,
     proposed: pending => group.proposed.push(pending),
     sign: signed => group.signed.push(signed),
     signed: () => group.signed,

@@ -33,7 +33,7 @@ const sumOf = arr => arr.reduce((sum, n) => sum + n, Number());
 
   @returns via cbk or Promise
   {
-    transaction_id: <Channel Funding Transaction Id Hex String>
+    transaction_id: <Fanout Funding Transaction Id Hex String>
   }
 */
 module.exports = (args, cbk) => {
@@ -154,7 +154,7 @@ module.exports = (args, cbk) => {
         cbk);
       }],
 
-      // Join the channel group
+      // Join the Fanout group
       join: [
         'confirmSigner',
         'getMethods',
@@ -195,7 +195,7 @@ module.exports = (args, cbk) => {
           return args.logger.info({peering_with: formatNodes(nodes)});
         });
 
-        // Once everyone is peered then the channel tx is made
+        // Once everyone is peered to the coordinator then the fanout tx is made
         join.once('publishing', ({refund, signed}) => {
           return args.logger.info({refund, signed});
         });

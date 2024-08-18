@@ -32,7 +32,7 @@ const tokensAsBigUnit = tokens => (tokens / 1e8).toFixed(8);
 
   @returns via cbk or Promise
   {
-    capacity: <Channel Capacity Tokens Number>
+    capacity: <Fanout Output Capacity Tokens Number>
     coordinator: <Group Coordinator Identity Public Key Hex String>
     count: <Group Members Count>
     id: <Group Id Hex String>
@@ -45,7 +45,7 @@ module.exports = (args, cbk) => {
       // Check arguments
       validate: cbk => {
         if (!isCode(args.code)) {
-          return cbk([400, 'ExpectedChannelGroupInviteCodeToGetJoinDetails']);
+          return cbk([400, 'ExpectedFanoutGroupInviteCodeToGetJoinDetails']);
         }
 
         if (!args.lnd) {

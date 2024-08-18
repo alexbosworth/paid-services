@@ -168,8 +168,6 @@ test(`Setup joint fanout group`, async ({end, equal, strictSame}) => {
       }));
     });
 
-    console.log('reached here 8');
-
     strictSame(ids, [events.broadcast.id, events.broadcast.id], 'Got tx ids');
     strictSame(events.broadcast.id.length, 64, 'Got broadcast tx id');
     strictSame(!!events.broadcast.transaction, true, 'Got broadcast tx');

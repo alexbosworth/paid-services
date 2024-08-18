@@ -62,7 +62,7 @@ module.exports = (args, cbk) => {
         }
 
         if (!args.capacity) {
-          return cbk([400, 'ExpectedChannelCapacityToCreateGroupFanout']);
+          return cbk([400, 'ExpectedFanoutOutputCapacityToCreateGroupFanout']);
         }
 
         if (args.capacity < minOutputSize) {
@@ -70,7 +70,7 @@ module.exports = (args, cbk) => {
         }
 
         if (isOdd(args.capacity)) {
-          return cbk([400, 'ExpectedEvenChannelCapacityToCreateGroupFanout']);
+          return cbk([400, 'ExpectedEvenFanoutOutputCapacityToCreateGroupFanout']);
         }
 
         if (!args.count) {
@@ -106,7 +106,7 @@ module.exports = (args, cbk) => {
         }
 
         if (!!args.members.filter(n => !isPublicKey(n)).length) {
-          return cbk([400, 'ExpectedNodeIdentityPublicKeysForChannelGroup']);
+          return cbk([400, 'ExpectedNodeIdentityPublicKeysForFanoutGroup']);
         }
 
         if (!args.output_count || !isNumber(args.output_count)) {
@@ -269,27 +269,27 @@ module.exports = (args, cbk) => {
           return args.logger.info({ready: join(nodes)});
         });
 
-        // Once filled, members will connect with their partners
+        // Members have connected to the coordinator
         coordinate.events.once('connected', () => {
-          return args.logger.info({peered: true});
+          return args.logger.info({members_connected: true});
         });
 
-        // Members will propose pending channels to each other
+        // Members will propose pending fanout to the coordinator
         coordinate.events.once('proposed', () => {
           return args.logger.info({proposed: true});
         });
 
-        // Once all pending channels are in place, signatures will be received
+        // Once all pending usigned fanout is in place, signatures will be received
         coordinate.events.once('signed', () => {
           return args.logger.info({signed: true});
         });
 
-        // Finally the open channel tx will be broadcast
+        // Finally the fanout tx will be broadcast
         coordinate.events.once('broadcasting', broadcast => {
           return args.logger.info({publishing: broadcast.transaction});
         });
 
-        // After broadcasting the channels transaction needs to confirm
+        // After broadcasting the fanout transaction needs to confirm
         coordinate.events.once('broadcast', broadcast => {
           coordinate.events.removeAllListeners();
 
@@ -311,7 +311,7 @@ module.exports = (args, cbk) => {
         });
 
         coordinate.events.once('error', err => {
-          return cbk([503, 'UnexpectedErrorAssemblingChannelGroup', {err}]);
+          return cbk([503, 'UnexpectedErrorAssemblingFanoutGroup', {err}]);
         });
 
         return;

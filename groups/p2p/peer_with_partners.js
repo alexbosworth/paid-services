@@ -12,7 +12,6 @@ const times = 2 * 60 * 30;
   {
     capacity: <Channel Capacity Tokens Number>
     [inbound]: <Inbound Identity Public Key Hex String>
-    [skip_acceptance_check]: <Skip Channel Acceptance Check Bool>
     lnd: <Authenticated LND API Object>
     outbound: <Outbound Identity Public Key Hex String>
   }
@@ -62,11 +61,6 @@ module.exports = (args, cbk) => {
 
       // Test if outbound peer would accept a channel
       getAcceptance: ['connectOutbound', ({}, cbk) => {
-        // Exit early when skipping acceptance check
-        if (!!args.skip_acceptance_check) {
-          return cbk(null, {is_accepted: true});
-        }
-
         return acceptsChannelOpen({
           capacity: args.capacity,
           lnd: args.lnd,

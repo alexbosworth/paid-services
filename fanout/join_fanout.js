@@ -6,8 +6,8 @@ const tinysecp = require('tiny-secp256k1');
 const {Transaction} = require('bitcoinjs-lib');
 
 const {findGroupPartners} = require('./../groups/p2p');
+const getFundingDetails = require('./get_funding_details');
 const {peerWithPartners} = require('./../groups/p2p');
-const proposeFanout = require('./propose_fanout');
 const {registerGroupConnected} = require('./../groups/p2p');
 const {registerPendingOpen} = require('./../groups/p2p');
 const {registerSignedOpen} = require('./../groups/p2p');
@@ -24,8 +24,8 @@ const times = 60 * 10;
 /** Join a fanout group
 
   {
-    capacity: <Channel Capacity Tokens Number>
-    coordinator: <Channel Group Coordinator Public Key Hex String>
+    capacity: <Fanout Output Capacity Tokens Number>
+    coordinator: <Fanout Group Coordinator Public Key Hex String>
     count: <Group Members Number>
     id: <Group Id Hex String>
     inputs: [<Utxo Outpoints String>]
@@ -60,11 +60,11 @@ module.exports = (args, cbk) => {
       }
 
       if (!args.capacity) {
-        return cbk([400, 'ExpectedGroupChannelCapacityToJoinFanout']);
+        return cbk([400, 'ExpectedGroupFanoutOutputCapacityToJoinFanout']);
       }
 
       if (!args.coordinator) {
-        return cbk([400, 'ExpectedChannelCoordinatorIdToJoinFanout']);
+        return cbk([400, 'ExpectedFanoutGroupCoordinatorIdToJoinFanout']);
       }
 
       if (!args.count) {
@@ -104,9 +104,9 @@ module.exports = (args, cbk) => {
       }, cbk);
     }],
 
-    // Propose to the outgoing partner
-    propose: ['connected', ({}, cbk) => {
-      return proposeFanout({
+    // Get the funding details for the fanout
+    getFundingInfo: ['connected', ({}, cbk) => {
+      return getFundingDetails({
         capacity: args.capacity,
         count: args.count,
         inputs: args.inputs,
@@ -118,19 +118,19 @@ module.exports = (args, cbk) => {
     }],
 
     // Register pending proposal and sign and fund
-    register: ['propose', ({propose}, cbk) => {
+    register: ['getFundingInfo', ({getFundingInfo}, cbk) => {
       return registerPendingOpen({
         capacity: args.capacity,
         coordinator: args.coordinator,
-        change: propose.change,
-        funding: propose.funding,
+        change: getFundingInfo.change,
+        funding: getFundingInfo.funding,
         group: args.id,
         lnd: args.lnd,
-        overflow: propose.overflow,
+        overflow: getFundingInfo.overflow,
         output_count: args.output_count,
-        pending: propose.id,
+        pending: getFundingInfo.id,
         service: serviceTypeRegisterPendingFanout,
-        utxos: propose.utxos,
+        utxos: getFundingInfo.utxos,
       },
       cbk);
     }],
@@ -138,11 +138,11 @@ module.exports = (args, cbk) => {
     // Decode the unsigned PSBT
     transaction: [
       'ecp',
-      'propose',
+      'getFundingInfo',
       'register',
-      ({ecp, propose, register}, cbk) =>
+      ({ecp, getFundingInfo, register}, cbk) =>
     {
-      const funding = hexAsBuffer(propose.funding);
+      const funding = hexAsBuffer(getFundingInfo.funding);
       const psbt = decodePsbt({ecp, psbt: register.psbt});
 
       const tx = fromHex(psbt.unsigned_transaction);
