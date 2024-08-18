@@ -32,7 +32,7 @@ const typeGroupChannelId = '1';
     outbound: <Outbound Peer Public Key Identity Hex String>
   }
 */
-module.exports = ({coordinator, count, id, lnd, service}, cbk) => {
+module.exports = ({coordinator, count, id, lnd}, cbk) => {
   return new Promise((resolve, reject) => {
     return asyncAuto({
       // Check arguments
