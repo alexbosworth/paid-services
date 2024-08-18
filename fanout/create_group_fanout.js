@@ -166,7 +166,6 @@ module.exports = (args, cbk) => {
         if (!args.is_selecting_utxos) {
           return cbk(null, []);
         }
-        console.log(getUtxos.utxos);
 
         // Only selecting confirmed utxos is supported
         const utxos = getUtxos.utxos
