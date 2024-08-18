@@ -2,7 +2,6 @@
   "serviceTypeAcceptCapacityChange": "8050002",
   "serviceTypeChangeCapacity": "8050001",
   "serviceTypeConfirmConnected": "8050012",
-  "serviceTypeFindFanoutPartners": "8050015",
   "serviceTypeFindGroupPartners": "8050011",
   "serviceTypeGetFanoutDetails": "8050016",
   "serviceTypeGetGroupDetails": "8050010",
@@ -32,7 +31,6 @@
     "8050012": "serviceTypeConfirmConnected",
     "8050013": "serviceTypeRegisterPendingOpen",
     "8050014": "serviceTypeRegisterSignedOpen",
-    "8050015": "serviceTypeFindFanoutPartners",
     "8050016": "serviceTypeGetFanoutDetails",
     "8050017": "serviceTypeRegisterPendingFanout",
     "8050018": "serviceTypeRegisterSignedFanout"

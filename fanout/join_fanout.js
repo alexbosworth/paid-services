@@ -11,7 +11,6 @@ const proposeFanout = require('./propose_fanout');
 const {registerGroupConnected} = require('./../groups/p2p');
 const {registerPendingOpen} = require('./../groups/p2p');
 const {registerSignedOpen} = require('./../groups/p2p');
-const {serviceTypeFindFanoutPartners} = require('./../service_types')
 const {serviceTypeRegisterPendingFanout} = require('./../service_types')
 const {serviceTypeRegisterSignedFanout} = require('./../service_types')
 

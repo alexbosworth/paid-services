@@ -13,7 +13,6 @@ const {encodePartnersRecords} = require('./../groups/messages');
 const {partnersFromMembers} = require('./../groups/members');
 const {servicePeerRequests} = require('./../p2p');
 const {serviceTypeConfirmConnected} = require('./../service_types');
-const {serviceTypeFindFanoutPartners} = require('./../service_types');
 const {serviceTypeGetFanoutDetails} = require('./../service_types');
 const {serviceTypeRegisterPendingFanout} = require('./../service_types');
 const {serviceTypeRegisterSignedFanout} = require('./../service_types');
@@ -107,6 +106,7 @@ module.exports = ({capacity, count, identity, lnd, members, rate}) => {
     members: [{id: identity}],
     proposed: [],
     signed: [],
+    unsigned: undefined,
   };
 
   // The group has an identifier

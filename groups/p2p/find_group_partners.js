@@ -24,7 +24,6 @@ const typeGroupChannelId = '1';
     count: <Group Member Count Number>
     id: <Group Identifier Hex String>
     lnd: <Authenticated LND API Object>
-    [service]: <Service Type Number>
   }
 
   @returns via cbk or Promise
@@ -89,7 +88,7 @@ module.exports = ({coordinator, count, id, lnd, service}, cbk) => {
             records: [{type: typeGroupChannelId, value: id}],
             timeout: defaultRequestTimeoutMs,
             to: coordinator,
-            type: service || serviceTypeFindGroupPartners,
+            type: serviceTypeFindGroupPartners,
           },
           (err, res) => {
             if (!!err) {
