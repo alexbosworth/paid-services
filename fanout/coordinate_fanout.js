@@ -21,7 +21,7 @@ const {serviceTypeRegisterSignedFanout} = require('./../service_types');
 const findRecord = (records, type) => records.find(n => n.type === type);
 const {isArray} = Array;
 const makeGroupId = () => randomBytes(16).toString('hex');
-const minGroupCount = 2;
+const minGroupCount = 3;
 const now = () => new Date().toISOString();
 const staleDate = () => new Date(Date.now() - (1000 * 60 * 10)).toISOString();
 const typeGroupId = '1';
@@ -53,12 +53,6 @@ const uniq = arr => Array.from(new Set(arr));
   // All members are connected
   @event 'connected'
 
-  // A member was connected to their peers
-  @event 'connecting'
-  {
-    id: <Connected Member Public Key Hex String>
-  }
-
   // All members have funded with their outbound peers
   @event 'funded'
 
@@ -66,12 +60,6 @@ const uniq = arr => Array.from(new Set(arr));
   @event 'funding'
   {
     id: <Funding Member Public Key Hex String>
-  }
-
-  // A new member joined
-  @event 'joining'
-  {
-    id: <Joined Member Public Key Hex String>
   }
 
   // All members are joined
@@ -115,7 +103,6 @@ module.exports = ({capacity, count, identity, lnd, members, rate}) => {
   // Instantiate the group with self as a member
   const group = {
     allowed: members,
-    connected: [],
     emitter: new EventEmitter(),
     members: [{id: identity}],
     proposed: [],
@@ -149,15 +136,15 @@ module.exports = ({capacity, count, identity, lnd, members, rate}) => {
   });
 
   // Listen for and respond to find member requests
-  service.request({type: serviceTypeFindFanoutPartners}, (req, res) => {
+  service.request({type: serviceTypeConfirmConnected}, (req, res) => {
     if (!isArray(req.records)) {
-      return res.failure([400, 'ExpectedArrayOfRecordsToFindGroupPartners']);
+      return res.failure([400, 'ExpectedArrayOfRecordsToConfirmConnection']);
     }
 
     const idRecord = findRecord(req.records, typeGroupId);
 
     if (!idRecord) {
-      return res.failure([400, 'ExpectedGroupIdRecordToFindGroupPartners']);
+      return res.failure([400, 'ExpectedGroupIdRecordToConfirmConnection']);
     }
 
     // Exit early when this request is for a different group
@@ -168,11 +155,6 @@ module.exports = ({capacity, count, identity, lnd, members, rate}) => {
     // Exit early when group member is not allowed
     if (!!group.allowed && !group.allowed.includes(req.from)) {
       return res.failure([403, 'AccessDeniedToGroup']);
-    }
-
-    // Emit event that someone is joining
-    if (!group.members.find(n => n.id === req.from)) {
-      group.emitter.emit('joining', {id: req.from});
     }
 
     // Refresh the member list, evicting members who stopped pinging
@@ -196,7 +178,7 @@ module.exports = ({capacity, count, identity, lnd, members, rate}) => {
       return res.failure([503, 'GroupMemberExited']);
     }
 
-    // Exit early when still waiting for group to fill
+    // Wait for the group to fill
     if (group.members.length < count) {
       return res.success({});
     }
@@ -207,64 +189,11 @@ module.exports = ({capacity, count, identity, lnd, members, rate}) => {
     // Emit event that everyone has joined
     group.emitter.emit('joined', {ids: group.ids});
 
-    // Exit early when this is a pair group
-    if (count === minGroupCount) {
-      return res.success({});
-    }
 
-    // Derive position in members list
-    const {inbound, outbound} = partnersFromMembers({group, id: req.from});
-
-    // Encode partners for wire
-    const {records} = encodePartnersRecords({inbound, outbound});
-
-    return res.success({records});
-  });
-
-  // Listen for and respond to connected confirmations
-  service.request({type: serviceTypeConfirmConnected}, (req, res) => {
-    if (!isArray(req.records)) {
-      return res.failure([400, 'ExpectedArrayOfRecordsToConfirmConnection']);
-    }
-
-    const idRecord = findRecord(req.records, typeGroupId);
-
-    if (!idRecord) {
-      return res.failure([400, 'ExpectedGroupIdRecordToConfirmConnection']);
-    }
-
-    // Exit early when this request is for a different group
-    if (idRecord.value !== id) {
-      return;
-    }
-
-    // Group ids must be locked in before connections start
-    if (!group.ids) {
-      return res.failure([503, 'GroupMembersAreNotLockedInToStartConnects']);
-    }
-
-    // Cannot confirm connected when not part of the locked in group
-    if (!group.ids.includes(req.from)) {
-      return res.failure([403, 'MembershipNotPresentInLockedInMembers']);
-    }
-
-    // Emit event that someone is connecting
-    if (!group.connected.find(n => n.id === req.from)) {
-      group.emitter.emit('connecting', {id: req.from});
-    }
-
-    // Refresh the connected list, evicting remote members who stopped pinging
-    group.connected = group.connected
-      .filter(n => !n.last_connected || n.last_connected > staleDate())
-      .filter(n => n.id !== req.from);
-
-    // Add the group connection details to the group
-    group.connected.push({id: req.from, last_connected: now()});
-
-    const {records} = encodeConnectedRecords({count: group.connected.length});
+    const {records} = encodeConnectedRecords({count: group.members.length});
 
     // Emit event that all members are connected
-    if (group.connected.length === count) {
+    if (group.members.length === count) {
       group.emitter.emit('connected', {});
     }
 
@@ -398,7 +327,6 @@ module.exports = ({capacity, count, identity, lnd, members, rate}) => {
 
   return {
     id,
-    connected: () => group.connected.push({id: identity}),
     events: group.emitter,
     partners: id => !!group.ids ? partnersFromMembers({group, id}) : undefined,
     proposed: pending => group.proposed.push(pending),

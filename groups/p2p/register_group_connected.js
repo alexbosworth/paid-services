@@ -87,6 +87,10 @@ module.exports = ({coordinator, count, id, lnd}, cbk) => {
               return cbk(err);
             }
 
+            if (!res.records || !res.records.length) {
+              return cbk([503, missingGroupPartners]);
+            }
+
             // Make sure that connected records are valid
             try {
               decodeConnectedRecords({records: res.records});

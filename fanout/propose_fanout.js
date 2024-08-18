@@ -27,14 +27,12 @@ const nestedSegWitPath = "m/49'/";
     inputs: [<Outpoints String>]
     output_count: <Output Count Number>
     rate: <Fee Rate Number>
-    [to]: <Peer Id Public Key Hex String>
   }
 
   @returns via cbk or Promise
   {
     [change]: <Change Output Script Hex String>
-    funding: <Funding Output Script Hex String>
-    id: <Pending Channel Id Hex String>
+    funding: [<Funding Output Script Hex String>]
     [overflow]: <Funding Overflow Number>
     utxos: [{
       bip32_derivations: [{
@@ -135,13 +133,8 @@ module.exports = (args, cbk) => {
         return cbk(null, {utxos: filteredUtxos});
       }],
 
-      // Make sure the peer is connected
-      connect: ['getFilteredInputs', ({}, cbk) => {
-        return connectPeer({id: args.to, lnd: args.lnd}, cbk);
-      }],
-
       // Generate addresses to fund
-      propose: ['connect', ({}, cbk) => {
+      propose: ['validate', ({}, cbk) => {
         return asyncMap(Array(args.output_count).fill(), (_, cbk) => {
           return createChainAddress({is_unused: false, lnd: args.lnd}, (err, res) => {
             if (err) {
@@ -216,8 +209,6 @@ module.exports = (args, cbk) => {
       funding: ['ecp', 'fund', 'propose', 'unlock', ({ecp, fund, propose}, cbk) => {
         const {inputs} = decodePsbt({ecp, psbt: fund.psbt});
 
-        const [proposal] = propose.pending;
-
         // Look for a nested input that was selected to confirm there are none
         const nested = inputs.find(input => {
           return input.bip32_derivations.find(derivation => {
@@ -239,8 +230,7 @@ module.exports = (args, cbk) => {
         // UTXOs have been selected
         return cbk(null, {
           change: !!change ? change.output_script : undefined,
-          funding: !!args.to ? funding : undefined,
-          id: proposal.id,
+          funding: funding,
           overflow: !!change ? change.tokens : undefined,
           utxos: fund.inputs.map((input, vin) => ({
             bip32_derivations: inputs[vin].bip32_derivations,

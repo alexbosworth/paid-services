@@ -25,7 +25,7 @@ const times = 2 * 60 * 10;
     count: <Channel Members Count Number>
     ecp: <ECPair Library Object>
     identity: <Coordinator Identity Public Key Hex String>
-    [inputs]: [<Utxo Outpoint String>]
+    inputs: [<Utxo Outpoint String>]
     lnd: <Authenticated LND API Object>
     [members]: [<Member Identity Public Key Hex String>]
     output_count: <Output Count Number>
@@ -38,14 +38,14 @@ const times = 2 * 60 * 10;
     id: <Group Id Hex String>
   }
 
-  // Open was published
+  // Fanout was published
   @event 'broadcast'
   {
     id: <Transaction Id Hex String>
     transaction: <Transaction Hex String>
   }
 
-  // Open is publishing
+  // Fanout is publishing
   @event 'broadcasting'
   {
     transaction: <Transaction Hex String>
@@ -104,24 +104,6 @@ module.exports = (args) => {
   // Group members have registered themselves
   coordinator.events.once('joined', async ({ids}) => {
     emitter.emit('filled', {ids});
-
-    try {
-      const {inbound, outbound} = coordinator.partners(args.identity);
-
-      // Connect to the inbound and outbound partners
-      await peerWithPartners({
-        inbound,
-        outbound,
-        capacity: args.capacity,
-        lnd: args.lnd,
-        skip_acceptance_check: true,
-    });
-
-      // Register as connected
-      return coordinator.connected();
-    } catch (err) {
-      return errored(err);
-    }
   });
 
   // Group members have connected to each other
@@ -129,18 +111,16 @@ module.exports = (args) => {
     emitter.emit('connected', {});
 
     try {
-      // Fund and propose the pending channel to the outbound partner
-      const {change, funding, id, utxos} = await proposeFanout({
+      // Fund and propose the pending fanout
+      const {change, funding, utxos} = await proposeFanout({
         capacity: args.capacity,
         count: args.count,
         inputs: args.inputs,
         lnd: args.lnd,
         output_count: args.output_count,
         rate: args.rate,
-        to: coordinator.partners(args.identity).outbound,
       });
 
-      pending.id = id;
       pending.utxos = utxos;
 
       // Register as proposed
@@ -159,7 +139,6 @@ module.exports = (args) => {
 
       // Sign the unsigned funding transaction
       const signed = await signAndFundGroupChannel({
-        id: pending.id,
         lnd: args.lnd,
         psbt: coordinator.unsigned(),
         utxos: pending.utxos,

@@ -86,14 +86,11 @@ test(`Setup joint fanout group`, async ({end, equal, strictSame}) => {
       }
     });
 
-    // Connect control to target
-    await addPeer({lnd, public_key: target.id, socket: target.socket});
-
-    // Connect target to remote
+    // Connect target to control
     await addPeer({
       lnd: target.lnd,
-      public_key: remote.id,
-      socket: remote.socket,
+      public_key: control.id,
+      socket: control.socket,
     });
 
     // Connect remote to control
@@ -147,11 +144,6 @@ test(`Setup joint fanout group`, async ({end, equal, strictSame}) => {
         rate: group.rate,
       });
 
-      const [{inbound, outbound}] = await once(join, 'peering');
-
-      strictSame(!!inbound, true, 'Received inbound peer');
-      strictSame(!!outbound, true, 'Received outbound peer');
-
       const [tx] = await once(join, 'end');
 
       return tx;
@@ -175,6 +167,8 @@ test(`Setup joint fanout group`, async ({end, equal, strictSame}) => {
         }
       }));
     });
+
+    console.log('reached here 8');
 
     strictSame(ids, [events.broadcast.id, events.broadcast.id], 'Got tx ids');
     strictSame(events.broadcast.id.length, 64, 'Got broadcast tx id');

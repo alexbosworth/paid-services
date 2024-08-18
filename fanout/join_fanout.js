@@ -29,7 +29,7 @@ const times = 60 * 10;
     coordinator: <Channel Group Coordinator Public Key Hex String>
     count: <Group Members Number>
     id: <Group Id Hex String>
-    [inputs]: [<Utxo Outpoints String>]
+    inputs: [<Utxo Outpoints String>]
     lnd: <Authenticated LND API Object>
     output_count: <Output Count Number>
     rate: <Chain Fee Tokens Per VByte Number>
@@ -41,12 +41,6 @@ const times = 60 * 10;
   @event 'end'
   {
     id: <Transaction Id Hex String>
-  }
-
-  @event 'peering'
-  {
-    inbound: <Inbound Peer Public Key Identity Hex String>
-    outbound: <Outbound Peer Public Key Identity Hex String>
   }
 
   // Sending the signatures for the open to the coordinator
@@ -101,42 +95,8 @@ module.exports = (args, cbk) => {
       return cbk();
     },
 
-    // Find partners in the group
-    partners: ['validate', ({}, cbk) => {
-      return findGroupPartners({
-        coordinator: args.coordinator,
-        count: args.count,
-        id: args.id,
-        lnd: args.lnd,
-        service: serviceTypeFindFanoutPartners
-      }, cbk);
-    }],
-
-    // Peer with the group partners
-    peer: ['partners', ({partners}, cbk) => {
-      // Exit early when there is no inbound partner to connect with
-      if (!partners.inbound) {
-        return cbk();
-      }
-
-      // Let listeners know that peering will be happening
-      emitter.emit('peering', {
-        inbound: partners.inbound,
-        outbound: partners.outbound,
-      });
-
-      return peerWithPartners({
-        capacity: args.capacity,
-        lnd: args.lnd,
-        inbound: partners.inbound,
-        outbound: partners.outbound,
-        skip_acceptance_check: true,
-      },
-      cbk);
-    }],
-
     // Confirm connected the partners
-    connected: ['peer', ({}, cbk) => {
+    connected: ['validate', ({}, cbk) => {
       return registerGroupConnected({
         coordinator: args.coordinator,
         count: args.count,
@@ -146,7 +106,7 @@ module.exports = (args, cbk) => {
     }],
 
     // Propose to the outgoing partner
-    propose: ['connected', 'partners', ({partners}, cbk) => {
+    propose: ['connected', ({}, cbk) => {
       return proposeFanout({
         capacity: args.capacity,
         count: args.count,
@@ -154,7 +114,6 @@ module.exports = (args, cbk) => {
         lnd: args.lnd,
         output_count: args.output_count,
         rate: args.rate,
-        to: partners.outbound,
       },
       cbk);
     }],
