@@ -47,10 +47,10 @@ const uniq = arr => Array.from(new Set(arr));
   // All members are connected
   @event 'connected'
 
-  // All members have funded with their outbound peers
+  // All members have funded with the coordinator
   @event 'funded'
 
-  // A member has funded with their outbound peer
+  // A member has funded with the coordinator
   @event 'funding'
   {
     id: <Funding Member Public Key Hex String>
