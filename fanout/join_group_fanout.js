@@ -189,15 +189,6 @@ module.exports = (args, cbk) => {
         join.once('end', ({id}) => cbk(null, {transaction_id: id}));
         join.once('error', err => cbk(err));
 
-        // After the group is filled the members are matched and peer up
-        join.once('peering', async ({inbound, outbound}) => {
-          const nodes = await asyncMap([inbound, outbound], async id => {
-            return niceName(await getNodeAlias({id, lnd: args.lnd}));
-          });
-
-          return args.logger.info({peering_with: formatNodes(nodes)});
-        });
-
         // Once everyone is peered to the coordinator then the fanout tx is made
         join.once('publishing', ({refund, signed}) => {
           return args.logger.info({refund, signed});
