@@ -20,7 +20,7 @@ const isPublicKey = n => !!n && /^0[2-3][0-9A-F]{64}$/i.test(n);
 const isOdd = n => !!(n % 2);
 const isValidMembersCount = (n, count) => !n.length || n.length === count - 1;
 const join = arr => arr.join(', ');
-const maxGroupSize = 420;
+const maxGroupSize = 42;
 const minOutputSize = 2e4;
 const minGroupSize = 3;
 const nestedSegWitAddressFormat = 'np2wpkh';

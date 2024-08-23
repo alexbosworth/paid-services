@@ -8,6 +8,7 @@ const {returnResult} = require('asyncjs-util');
 const joinFanout = require('./join_fanout');
 const getJoinDetails = require('./get_join_details');
 
+const allowedAddressFormats = ['p2tr', 'np2wpkh'];
 const asBigUnit = n => (n / 1e8).toFixed(8);
 const asOutpoint = utxo => `${utxo.transaction_id}:${utxo.transaction_vout}`;
 const formatNodes = arr => arr.join(', ');
@@ -107,7 +108,7 @@ module.exports = (args, cbk) => {
         // Only selecting confirmed utxos is supported
         const utxos = getUtxos.utxos
         .filter(n => !!n.confirmation_count)
-        .filter(n => n.address_format !== nestedSegWitAddressFormat);
+        .filter(n => allowedAddressFormats.includes(n.address_format));
 
         // Make sure there are some UTXOs to select
         if (!utxos.length) {
