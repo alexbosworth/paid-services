@@ -170,7 +170,7 @@ module.exports = (args, cbk) => {
         cbk);
       }],
 
-      // Unlock UTXOs
+      // Unlock UTXOs to undo the PSBT funding locks
       unlock: ['fund', ({fund}, cbk) => {
         return asyncEach(fund.inputs, (input, cbk) => {
           return unlockUtxo({
