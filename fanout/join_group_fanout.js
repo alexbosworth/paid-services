@@ -2,7 +2,6 @@ const asyncAuto = require('async/auto');
 const asyncMap = require('async/map');
 const {getMethods} = require('ln-service');
 const {getUtxos} = require('ln-service');
-const {getNodeAlias} = require('ln-sync');
 const {returnResult} = require('asyncjs-util');
 
 const joinFanout = require('./join_fanout');

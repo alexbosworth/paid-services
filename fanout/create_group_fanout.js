@@ -18,7 +18,6 @@ const asOutpoint = utxo => `${utxo.transaction_id}:${utxo.transaction_vout}`;
 const {isArray} = Array;
 const isNumber = n => !isNaN(n);
 const isPublicKey = n => !!n && /^0[2-3][0-9A-F]{64}$/i.test(n);
-const isOdd = n => !!(n % 2);
 const isValidMembersCount = (n, count) => !n.length || n.length === count - 1;
 const join = arr => arr.join(', ');
 const maxGroupSize = 42;
@@ -69,10 +68,6 @@ module.exports = (args, cbk) => {
 
         if (args.capacity < minOutputSize) {
           return cbk([400, 'ExpectedCapacityGreaterThanMinSizeToCreateGroupFanout']);
-        }
-
-        if (isOdd(args.capacity)) {
-          return cbk([400, 'ExpectedEvenFanoutOutputCapacityToCreateGroupFanout']);
         }
 
         if (!args.count) {
