@@ -11,6 +11,7 @@ const tinysecp = require('tiny-secp256k1');
 
 const assembleFanoutGroup = require('./assemble_fanout_group');
 
+const allowedAddressFormats = ['p2tr', 'p2wpkh'];
 const descriptionForGroup = 'group fanout';
 const asBigUnit = n => (n / 1e8).toFixed(8);
 const asOutpoint = utxo => `${utxo.transaction_id}:${utxo.transaction_vout}`;
@@ -170,7 +171,7 @@ module.exports = (args, cbk) => {
         // Only selecting confirmed utxos is supported
         const utxos = getUtxos.utxos
         .filter(n => !!n.confirmation_count)
-        .filter(n => n.address_format !== nestedSegWitAddressFormat);
+        .filter(n => allowedAddressFormats.includes(n.address_format));
 
         // Make sure there are some UTXOs to select
         if (!utxos.length) {
