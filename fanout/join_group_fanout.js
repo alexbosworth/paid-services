@@ -8,7 +8,7 @@ const {returnResult} = require('asyncjs-util');
 const joinFanout = require('./join_fanout');
 const getJoinDetails = require('./get_join_details');
 
-const allowedAddressFormats = ['p2tr', 'np2wpkh'];
+const allowedAddressFormats = ['p2tr', 'p2wpkh'];
 const asBigUnit = n => (n / 1e8).toFixed(8);
 const asOutpoint = utxo => `${utxo.transaction_id}:${utxo.transaction_vout}`;
 const formatNodes = arr => arr.join(', ');
