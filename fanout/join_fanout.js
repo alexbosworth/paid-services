@@ -136,11 +136,9 @@ module.exports = (args, cbk) => {
     // Decode the unsigned PSBT
     transaction: [
       'ecp',
-      'getFundingInfo',
       'register',
-      ({ecp, getFundingInfo, register}, cbk) =>
+      ({ecp, register}, cbk) =>
     {
-      const funding = hexAsBuffer(getFundingInfo.funding);
       const psbt = decodePsbt({ecp, psbt: register.psbt});
 
       const tx = fromHex(psbt.unsigned_transaction);
@@ -148,7 +146,6 @@ module.exports = (args, cbk) => {
       return cbk(null, {
         id: tx.getId(),
         raw: psbt.unsigned_transaction,
-        vout: tx.outs.findIndex(n => n.script.equals(funding)),
       });
     }],
 
