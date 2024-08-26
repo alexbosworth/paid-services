@@ -18,20 +18,20 @@ const times = 2 * 60 * 30;
 
   @returns via cbk or Promise
 */
-module.exports = (args, cbk) => {
+module.exports = ({capacity, inbound, lnd, outbound}, cbk) => {
   return new Promise((resolve, reject) => {
     return asyncAuto({
       // Check arguments
       validate: cbk => {
-        if (!args.capacity) {
+        if (!capacity) {
           return cbk([400, 'ExpectedChannelCapacityToPeerWithPartners']);
         }
 
-        if (!args.lnd) {
+        if (!lnd) {
           return cbk([400, 'ExpectedAuthenticatedLndToConnectTo']);
         }
 
-        if (!args.outbound) {
+        if (!outbound) {
           return cbk([400, 'ExpectedOutboundPeerIdentityToConnectTo']);
         }
 
@@ -41,12 +41,12 @@ module.exports = (args, cbk) => {
       // Attempt connecting to the inbound peer
       connectInbound: ['validate', ({}, cbk) => {
         // Exit early when there is no inbound peer
-        if (!args.inbound) {
+        if (!inbound) {
           return cbk();
         }
 
         return asyncRetry({interval, times}, cbk => {
-          return connectPeer({id: args.inbound, lnd: args.lnd}, cbk);
+          return connectPeer({lnd, id: inbound}, cbk);
         },
         cbk);
       }],
@@ -54,7 +54,7 @@ module.exports = (args, cbk) => {
       // Attempt connecting to the outbound peer
       connectOutbound: ['validate', ({}, cbk) => {
         return asyncRetry({interval, times}, cbk => {
-          return connectPeer({id: args.outbound, lnd: args.lnd}, cbk);
+          return connectPeer({lnd, id: outbound}, cbk);
         },
         cbk);
       }],
@@ -62,9 +62,9 @@ module.exports = (args, cbk) => {
       // Test if outbound peer would accept a channel
       getAcceptance: ['connectOutbound', ({}, cbk) => {
         return acceptsChannelOpen({
-          capacity: args.capacity,
-          lnd: args.lnd,
-          partner_public_key: args.outbound,
+          capacity,
+          lnd,
+          partner_public_key: outbound,
         },
         cbk);
       }],
@@ -72,7 +72,7 @@ module.exports = (args, cbk) => {
       // Check that the proposal would be accepted
       checkAcceptance: ['getAcceptance', ({getAcceptance}, cbk) => {
         if (!getAcceptance.is_accepted) {
-          return cbk([503, 'PeerRejectedChanOpenRequest', {peer: args.outbound}]);
+          return cbk([503, 'PeerRejectedChanOpenRequest', {peer: outbound}]);
         }
 
         return cbk();
