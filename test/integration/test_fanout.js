@@ -103,8 +103,6 @@ test(`Setup joint fanout group`, async ({end, equal, strictSame}) => {
     // Get utxos of the coordinator
     const controlUtxos = await getUtxos({lnd: control.lnd});
 
-    // Start Group Coordination
-
     // Start the coordination
     const assemble = assembleFanoutGroup({
       capacity,
