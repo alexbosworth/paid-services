@@ -161,7 +161,7 @@ module.exports = (args) => {
 
     try {
       // Merge partial PSBTs into a single PSBT
-      const combined = combinePsbts({ecp: args.ecp, psbts});
+      const combined = combinePsbts({psbts, ecp: args.ecp});
 
       // Finalize the PSBT to convert partial signatures to final signatures
       const finalized = finalizePsbt({ecp: args.ecp, psbt: combined.psbt});
