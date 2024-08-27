@@ -10,12 +10,9 @@ const getJoinDetails = require('./get_join_details');
 const allowedAddressFormats = ['p2tr', 'p2wpkh'];
 const asBigUnit = n => (n / 1e8).toFixed(8);
 const asOutpoint = utxo => `${utxo.transaction_id}:${utxo.transaction_vout}`;
-const formatNodes = arr => arr.join(', ');
 const {isArray} = Array;
 const isCode = n => !!n && n.length === 98;
 const isNumber = n => !isNaN(n);
-const nestedSegWitAddressFormat = 'np2wpkh';
-const niceName = ({alias, id}) => `${alias} ${id}`.trim();
 const signPsbtEndpoint = '/walletrpc.WalletKit/SignPsbt';
 const sumOf = arr => arr.reduce((sum, n) => sum + n, Number());
 

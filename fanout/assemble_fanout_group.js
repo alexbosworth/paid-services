@@ -5,16 +5,12 @@ const {combinePsbts} = require('psbt');
 const {decodePsbt} = require('psbt');
 const {extractTransaction} = require('psbt');
 const {finalizePsbt} = require('psbt');
-const {Transaction} = require('bitcoinjs-lib');
 
 const coordinateFanout = require('./coordinate_fanout');
 const getFundingDetails = require('./get_funding_details');
 const {signAndFundGroupChannel} = require('../groups/funding');
 
-const {fromHex} = Transaction;
-const interval = 500;
 const minGroupCount = 3;
-const times = 2 * 60 * 10;
 
 /** Assemble a fanout group
 

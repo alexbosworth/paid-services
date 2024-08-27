@@ -13,11 +13,8 @@ const {serviceTypeRegisterPendingFanout} = require('./../service_types')
 const {serviceTypeRegisterSignedFanout} = require('./../service_types')
 
 const {fromHex} = Transaction;
-const hexAsBuffer = hex => Buffer.from(hex, 'hex');
-const interval = 1000;
 const {isArray} = Array;
 const isNumber = n => !isNaN(n);
-const times = 60 * 10;
 
 /** Join a fanout group
 

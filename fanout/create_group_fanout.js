@@ -23,7 +23,6 @@ const join = arr => arr.join(', ');
 const maxGroupSize = 42;
 const minOutputSize = 2e4;
 const minGroupSize = 3;
-const nestedSegWitAddressFormat = 'np2wpkh';
 const niceName = ({alias, id}) => `${alias} ${id}`.trim();
 const {now} = Date;
 const signPsbtEndpoint = '/walletrpc.WalletKit/SignPsbt';

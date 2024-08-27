@@ -18,7 +18,6 @@ const findRecord = (records, type) => records.find(n => n.type === type);
 const {isArray} = Array;
 const makeGroupId = () => randomBytes(16).toString('hex');
 const minGroupCount = 3;
-const now = () => new Date().toISOString();
 const staleDate = () => new Date(Date.now() - (1000 * 60 * 10)).toISOString();
 const typeGroupId = '1';
 const uniq = arr => Array.from(new Set(arr));
