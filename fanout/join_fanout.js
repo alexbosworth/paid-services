@@ -89,14 +89,15 @@ module.exports = (args, cbk) => {
       return cbk();
     },
 
-    // Confirm connected the partners
+    // Confirm connected to the coordinator
     connected: ['validate', ({}, cbk) => {
       return registerGroupConnected({
         coordinator: args.coordinator,
         count: args.count,
         id: args.id,
         lnd: args.lnd,
-      }, cbk);
+      },
+      cbk);
     }],
 
     // Get the funding details for the fanout

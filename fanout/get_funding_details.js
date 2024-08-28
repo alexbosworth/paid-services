@@ -138,23 +138,22 @@ module.exports = (args, cbk) => {
             if (err) {
               return cbk(err);
             }
-            
             return cbk(null, {address: res.address, tokens: args.capacity});
           });
         }, (err, res) => {
           if (err) {
             return cbk(err);
           }
-          
           return cbk(null, {pending: res});
         });
       }],
 
       // Fund the address to populate UTXOs that can be used
       fund: [
-      'getFilteredInputs',
-      'propose',
-      ({getFilteredInputs, propose}, cbk) => {
+        'getFilteredInputs',
+        'propose',
+        ({getFilteredInputs, propose}, cbk) =>
+      {
         return fundPsbt({
           inputs: getFilteredInputs.utxos.map(input => ({
             transaction_id: input.transaction_id,
@@ -185,7 +184,13 @@ module.exports = (args, cbk) => {
       }],
 
       // Final funding elements
-      funding: ['ecp', 'fund', 'propose', 'unlock', ({ecp, fund, propose}, cbk) => {
+      funding: [
+        'ecp',
+        'fund',
+        'propose',
+        'unlock',
+        ({ecp, fund}, cbk) =>
+      {
         const {inputs} = decodePsbt({ecp, psbt: fund.psbt});
 
         // Look for a nested input that was selected to confirm there are none
