@@ -1,7 +1,8 @@
 const EventEmitter = require('events');
 const {randomBytes} = require('crypto');
 
-const assembleUnsignedPsbt = require('./assemble_unsigned_psbt');
+const {assembleUnsignedPsbt} = require('ln-sync');
+
 const {decodeGroupDetails} = require('./../messages');
 const {decodePendingProposal} = require('./../messages');
 const {decodeSignedFunding} = require('./../messages');
@@ -32,6 +33,7 @@ const uniq = arr => Array.from(new Set(arr));
   {
     capacity: <Channel Capacity Tokens Number>
     count: <Group Members Count Number>
+    ecp: <ECPair Library Object>
     identity: <Coordinator Identity Public Key Hex String>
     lnd: <Authenticated LND API Object>
     [members]: [<Member Node Id Public Key Hex String>]
@@ -95,9 +97,13 @@ const uniq = arr => Array.from(new Set(arr));
   // All members have submitted their partial signatures
   @event 'signed'
 */
-module.exports = ({capacity, count, identity, lnd, members, rate}) => {
+module.exports = ({capacity, count, ecp, identity, lnd, members, rate}) => {
   if (count < minGroupCount) {
     throw new Error('ExpectedHigherGroupMembersCountToCoordinateGroup');
+  }
+
+  if (!ecp) {
+    throw new Error('ExpectedEcpLibraryToCoordinateChannelGroup');
   }
 
   if (!identity) {
@@ -307,7 +313,7 @@ module.exports = ({capacity, count, identity, lnd, members, rate}) => {
 
       group.proposed.push({
         change: proposal.change,
-        funding: proposal.funding,
+        funding: [proposal.funding],
         id: req.from,
         utxos: proposal.utxos,
       });
@@ -371,12 +377,12 @@ module.exports = ({capacity, count, identity, lnd, members, rate}) => {
     }
 
     try {
-      decodeSignedFunding({records: req.records});
+      decodeSignedFunding({ecp, records: req.records});
     } catch (err) {
       return res.failure([400, err.message]);
     }
 
-    const signed = decodeSignedFunding({records: req.records});
+    const signed = decodeSignedFunding({ecp, records: req.records});
 
     // Register the signed funding
     if (!group.signed.find(n => n.id === req.from)) {

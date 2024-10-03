@@ -6,7 +6,7 @@ const {returnResult} = require('asyncjs-util');
 const {decodeSignedRecords} = require('./../messages');
 const {encodeSignedOpen} = require('./../messages');
 const {makePeerRequest} = require('./../../p2p');
-const {serviceTypeRegisterSignedOpen} = require('./../../service_types');
+const {serviceTypeRegisterSignedFanout} = require('./../../service_types');
 
 const defaultIntervalMs = 500;
 const defaultPollTimes = 2 * 60 * 30;
@@ -16,7 +16,7 @@ const missingGroupPartners = 'NoGroupPartnersFound';
 const typeGroupChannelId = '1';
 const typeSignedFunding = '2';
 
-/** Register signed open with the coordinator
+/** Register signed fanout with the coordinator
 
   {
     coordinator: <Group Coordinator Identity Public Key Hex String>
@@ -56,24 +56,19 @@ module.exports = ({coordinator, count, group, lnd, signed}, cbk) => {
         return cbk();
       },
 
-      // Connect to the coordinator to send the registered pending message
+      // Connect to the coordinator to send the signed fanout
       connect: ['validate', ({}, cbk) => {
         return connectPeer({lnd, id: coordinator}, cbk);
       }],
 
-      // Send connection confirmation request
+      // Send the signed fanout
       request: ['connect', ({}, cbk) => {
         return asyncRetry({
           errorFilter: err => {
             const [code, message] = err;
 
-            // Retry when there was a local error
-            if (!code) {
-              return true;
-            }
-
-            // Continue retrying when there are others still signing
-            if (message === missingGroupPartners) {
+            // Continue retrying on error or there are others still signing
+            if (!code || message === missingGroupPartners) {
               return true;
             }
 
@@ -91,7 +86,7 @@ module.exports = ({coordinator, count, group, lnd, signed}, cbk) => {
             ],
             timeout: defaultRequestTimeoutMs,
             to: coordinator,
-            type: serviceTypeRegisterSignedOpen,
+            type: serviceTypeRegisterSignedFanout,
           },
           (err, res) => {
             if (!!err) {

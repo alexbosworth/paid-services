@@ -13,6 +13,7 @@ const {coordinateGroup} = require('./assemble');
 const {peerWithPartners} = require('./p2p');
 const {proposeGroupChannel} = require('./funding');
 const {signAndFundGroupChannel} = require('./funding');
+const transactionFeeRate = require('./transaction_fee_rate');
 
 const {fromHex} = Transaction;
 const interval = 500;
@@ -82,6 +83,7 @@ module.exports = ({capacity, count, ecp, identity, lnd, members, rate}) => {
   const coordinator = coordinateGroup({
     capacity,
     count,
+    ecp,
     identity,
     lnd,
     members,
@@ -144,7 +146,12 @@ module.exports = ({capacity, count, ecp, identity, lnd, members, rate}) => {
       pending.utxos = utxos;
 
       // Register as proposed
-      return coordinator.proposed({change, funding, utxos, id: identity});
+      return coordinator.proposed({
+        change,
+        utxos,
+        funding: !!funding ? [funding] : undefined,
+        id: identity,
+      });
     } catch (err) {
       return errored(err);
     }
@@ -202,6 +209,13 @@ module.exports = ({capacity, count, ecp, identity, lnd, members, rate}) => {
 
       // Pull out the raw transaction from the PSBT
       const {transaction} = extractTransaction({ecp, psbt: finalized.psbt});
+
+      const {inputs} = decodePsbt({ecp, psbt: combined.psbt});
+
+      // Make sure the final transaction fee rate is not too low
+      if (transactionFeeRate({inputs, transaction}).rate < rate) {
+        throw [503, 'UnexpectedLowFeeRateForChannelGroupTransaction'];
+      }
 
       emitter.emit('broadcasting', ({transaction}));
 

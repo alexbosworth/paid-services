@@ -5,15 +5,15 @@ const {cancelPendingChannel} = require('ln-service');
 const {connectPeer} = require('ln-sync');
 const {decodePsbt} = require('psbt');
 const {returnResult} = require('asyncjs-util');
+const {signAndFundPsbt} = require('ln-sync');
 const tinysecp = require('tiny-secp256k1');
 const {Transaction} = require('bitcoinjs-lib');
 
 const {decodeUnsignedFunding} = require('./../messages');
-const {encodePendingProposal} = require('./../messages');
+const {encodeFanoutProposal} = require('./../messages');
 const estimateFeeRate = require('./../estimate_fee_rate');
 const {makePeerRequest} = require('./../../p2p');
-const {serviceTypeRegisterPendingOpen} = require('./../../service_types');
-const {signAndFundGroupChannel} = require('./../funding');
+const {serviceTypeRegisterPendingFanout} = require('./../../service_types')
 
 const bufferAsHex = buffer => buffer.toString('hex');
 const defaultIntervalMs = 500;
@@ -25,17 +25,17 @@ const {isArray} = Array;
 const missingGroupPartners = 'NoGroupPartnersFound';
 const typeGroupChannelId = '1';
 
-/** Register pending open with the coordinator
+/** Register fanout proposal with the coordinator
 
   {
     capacity: <Channel Capacity Tokens Number>
     [change]: <Change Output Script Hex String>
     coordinator: <Group Coordinator Identity Public Key Hex String>
-    funding: <Funding Output Script Hex String>
+    funding: [<Funding Output Script Hex String>]
     group: <Group Identifier Hex String>
     lnd: <Authenticated LND API Object>
-    overflow: <Expected Minimum Change Amount Tokens Number>
-    [pending]: <Pending Channel Id Hex String>
+    [overflow]: <Expected Minimum Change Amount Tokens Number>
+    rate: <Chain Fee Rate Tokens Per VByte Number>
     utxos: [{
       [non_witness_utxo]: <Non Witness Transaction Hex String>
       transaction_id: <Transaction Id Hex String>
@@ -56,46 +56,50 @@ const typeGroupChannelId = '1';
 module.exports = (args, cbk) => {
   return new Promise((resolve, reject) => {
     return asyncAuto({
-      // Import ECPair library
+      // Import ECPair library to use for funding checks
       ecp: async () => (await import('ecpair')).ECPairFactory(tinysecp),
 
       // Check arguments
       validate: cbk => {
         if (!args.capacity) {
-          return cbk([400, 'ExpectedChannelCapacityToRegisterPendingOpen']);
+          return cbk([400, 'ExpectedChannelCapacityToRegisterFanoutProposal']);
         }
 
         if (!args.coordinator) {
-          return cbk([400, 'ExpectedCoordinatorToRegisterPendingOpen']);
+          return cbk([400, 'ExpectedCoordinatorToRegisterFanoutProposal']);
         }
 
         if (!args.funding) {
-          return cbk([400, 'ExpectedFundingOutputToRegisterPendingOpen']);
+          return cbk([400, 'ExpectedFundingOutputToRegisterFanoutProposal']);
         }
 
         if (!args.group) {
-          return cbk([400, 'ExpectedGroupIdToRegisterPendingOpen']);
+          return cbk([400, 'ExpectedGroupIdToRegisterFanoutProposal']);
         }
 
         if (!args.lnd) {
-          return cbk([400, 'ExpectedAuthenticatedLndToRegisterPendingOpen']);
+          return cbk([400, 'ExpectedAuthenticatedLndToSendFanoutProposal']);
+        }
+
+        if (!args.rate) {
+          return cbk([400, 'ExpectedChainFeeRateToRegisterFanoutProposal']);
         }
 
         if (!isArray(args.utxos)) {
-          return cbk([400, 'ExpectedArrayOfUtxosToRegisterPendingOpen']);
+          return cbk([400, 'ExpectedArrayOfUtxosToRegisterFanoutProposal']);
         }
 
         return cbk();
       },
 
-      // Connect to the coordinator to send the registered pending message
+      // Connect to the coordinator to send the fanout proposal message
       connect: ['validate', ({}, cbk) => {
         return connectPeer({id: args.coordinator, lnd: args.lnd}, cbk);
       }],
 
-      // Send connection confirmation request
+      // Send fanout proposal request
       request: ['connect', asyncReflect(({}, cbk) => {
-        const {records} = encodePendingProposal({
+        const {records} = encodeFanoutProposal({
           change: args.change,
           funding: args.funding,
           id: args.group,
@@ -106,13 +110,8 @@ module.exports = (args, cbk) => {
           errorFilter: err => {
             const [code, message] = err;
 
-            // Retry when there was a local error
-            if (!code) {
-              return true;
-            }
-
-            // Continue retrying when there are others still proposing
-            if (message === missingGroupPartners) {
+            // Continue retrying on error, or when others are still proposing
+            if (!code || message === missingGroupPartners) {
               return true;
             }
 
@@ -127,7 +126,7 @@ module.exports = (args, cbk) => {
             lnd: args.lnd,
             timeout: defaultRequestTimeoutMs,
             to: args.coordinator,
-            type: serviceTypeRegisterPendingOpen,
+            type: serviceTypeRegisterPendingFanout,
           },
           (err, res) => {
             if (!!err) {
@@ -152,30 +151,8 @@ module.exports = (args, cbk) => {
         cbk);
       })],
 
-      // Clean up the pending channel if registration fails
-      clean: ['request', ({request}, cbk) => {
-        // Exit early when there was no error registering the pending channel
-        if (!request.error) {
-          return cbk();
-        }
-
-        // Exit early if there is no pending id
-        if (!args.pending) {
-          return cbk();
-        }
-
-        return cancelPendingChannel({id: args.pending, lnd: args.lnd}, err => {
-          if (!!err) {
-            return cbk([503, 'UnexpectedErrorCleaningPendingChannel', {err}]);
-          }
-
-          // Return the original registration error
-          return cbk(request.error);
-        });
-      }],
-
-      // Check the unsigned funding transaction represents the partial open
-      check: ['clean', 'ecp', 'request', ({ecp, request}, cbk) => {
+      // Check the unsigned funding transaction represents the funding
+      check: ['ecp', 'request', ({ecp, request}, cbk) => {
         try {
           decodePsbt({ecp, psbt: request.value});
         } catch (err) {
@@ -185,7 +162,7 @@ module.exports = (args, cbk) => {
         const psbt = decodePsbt({ecp, psbt: request.value});
 
         if (!!psbt.inputs.find(n => !n.witness_utxo)) {
-          return cbk([503, 'ExpectedAllGroupInputsSpendingWitnessUtxos']);
+          return cbk([503, 'ExpectedAllFanoutInputsSpendingWitnessUtxos']);
         }
 
         const tx = fromHex(psbt.unsigned_transaction);
@@ -196,16 +173,20 @@ module.exports = (args, cbk) => {
           unsigned: psbt.unsigned_transaction,
         });
 
-        // The utxos should be represented in the PSBT
-        const missing = args.utxos.find(utxo => {
+        if (estimated.rate < args.rate) {
+          return cbk([503, 'ExpectedGreaterChainFeeRateForFanoutPsbt']);
+        }
+
+        // All the specified utxos should be represented in the PSBT
+        const missingInput = args.utxos.find(utxo => {
           const hash = hexAsBuffer(utxo.transaction_id).reverse();
           const vout = utxo.transaction_vout;
 
           return !tx.ins.find(n => n.hash.equals(hash) && n.index === vout);
         });
 
-        if (!!missing) {
-          return cbk([503, 'ExpectedAllInputsRepresentedInGroupChannelPsbt']);
+        if (!!missingInput) {
+          return cbk([503, 'ExpectedAllInputsRepresentedInFanoutGroupPsbt']);
         }
 
         const outputs = tx.outs.map(({script, value}) => ({
@@ -214,35 +195,34 @@ module.exports = (args, cbk) => {
         }));
 
         const change = outputs.find(n => n.script === args.change);
-        const funding = outputs.find(n => n.script === args.funding);
+        const funding = outputs.filter(n => args.funding.includes(n.script));
 
         // When there is overflow to receive, require a change output
         if (!!args.overflow && !change) {
-          return cbk([503, 'ExpectedChangeOutputInUnsignedGroupChannelPsbt']);
+          return cbk([503, 'ExpectedChangeOutputInUnsignedFanoutGroupPsbt']);
         }
 
         // When change is expected it must have at least the excess value
         if (!!args.change && change.tokens < args.overflow) {
-          return cbk([503, 'UnexpectedChangeAmountInUnsignedChannelPsbt']);
+          return cbk([503, 'UnexpectedChangeAmountInUnsignedFanoutPsbt']);
         }
 
-        // The funding output should be represented in the outputs
-        if (!funding) {
-          return cbk([503, 'FailedToFindFundingOutputInUnsignedGroupPsbt']);
+        // The funding outputs should all be represented in the outputs
+        if (funding.length !== args.funding.length) {
+          return cbk([503, 'FailedToFindFundingOutputInUnsignedFanoutPsbt']);
         }
 
-        // Funding should match the channel capacity
-        if (funding.tokens !== args.capacity) {
-          return cbk([503, 'IncorrectFundingOutputValueInUnsignedGroupPsbt']);
+        // All the funding outputs should have the correct output value
+        if (!!funding.find(n => n.tokens !== args.capacity)) {
+          return cbk([503, 'ExpectedFundingOutputsRepresentingFanoutSize']);
         }
 
         return cbk();
       }],
 
-      // Sign and fund the PSBT
+      // Once all are ready, sign and fund the PSBT for the fanout
       sign: ['check', 'request', ({request}, cbk) => {
-        return signAndFundGroupChannel({
-          id: args.pending,
+        return signAndFundPsbt({
           lnd: args.lnd,
           psbt: request.value,
           utxos: args.utxos,

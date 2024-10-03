@@ -3,6 +3,7 @@ const {encodeTlvStream} = require('bolt01');
 
 const encodeNumber = n => encodeBigSize({number: n.toString()}).encoded;
 const encodeTlv = records => encodeTlvStream({records}).encoded;
+const outputsAsHashes = outs => outs.map(n => (n || '').substring(4)).join('');
 const utxoTypeNonWitnessUtxo = '0';
 const utxoTypeScriptPub = '1';
 const utxoTypeTokens = '2';
@@ -13,11 +14,11 @@ const typeFunding = '3';
 const typeId = '1';
 const typeUtxos = '4';
 
-/** Encode pending proposal into records
+/** Encode fanout proposal into TLV records
 
   {
     [change]: <Change Output Script Hex String>
-    funding: <Funding Output Script Hex String>
+    funding: [<P2TR Funding Output Script Hex String>]
     utxos: [{
       [non_witness_utxo]: <Non Witness Transaction Hex String>
       transaction_id: <Transaction Id Hex String>
@@ -39,10 +40,10 @@ const typeUtxos = '4';
 */
 module.exports = ({change, funding, id, utxos}) => {
   // Encode change output script when present
-  const changeRecord = !change ? undefined : {type: typeChange, value: change};
+  const changeRecord = {type: typeChange, value: outputsAsHashes([change])};
 
-  // Encode funding output script
-  const fundingRecord = {type: typeFunding, value: funding};
+  // Encode funding output scripts as hashes
+  const fundingRecord = {type: typeFunding, value: outputsAsHashes(funding)};
 
   // Encode the group id
   const idRecord = {type: typeId, value: id};
@@ -80,12 +81,7 @@ module.exports = ({change, funding, id, utxos}) => {
 
   const utxosRecord = {type: typeUtxos, value: encodeTlv(inputRecords)};
 
-  const records = [
-    changeRecord,
-    fundingRecord,
-    idRecord,
-    utxosRecord,
-  ];
+  const records = [changeRecord, fundingRecord, idRecord, utxosRecord];
 
-  return {records: records.filter(n => !!n)};
+  return {records: records.filter(n => !!n && !!n.value)};
 };

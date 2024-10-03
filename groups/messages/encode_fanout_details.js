@@ -7,10 +7,10 @@ const typeRate = '3';
 const typeVersion = '0';
 const version = '1';
 
-/** Encode channel group details records
+/** Encode fanout group details records
 
   {
-    capacity: <Channel Capacity Tokens Number>
+    capacity: <Output Size Tokens Number>
     count: <Target Members Count Number>
     rate: <Chain Fee Rate Number>
   }

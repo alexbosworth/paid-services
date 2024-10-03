@@ -20,7 +20,7 @@ const isNumber = n => !isNaN(n);
 const isPublicKey = n => !!n && /^0[2-3][0-9A-F]{64}$/i.test(n);
 const isValidMembersCount = (n, count) => !n.length || n.length === count - 1;
 const join = arr => arr.join(', ');
-const maxGroupSize = 42;
+const maxGroupSize = 100;
 const minOutputSize = 2e4;
 const minGroupSize = 3;
 const niceName = ({alias, id}) => `${alias} ${id}`.trim();
@@ -66,7 +66,7 @@ module.exports = (args, cbk) => {
         }
 
         if (args.capacity < minOutputSize) {
-          return cbk([400, 'ExpectedCapacityGreaterThanMinSizeToCreateGroupFanout']);
+          return cbk([400, 'ExpectedGreaterThanMinSizeToCreateGroupFanout']);
         }
 
         if (!args.count) {
@@ -135,7 +135,7 @@ module.exports = (args, cbk) => {
         const capacity = args.capacity * args.output_count;
 
         if (capacity > getBalance.chain_balance) {
-          return cbk([400, 'ExpectedCapacityLowerThanCurrentChainBalance']);
+          return cbk([400, 'ExpectedOutputsLessThanCurrentChainBalance']);
         }
 
         return cbk();
@@ -144,7 +144,7 @@ module.exports = (args, cbk) => {
       // Make sure that partially signing a PSBT is a known method
       confirmSigner: ['getMethods', ({getMethods}, cbk) => {
         if (!getMethods.methods.find(n => n.endpoint === signPsbtEndpoint)) {
-          return cbk([400, 'ExpectedLndSupportingPartialPsbtSigning']);
+          return cbk([400, 'ExpectedLndSupportingPartialPsbtSigningToFanout']);
         }
 
         return cbk();
@@ -164,12 +164,12 @@ module.exports = (args, cbk) => {
 
         // Only selecting confirmed utxos is supported
         const utxos = getUtxos.utxos
-        .filter(n => !!n.confirmation_count)
-        .filter(n => allowedAddressFormats.includes(n.address_format));
+          .filter(n => !!n.confirmation_count)
+          .filter(n => allowedAddressFormats.includes(n.address_format));
 
         // Make sure there are some UTXOs to select
         if (!utxos.length) {
-          return cbk([400, 'WalletHasZeroConfirmedUtxos']);
+          return cbk([400, 'WalletHasZeroConfirmedCompatibleUtxos']);
         }
 
         return args.ask({
@@ -225,15 +225,15 @@ module.exports = (args, cbk) => {
           inputs: utxos,
           lnd: args.lnd,
           members: !!args.members.length ? members : undefined,
-          output_count: args.output_count,
+          outputs: args.output_count,
           rate: args.rate,
         });
 
         const code = getIdentity.public_key + coordinate.id;
 
-        args.logger.info({group_invite_code: code});
+        args.logger.info({fanout_invite_code: code});
 
-        // Members will join the group
+        // Members will join the group, announce as they join
         coordinate.events.on('present', async ({id}) => {
           const alreadyAnnounced = announced.slice().reverse().find(node => {
             return node.id === id;
@@ -256,7 +256,7 @@ module.exports = (args, cbk) => {
           return args.logger.info({at: new Date(), ready: niceName(joined)});
         });
 
-        // The group must fill up with participants first
+        // The group must fill up with participants before proceeding
         coordinate.events.once('filled', async ({ids}) => {
           const members = ids.filter(n => n !== getIdentity.public_key);
 
@@ -267,17 +267,17 @@ module.exports = (args, cbk) => {
           return args.logger.info({ready: join(nodes)});
         });
 
-        // Members have connected to the coordinator
+        // Members have confirmed their connection to the coordinator
         coordinate.events.once('connected', () => {
           return args.logger.info({members_connected: true});
         });
 
-        // Members will propose pending fanout to the coordinator
+        // Members will propose pending fanout funding to the coordinator
         coordinate.events.once('proposed', () => {
           return args.logger.info({proposed: true});
         });
 
-        // Once all pending usigned fanout is in place, signatures will be received
+        // Once unsigned is fully in place, signatures will be received
         coordinate.events.once('signed', () => {
           return args.logger.info({signed: true});
         });

@@ -1,21 +1,23 @@
 const EventEmitter = require('events');
 const {randomBytes} = require('crypto');
 
-const assembleUnsignedPsbt = require('./../groups/assemble/assemble_unsigned_psbt');
-const {decodePendingProposal} = require('./../groups/messages');
-const {decodeSignedFunding} = require('./../groups/messages');
-const {encodeConnectedRecords} = require('./../groups/messages');
-const {encodeGroupDetails} = require('./../groups/messages');
-const {encodeSignedRecords} = require('./../groups/messages');
-const {encodeUnsignedFunding} = require('./../groups/messages');
-const {servicePeerRequests} = require('./../p2p');
-const {serviceTypeConfirmConnected} = require('./../service_types');
-const {serviceTypeGetFanoutDetails} = require('./../service_types');
-const {serviceTypeRegisterPendingFanout} = require('./../service_types');
-const {serviceTypeRegisterSignedFanout} = require('./../service_types');
+const {assembleUnsignedPsbt} = require('ln-sync');
+
+const {decodeFanoutProposal} = require('./../messages');
+const {decodeSignedFunding} = require('./../messages');
+const {encodeConnectedRecords} = require('./../messages');
+const {encodeFanoutDetails} = require('./../messages');
+const {encodeSignedRecords} = require('./../messages');
+const {encodeUnsignedFunding} = require('./../messages');
+const {servicePeerRequests} = require('./../../p2p');
+const {serviceTypeConfirmConnected} = require('./../../service_types');
+const {serviceTypeGetFanoutDetails} = require('./../../service_types');
+const {serviceTypeRegisterPendingFanout} = require('./../../service_types');
+const {serviceTypeRegisterSignedFanout} = require('./../../service_types');
 
 const findRecord = (records, type) => records.find(n => n.type === type);
 const {isArray} = Array;
+const keySpendSignatureHexLength = 128;
 const makeGroupId = () => randomBytes(16).toString('hex');
 const minGroupCount = 3;
 const staleDate = () => new Date(Date.now() - (1000 * 60 * 10)).toISOString();
@@ -27,6 +29,7 @@ const uniq = arr => Array.from(new Set(arr));
   {
     capacity: <Fanout Output Capacity Tokens Number>
     count: <Group Members Count Number>
+    ecp: <ECPair Library Object>
     identity: <Coordinator Identity Public Key Hex String>
     lnd: <Authenticated LND API Object>
     [members]: [<Member Node Id Public Key Hex String>]
@@ -76,21 +79,33 @@ const uniq = arr => Array.from(new Set(arr));
   // All members have submitted their partial signatures
   @event 'signed'
 */
-module.exports = ({capacity, count, identity, lnd, members, rate}) => {
+module.exports = ({capacity, count, ecp, identity, lnd, members, rate}) => {
+  if (!capacity) {
+    throw new Error('ExpectedOutputSizeCapacityToCoordinateFanoutGroup');
+  }
+
   if (count < minGroupCount) {
-    throw new Error('ExpectedHigherGroupMembersCountToCoordinateGroup');
+    throw new Error('ExpectedHigherGroupMembersCountToCoordinateFanoutGroup');
+  }
+
+  if (!ecp) {
+    throw new Error('ExpectedEcLibraryToCoordinateFanoutGroup');
   }
 
   if (!identity) {
-    throw new Error('ExpectedSelfIdentityPublicKeyToCoordinateGroup');
+    throw new Error('ExpectedSelfIdentityPublicKeyToCoordinateFanoutGroup');
   }
 
   if (!lnd) {
-    throw new Error('ExpectedAuthenticatedLndToCoordinateGroup');
+    throw new Error('ExpectedAuthenticatedLndToCoordinateFanoutGroup');
   }
 
   if (!!members && uniq(members).length !== count) {
-    throw new Error('ExpectedCompleteSetOfAllowedMembers');
+    throw new Error('ExpectedCompleteSetOfAllowedMembersForFanoutGroup');
+  }
+
+  if (!rate) {
+    throw new Error('ExpectedChainFeeRateToCoordinateFanoutGroup');
   }
 
   // Instantiate the group with self as a member
@@ -109,36 +124,36 @@ module.exports = ({capacity, count, identity, lnd, members, rate}) => {
   // Wait for peer requests
   const service = servicePeerRequests({lnd});
 
-  // Listen for and respond to get group details requests
+  // Listen for and respond to get fanout group details requests
   service.request({type: serviceTypeGetFanoutDetails}, (req, res) => {
     if (!isArray(req.records)) {
-      return res.failure([400, 'ExpectedArrayOfRecordsToGetGroupDetails']);
+      return res.failure([400, 'ExpectedArrayOfRecordsToGetFanoutDetails']);
     }
 
     const idRecord = findRecord(req.records, typeGroupId);
 
     if (!idRecord) {
-      return res.failure([400, 'ExpectedGroupIdRecordToGetGroupDetails']);
+      return res.failure([400, 'ExpectedGroupIdRecordToGetFanoutDetails']);
     }
 
-    // Exit early when this request is for a different group
+    // Exit early when this request is for a different fanout group
     if (idRecord.value !== id) {
       return;
     }
 
-    return res.success(encodeGroupDetails({capacity, count, rate}));
+    return res.success(encodeFanoutDetails({capacity, count, rate}));
   });
 
-  // Listen for and respond to find member requests
+  // Listen for and respond to confirm connected requests
   service.request({type: serviceTypeConfirmConnected}, (req, res) => {
     if (!isArray(req.records)) {
-      return res.failure([400, 'ExpectedArrayOfRecordsToConfirmConnection']);
+      return res.failure([400, 'ExpectedArrayOfRecordsForFanoutConnection']);
     }
 
     const idRecord = findRecord(req.records, typeGroupId);
 
     if (!idRecord) {
-      return res.failure([400, 'ExpectedGroupIdRecordToConfirmConnection']);
+      return res.failure([400, 'ExpectedGroupIdRecordForFanoutConnection']);
     }
 
     // Exit early when this request is for a different group
@@ -146,9 +161,9 @@ module.exports = ({capacity, count, identity, lnd, members, rate}) => {
       return;
     }
 
-    // Exit early when group member is not allowed
+    // Exit early when fanout group member is not allowed
     if (!!group.allowed && !group.allowed.includes(req.from)) {
-      return res.failure([403, 'AccessDeniedToGroup']);
+      return res.failure([403, 'AccessDeniedToFanoutGroup']);
     }
 
     // Refresh the member list, evicting members who stopped pinging
@@ -158,7 +173,7 @@ module.exports = ({capacity, count, identity, lnd, members, rate}) => {
 
     // Exit early with failure when the group is full
     if (group.members.length === count) {
-      return res.failure([503, 'GroupIsCurrentlyFull']);
+      return res.failure([503, 'FanoutGroupIsCurrentlyFull']);
     }
 
     // Add the group member details to the group
@@ -183,7 +198,6 @@ module.exports = ({capacity, count, identity, lnd, members, rate}) => {
     // Emit event that everyone has joined
     group.emitter.emit('joined', {ids: group.ids});
 
-
     const {records} = encodeConnectedRecords({count: group.members.length});
 
     // Emit event that all members are connected
@@ -197,13 +211,13 @@ module.exports = ({capacity, count, identity, lnd, members, rate}) => {
   // Listen for and respond to pending open registrations
   service.request({type: serviceTypeRegisterPendingFanout}, (req, res) => {
     if (!isArray(req.records)) {
-      return res.failure([400, 'ExpectedArrayOfRecordsToRegisterPendingOpen']);
+      return res.failure([400, 'ExpectedArrayOfRecordsForPendingFanout']);
     }
 
     const idRecord = findRecord(req.records, typeGroupId);
 
     if (!idRecord) {
-      return res.failure([400, 'ExpectedGroupIdRecordToRegisterPendingOpen']);
+      return res.failure([400, 'ExpectedGroupIdRecordForPendingFanout']);
     }
 
     // Exit early when this request is for a different group
@@ -213,18 +227,18 @@ module.exports = ({capacity, count, identity, lnd, members, rate}) => {
 
     // Cannot register pending when not part of the locked in group
     if (!group.ids.includes(req.from)) {
-      return res.failure([403, 'MembershipNotPresentInLockedInMembers']);
+      return res.failure([403, 'MembershipNotPresentInLockedInFanoutMembers']);
     }
 
     try {
-      decodePendingProposal({records: req.records});
+      decodeFanoutProposal({records: req.records});
     } catch (err) {
       return res.failure([400, err.message]);
     }
 
-    const proposal = decodePendingProposal({records: req.records});
+    const proposal = decodeFanoutProposal({records: req.records});
 
-    // Register the proposal
+    // Register the pending fanout
     if (!group.proposed.find(n => n.id === req.from)) {
       group.emitter.emit('funding', {id: req.from});
 
@@ -274,36 +288,40 @@ module.exports = ({capacity, count, identity, lnd, members, rate}) => {
   // Listen for and respond to funding signatures
   service.request({type: serviceTypeRegisterSignedFanout}, (req, res) => {
     if (!isArray(req.records)) {
-      return res.failure([400, 'ExpectedArrayOfRecordsToRegisterSignedOpen']);
+      return res.failure([400, 'ExpectedArrayOfRecordsForSignedFanout']);
     }
 
     const idRecord = findRecord(req.records, typeGroupId);
 
     if (!idRecord) {
-      return res.failure([400, 'ExpectedGroupIdRecordToRegisterSignedOpen']);
+      return res.failure([400, 'ExpectedGroupIdRecordToRegisterSignedFanout']);
     }
 
-    // Exit early when this request is for a different group
+    // Exit early when this request is for a different fanout group
     if (idRecord.value !== id) {
       return;
     }
 
     // Cannot register signatures when not part of the locked in group
     if (!group.ids.includes(req.from)) {
-      return res.failure([403, 'MembershipNotPresentInLockedInMembers']);
+      return res.failure([403, 'MembershipNotPresentInLockedInFanoutMembers']);
     }
 
     try {
-      decodeSignedFunding({records: req.records});
+      decodeSignedFunding({ecp, records: req.records});
     } catch (err) {
       return res.failure([400, err.message]);
     }
 
-    const signed = decodeSignedFunding({records: req.records});
+    const signed = decodeSignedFunding({ecp, records: req.records});
+
+    if (signed.p2tr.find(n => n.length !== keySpendSignatureHexLength)) {
+      return failure([400, 'InvalidSignatureLengthForKeySpend']);
+    }
 
     // Register the signed funding
     if (!group.signed.find(n => n.id === req.from)) {
-      // Emit event to indicate member has submitted their signed open
+      // Emit event to indicate member has submitted their signed PSBT
       group.emitter.emit('signing', {id: req.from});
 
       group.signed.push({id: req.from, signed: signed.psbt});

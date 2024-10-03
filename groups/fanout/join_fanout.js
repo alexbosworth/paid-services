@@ -5,12 +5,11 @@ const {decodePsbt} = require('psbt');
 const tinysecp = require('tiny-secp256k1');
 const {Transaction} = require('bitcoinjs-lib');
 
-const getFundingDetails = require('./get_funding_details');
-const {registerGroupConnected} = require('./../groups/p2p');
-const {registerPendingOpen} = require('./../groups/p2p');
-const {registerSignedOpen} = require('./../groups/p2p');
-const {serviceTypeRegisterPendingFanout} = require('./../service_types')
-const {serviceTypeRegisterSignedFanout} = require('./../service_types')
+const getFanoutFunding = require('./get_fanout_funding');
+const {registerGroupConnected} = require('./../p2p');
+const {registerFanoutProposal} = require('./../p2p');
+const {registerFanoutSigned} = require('./../p2p');
+const {serviceTypeRegisterPendingFanout} = require('./../../service_types')
 
 const {fromHex} = Transaction;
 const {isArray} = Array;
@@ -51,7 +50,7 @@ module.exports = (args, cbk) => {
     // Check arguments
     validate: cbk => {
       if (!isArray(args.inputs)) {
-        return cbk([400, 'ExpectedArrayOfUtxosToJoinFanout']);
+        return cbk([400, 'ExpectedArrayOfUtxosToJoinFanoutGroup']);
       }
 
       if (!args.capacity) {
@@ -59,31 +58,31 @@ module.exports = (args, cbk) => {
       }
 
       if (!args.coordinator) {
-        return cbk([400, 'ExpectedFanoutGroupCoordinatorIdToJoinFanout']);
+        return cbk([400, 'ExpectedFanoutGroupCoordinatorIdToJoinFanoutGroup']);
       }
 
       if (!args.count) {
-        return cbk([400, 'ExpectedMembersCountToJoinFanout']);
+        return cbk([400, 'ExpectedMembersCountToJoinFanoutGroup']);
       }
 
       if (!args.id) {
-        return cbk([400, 'ExpectedGroupIdToJoinFanout']);
+        return cbk([400, 'ExpectedGroupIdToJoinFanoutGroup']);
       }
 
       if (!args.inputs.length) {
-        return cbk([400, 'ExpectedArrayOfUtxosToJoinFanout']);
+        return cbk([400, 'ExpectedArrayOfUtxosToJoinFanoutGroup']);
       }
 
       if (!args.lnd) {
-        return cbk([400, 'ExpectedAuthenticatedLndToJoinFanout']);
+        return cbk([400, 'ExpectedAuthenticatedLndToJoinFanoutGroup']);
       }
 
       if (!args.output_count || !isNumber(args.output_count)) {
-        return cbk([400, 'ExpectedOutputCountToJoinFanout']);
+        return cbk([400, 'ExpectedOutputCountToJoinFanoutGroup']);
       }
 
       if (!args.rate) {
-        return cbk([400, 'ExpectedChainFeeRateToJoinFanout']);
+        return cbk([400, 'ExpectedChainFeeRateToJoinFanoutGroup']);
       }
 
       return cbk();
@@ -102,20 +101,19 @@ module.exports = (args, cbk) => {
 
     // Get the funding details for the fanout
     getFundingInfo: ['connected', ({}, cbk) => {
-      return getFundingDetails({
+      return getFanoutFunding({
         capacity: args.capacity,
-        count: args.count,
         inputs: args.inputs,
         lnd: args.lnd,
-        output_count: args.output_count,
+        outputs: args.output_count,
         rate: args.rate,
       },
       cbk);
     }],
 
-    // Register pending proposal and sign and fund
+    // Register a fanout funding proposal and sign and fund for the next step
     register: ['getFundingInfo', ({getFundingInfo}, cbk) => {
-      return registerPendingOpen({
+      return registerFanoutProposal({
         capacity: args.capacity,
         coordinator: args.coordinator,
         change: getFundingInfo.change,
@@ -125,29 +123,22 @@ module.exports = (args, cbk) => {
         overflow: getFundingInfo.overflow,
         output_count: args.output_count,
         pending: getFundingInfo.id,
-        service: serviceTypeRegisterPendingFanout,
+        rate: args.rate,
         utxos: getFundingInfo.utxos,
       },
       cbk);
     }],
 
-    // Decode the unsigned PSBT
-    transaction: [
-      'ecp',
-      'register',
-      ({ecp, register}, cbk) =>
-    {
+    // Decode the unsigned PSBT given back by registration
+    transaction: ['ecp', 'register', ({ecp, register}, cbk) => {
       const psbt = decodePsbt({ecp, psbt: register.psbt});
 
       const tx = fromHex(psbt.unsigned_transaction);
 
-      return cbk(null, {
-        id: tx.getId(),
-        raw: psbt.unsigned_transaction,
-      });
+      return cbk(null, {id: tx.getId(), raw: psbt.unsigned_transaction});
     }],
 
-    // Publish partial signatures to coordinator
+    // Publish the partial funding signatures to coordinator
     reveal: ['register', ({register}, cbk) => {
       // Let listeners know that the signature will be sent to coordinator
       emitter.emit('publishing', {
@@ -155,13 +146,12 @@ module.exports = (args, cbk) => {
         signed: register.psbt,
       });
 
-      return registerSignedOpen({
+      return registerFanoutSigned({
         coordinator: args.coordinator,
         count: args.count,
         group: args.id,
         lnd: args.lnd,
         signed: register.psbt,
-        service: serviceTypeRegisterSignedFanout,
       },
       cbk);
     }],

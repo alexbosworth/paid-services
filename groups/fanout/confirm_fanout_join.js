@@ -6,8 +6,7 @@ const {getChainBalance} = require('ln-service');
 const {getNodeAlias} = require('ln-sync');
 const {returnResult} = require('asyncjs-util');
 
-const {getGroupDetails} = require('./../groups/p2p');
-const {serviceTypeGetFanoutDetails} = require('./../service_types')
+const getFanoutDetails = require('./get_fanout_details');
 
 const coordinatorFromJoinCode = n => n.slice(0, 66);
 const defaultTimeoutMs = 1000 * 60;
@@ -25,9 +24,9 @@ const tokensAsBigUnit = tokens => (tokens / 1e8).toFixed(8);
 
   {
     code: <Group Invite Code String>
+    count: <Output Count Number>
     lnd: <Authenticated LND API Object>
     logger: <Winston Logger Object>
-    output_count: <Output Count Number>
   }
 
   @returns via cbk or Promise
@@ -39,54 +38,54 @@ const tokensAsBigUnit = tokens => (tokens / 1e8).toFixed(8);
     rate: <Chain Fee Tokens Per VByte Number>
   }
 */
-module.exports = (args, cbk) => {
+module.exports = ({code, count, lnd, logger}, cbk) => {
   return new Promise((resolve, reject) => {
     return asyncAuto({
       // Check arguments
       validate: cbk => {
-        if (!isCode(args.code)) {
+        if (!isCode(code)) {
           return cbk([400, 'ExpectedFanoutGroupInviteCodeToGetJoinDetails']);
         }
 
-        if (!args.lnd) {
+        if (!count || !isNumber(count)) {
+          return cbk([400, 'ExpectedOutputCountToJoinGroupFanout']);
+        }
+
+        if (!lnd) {
           return cbk([400, 'ExpectedAuthenticatedLndToGetJoinGroupDetails']);
         }
 
-        if (!args.logger) {
+        if (!logger) {
           return cbk([400, 'ExpectedWinstonLoggerObjectToGetJoinDetails']);
-        }
-
-        if (!args.output_count || !isNumber(args.output_count)) {
-            return cbk([400, 'ExpectedOutputCountToJoinGroupFanout']);
         }
 
         return cbk();
       },
 
       // Get the wallet balance to make sure there are enough funds to join
-      getBalance: ['validate', ({}, cbk) => getChainBalance({lnd: args.lnd}, cbk)],
+      getBalance: ['validate', ({}, cbk) => getChainBalance({lnd}, cbk)],
 
       // Parse the group join code
       group: ['validate', ({}, cbk) => {
-        const coordinator = coordinatorFromJoinCode(args.code);
+        const coordinator = coordinatorFromJoinCode(code);
 
         if (!isPublicKey(coordinator)) {
           return cbk([400, 'ExpectedValidGroupJoinCodeToRequestGroupDetails']);
         }
 
-        const id = groupIdFromJoinCode(args.code);
+        const id = groupIdFromJoinCode(code);
 
-        return cbk(null, {id, coordinator})
+        return cbk(null, {coordinator, id});
       }],
 
       // Connect to the coordinator
       connect: ['group', ({group}, cbk) => {
         return asyncRetry({interval, times}, cbk => {
-          args.logger.info({connecting_to: group.coordinator});
+          logger.info({connecting_to: group.coordinator});
 
           return asyncTimeout(connectPeer, defaultTimeoutMs)({
+            lnd,
             id: group.coordinator,
-            lnd: args.lnd,
           },
           cbk);
         },
@@ -95,19 +94,18 @@ module.exports = (args, cbk) => {
 
       // Get the coordinator node alias to log it out
       getAlias: ['group', ({group}, cbk) => {
-        return getNodeAlias({id: group.coordinator, lnd: args.lnd}, cbk);
+        return getNodeAlias({lnd, id: group.coordinator}, cbk);
       }],
 
-      // Get the group details from the coordinator
+      // Get the group details from the coordinator once connected
       getDetails: ['connect', 'group', ({group}, cbk) => {
         return asyncRetry({interval, times}, cbk => {
-          args.logger.info({requesting_group_details_from: group.coordinator});
+          logger.info({requesting_group_details_from: group.coordinator});
 
-          return getGroupDetails({
+          return getFanoutDetails({
+            lnd,
             coordinator: group.coordinator,
             id: group.id,
-            lnd: args.lnd,
-            service: serviceTypeGetFanoutDetails,
           },
           cbk);
         },
@@ -122,13 +120,13 @@ module.exports = (args, cbk) => {
         ({getAlias, getBalance, getDetails}, cbk) =>
       {
         const coordinatedBy = `coordinated by ${niceName(getAlias)}`;
-        const members = `${getDetails.count} member group`;
-        const size = `with ${tokensAsBigUnit(getDetails.capacity)} output size`;
+        const members = `${getDetails.count} member fanout group`;
+        const size = `with ${tokensAsBigUnit(getDetails.capacity)} outputs`;
         const rate = `and paying ${getDetails.rate}/vbyte chain fee`;
 
-        args.logger.info({joining: join([members, coordinatedBy, size, rate])});
+        logger.info({joining: join([members, coordinatedBy, size, rate])});
 
-        const requiredFunding = getDetails.funding * args.output_count;
+        const requiredFunding = getDetails.funding * count;
 
         // Check to make sure that there are on chain funds for this group
         if (getBalance.chain_balance < requiredFunding) {
@@ -143,7 +141,7 @@ module.exports = (args, cbk) => {
       }],
 
       // Go ahead with the group join
-      join: ['getDetails', 'group', 'log', ({getDetails, group}, cbk) => {
+      join: ['getDetails', 'group', ({getDetails, group}, cbk) => {
         return cbk(null, {
           capacity: getDetails.capacity,
           coordinator: group.coordinator,

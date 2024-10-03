@@ -13,10 +13,9 @@ const {spawnLightningCluster} = require('ln-docker-daemons');
 const {test} = require('@alexbosworth/tap');
 const tinysecp = require('tiny-secp256k1');
 
-const assembleFanoutGroup = require('./../../fanout/assemble_fanout_group');
-const {getGroupDetails} = require('./../../groups/p2p');
-const joinFanout = require('./../../fanout/join_fanout');
-const {serviceTypeGetFanoutDetails} = require('./../../service_types')
+const assembleGroup = require('./../../groups/fanout/assemble_fanout_group');
+const getFanoutDetails = require('./../../groups/fanout/get_fanout_details');
+const joinFanout = require('./../../groups/fanout/join_fanout');
 
 const asOutpoint = utxo => `${utxo.transaction_id}:${utxo.transaction_vout}`;
 const capacity = 1e5;
@@ -104,14 +103,14 @@ test(`Setup joint fanout group`, async ({end, equal, strictSame}) => {
     const controlUtxos = await getUtxos({lnd: control.lnd});
 
     // Start the coordination
-    const assemble = assembleFanoutGroup({
+    const assemble = assembleGroup({
       capacity,
       ecp,
       count: nodes.length,
       identity: control.id,
       inputs: controlUtxos.utxos.map(n => asOutpoint(n)),
       lnd: control.lnd,
-      output_count: outputCount,
+      outputs: outputCount,
       rate: feeRate,
     });
 
@@ -122,11 +121,10 @@ test(`Setup joint fanout group`, async ({end, equal, strictSame}) => {
 
     // Target and remote join the group
     const joins = await asyncMap([target.lnd, remote.lnd], async lnd => {
-      const group = await getGroupDetails({
+      const group = await getFanoutDetails({
         lnd,
         coordinator: control.id,
         id: assemble.id,
-        service: serviceTypeGetFanoutDetails,
       });
 
       const {utxos} = await getUtxos({lnd});
@@ -158,9 +156,9 @@ test(`Setup joint fanout group`, async ({end, equal, strictSame}) => {
       await Promise.all(nodes.map(async ({lnd}) => {
         const {utxos} = await getUtxos({lnd, min_confirmations: 1});
 
-        const fanoutUtxosCount = utxos.filter(n => n.tokens === capacity).length;
+        const utxosCount = utxos.filter(n => n.tokens === capacity).length;
 
-        if (outputCount !== fanoutUtxosCount) {
+        if (outputCount !== utxosCount) {
           throw new Error('ExpectedCorrectFanoutUtxoCount');
         }
       }));

@@ -3,16 +3,16 @@ const asyncRetry = require('async/retry');
 const {connectPeer} = require('ln-sync');
 const {returnResult} = require('asyncjs-util');
 
-const {decodeGroupDetails} = require('./../messages');
+const {decodeFanoutDetails} = require('./../messages');
 const {makePeerRequest} = require('./../../p2p');
-const {serviceTypeGetGroupDetails} = require('./../../service_types');
+const {serviceTypeGetFanoutDetails} = require('./../../service_types')
 
 const defaultRequestTimeoutMs = 1000 * 60;
 const interval = 3000;
 const times = 10;
-const typeGroupChannelId = '1';
+const typeGroupId = '1';
 
-/** Get details about a group
+/** Get details about a fanout group, like the output size and fee rate
 
   {
     coordinator: <Group Coordinator Identity Public Key Hex String>
@@ -22,9 +22,8 @@ const typeGroupChannelId = '1';
 
   @returns via cbk or Promise
   {
-    capacity: <Channel Capacity Tokens Number>
+    capacity: <Output Size Tokens Number>
     count: <Target Members Count Number>
-    funding: <Amount Of Funding Required Tokens Number>
     rate: <Chain Fee Rate Number>
   }
 */
@@ -34,21 +33,21 @@ module.exports = ({coordinator, id, lnd}, cbk) => {
       // Check arguments
       validate: cbk => {
         if (!coordinator) {
-          return cbk([400, 'ExpectedCoordinatorToGetGroupDetails']);
+          return cbk([400, 'ExpectedCoordinatorToGetFanoutGroupDetails']);
         }
 
         if (!id) {
-          return cbk([400, 'ExpectedGroupIdToGetGroupDetails']);
+          return cbk([400, 'ExpectedGroupIdToGetFanoutGroupDetails']);
         }
 
         if (!lnd) {
-          return cbk([400, 'ExpectedAuthenticatedLndToGetGroupDetails']);
+          return cbk([400, 'ExpectedAuthenticatedLndToGetFanoutGroupDetails']);
         }
 
         return cbk();
       },
 
-      // Connect to the coordinator to request the group details
+      // Connect to the coordinator to request the fanout group details
       connect: ['validate', ({}, cbk) => {
         return asyncRetry({interval, times}, cbk => {
           return connectPeer({lnd, id: coordinator}, cbk);
@@ -56,25 +55,25 @@ module.exports = ({coordinator, id, lnd}, cbk) => {
         cbk);
       }],
 
-      // Send the request for group details
+      // Send the request for fanout group details
       request: ['connect', ({}, cbk) => {
         return asyncRetry({interval, times}, cbk => {
           return makePeerRequest({
             lnd,
-            records: [{type: typeGroupChannelId, value: id}],
+            records: [{type: typeGroupId, value: id}],
             timeout: defaultRequestTimeoutMs,
             to: coordinator,
-            type: serviceTypeGetGroupDetails,
+            type: serviceTypeGetFanoutDetails,
           },
           cbk);
         },
         cbk);
       }],
 
-      // Parse the group details records
+      // Parse the fanout group details records
       group: ['request', ({request}, cbk) => {
         try {
-          return cbk(null, decodeGroupDetails({records: request.records}));
+          return cbk(null, decodeFanoutDetails({records: request.records}));
         } catch (err) {
           return cbk([503, err.message]);
         }

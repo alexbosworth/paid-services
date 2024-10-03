@@ -5,78 +5,76 @@ const {combinePsbts} = require('psbt');
 const {decodePsbt} = require('psbt');
 const {extractTransaction} = require('psbt');
 const {finalizePsbt} = require('psbt');
+const {signAndFundPsbt} = require('ln-sync');
 
 const coordinateFanout = require('./coordinate_fanout');
-const getFundingDetails = require('./get_funding_details');
-const {signAndFundGroupChannel} = require('../groups/funding');
-
-const minGroupCount = 3;
+const getFanoutFunding = require('./get_fanout_funding');
+const transactionFeeRate = require('./../transaction_fee_rate');
 
 /** Assemble a fanout group
 
+  This group type must have at least 3 participants
+
   {
-    capacity: <Output Capacity Tokens Number>
+    capacity: <Output Size Tokens Number>
     count: <Fanout Members Count Number>
     ecp: <ECPair Library Object>
     identity: <Coordinator Identity Public Key Hex String>
     inputs: [<Utxo Outpoint String>]
     lnd: <Authenticated LND API Object>
     [members]: [<Member Identity Public Key Hex String>]
-    output_count: <Output Count Number>
+    outputs: <Output Count Number>
     rate: <Chain Fee Tokens Per VByte Number>
   }
 
   @returns
   {
-    events: <EventEmitter Object>
-    id: <Group Id Hex String>
+    events: <Fanout Status Notifications EventEmitter Object>
+    id: <Group Identifier Hex Encoded String>
   }
 
-  // Fanout was published
+  // The fanout transaction was successfully published to relays
   @event 'broadcast'
   {
     id: <Transaction Id Hex String>
     transaction: <Transaction Hex String>
   }
 
-  // Fanout is publishing
+  // The fanout transaction is being published to relays
   @event 'broadcasting'
   {
     transaction: <Transaction Hex String>
   }
 
-  // Members are peered
+  // A member is peered with the coordinator
   @event 'connected'
   {}
 
-  // All members are present
+  // All members are peered with the coordinator
   @event 'filled'
   {
     ids: [<Group Member Identity Public Key Hex String>]
   }
 
-  // Member is present
+  // A member sent a presence update
   @event 'present'
   {
     id: <Present Member Public Id Hex String>
   }
 
-  // Members have proposed fanout to the coordinator
+  // Members have proposed the entire unsigned fanout to the coordinator
   @event 'proposed'
   {}
 
-  // Members have all signed
+  // Members have all signed the fanout transaction
   @event 'signed'
   {}
 */
-module.exports = (args) => {
-  if (args.count < minGroupCount) {
-    throw new Error('ExpectedHigherGroupCountToAssembleFanoutGroup');
-  }
-
+module.exports = args => {
   const coordinator = coordinateFanout({
     capacity: args.capacity,
     count: args.count,
+    ecp: args.ecp,
     identity: args.identity,
     lnd: args.lnd,
     members: args.members,
@@ -96,28 +94,25 @@ module.exports = (args) => {
   coordinator.events.once('error', errored);
 
   // Group members have registered themselves
-  coordinator.events.once('joined', async ({ids}) => {
-    emitter.emit('filled', {ids});
-  });
+  coordinator.events.once('joined', ({ids}) => emitter.emit('filled', {ids}));
 
   // Group members have connected to the coordinator
   coordinator.events.once('connected', async () => {
     emitter.emit('connected', {});
 
     try {
-      // Get the funding details for the fanout
-      const {change, funding, utxos} = await getFundingDetails({
+      // Get the self funding details for the fanout
+      const {change, funding, utxos} = await getFanoutFunding({
         capacity: args.capacity,
-        count: args.count,
         inputs: args.inputs,
         lnd: args.lnd,
-        output_count: args.output_count,
+        outputs: args.outputs,
         rate: args.rate,
       });
 
       pending.utxos = utxos;
 
-      // Register as proposed
+      // Register self as proposed
       return coordinator.proposed({change, funding, utxos, id: args.identity});
     } catch (err) {
       return errored(err);
@@ -129,10 +124,8 @@ module.exports = (args) => {
     emitter.emit('proposed', {unsigned: coordinator.unsigned()});
 
     try {
-      const basePsbt = decodePsbt({ecp: args.ecp, psbt: coordinator.unsigned()});
-
       // Sign the unsigned funding transaction
-      const signed = await signAndFundGroupChannel({
+      const signed = await signAndFundPsbt({
         lnd: args.lnd,
         psbt: coordinator.unsigned(),
         utxos: pending.utxos,
@@ -150,24 +143,37 @@ module.exports = (args) => {
 
   // Group members have submitted their partial signatures
   coordinator.events.once('signed', async () => {
-    // Collect all the partially signed PSBTs
+    // Collect all the partially signed PSBTs to be combined into a single PSBT
     const psbts = coordinator.signed().map(n => n.signed);
 
     emitter.emit('signed', {psbts});
 
     try {
-      // Merge partial PSBTs into a single PSBT
+      // Merge all the partial signed PSBTs into a single PSBT with all sigs
       const combined = combinePsbts({psbts, ecp: args.ecp});
 
       // Finalize the PSBT to convert partial signatures to final signatures
       const finalized = finalizePsbt({ecp: args.ecp, psbt: combined.psbt});
 
       // Pull out the raw transaction from the PSBT
-      const {transaction} = extractTransaction({ecp: args.ecp, psbt: finalized.psbt});
+      const {transaction} = extractTransaction({
+        ecp: args.ecp,
+        psbt: finalized.psbt,
+      });
+
+      const {inputs} = decodePsbt({ecp: args.ecp, psbt: combined.psbt});
+
+      // Make sure the final transaction fee rate is not too low
+      if (transactionFeeRate({inputs, transaction}).rate < args.rate) {
+        throw [503, 'UnexpectedLowFeeRateForFanoutTransaction'];
+      }
 
       emitter.emit('broadcasting', ({transaction}));
 
-      const {id} = await broadcastChainTransaction({transaction, lnd: args.lnd});
+      const {id} = await broadcastChainTransaction({
+        transaction,
+        lnd: args.lnd,
+      });
 
       return emitter.emit('broadcast', {id, transaction});
     } catch (err) {

@@ -4,8 +4,8 @@ const {getMethods} = require('ln-service');
 const {getUtxos} = require('ln-service');
 const {returnResult} = require('asyncjs-util');
 
+const confirmFanoutJoin = require('./confirm_fanout_join');
 const joinFanout = require('./join_fanout');
-const getJoinDetails = require('./get_join_details');
 
 const allowedAddressFormats = ['p2tr', 'p2wpkh'];
 const asBigUnit = n => (n / 1e8).toFixed(8);
@@ -21,7 +21,7 @@ const sumOf = arr => arr.reduce((sum, n) => sum + n, Number());
   {
     ask: <Ask Function>
     code: <Group Invite Code String>
-    [inputs]: [<Utxo Outpoint String>]
+    inputs: [<Utxo Outpoint String>]
     [is_selecting_utxos]: <Interactively Select UTXOs to Spend Bool>
     lnd: <Authenticated LND API Object>
     logger: <Winston Logger Object>
@@ -103,8 +103,8 @@ module.exports = (args, cbk) => {
 
         // Only selecting confirmed utxos is supported
         const utxos = getUtxos.utxos
-        .filter(n => !!n.confirmation_count)
-        .filter(n => allowedAddressFormats.includes(n.address_format));
+          .filter(n => !!n.confirmation_count)
+          .filter(n => allowedAddressFormats.includes(n.address_format));
 
         // Make sure there are some UTXOs to select
         if (!utxos.length) {
@@ -145,16 +145,16 @@ module.exports = (args, cbk) => {
 
       // Decode the group invite code and get group details
       getJoinDetails: ['confirmSigner', 'utxos', ({}, cbk) => {
-        return getJoinDetails({
+        return confirmFanoutJoin({
           code: args.code,
+          count: args.output_count,
           lnd: args.lnd,
           logger: args.logger,
-          output_count: args.output_count,
         },
         cbk);
       }],
 
-      // Join the Fanout group
+      // Join the fanout group
       join: [
         'confirmSigner',
         'getMethods',
@@ -183,10 +183,13 @@ module.exports = (args, cbk) => {
           rate: getJoinDetails.rate,
         });
 
+        // Listen for an end event that will signal the tx was published
         join.once('end', ({id}) => cbk(null, {transaction_id: id}));
+
+        // Listen for a failed event that indicates the join errored
         join.once('error', err => cbk(err));
 
-        // Once everyone is peered to the coordinator then the fanout tx is made
+        // Once everyone is peered to the coordinator then a fanout tx is made
         join.once('publishing', ({refund, signed}) => {
           return args.logger.info({refund, signed});
         });

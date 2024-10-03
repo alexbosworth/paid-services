@@ -1,20 +1,18 @@
 const {decodeBigSize} = require('bolt01');
 
 const findRecord = (records, type) => records.find(n => n.type === type);
-const funding = (capacity, count) => count === 2 ? capacity / 2 : capacity;
 const {isArray} = Array;
-const isOdd = n => !!(n % 2);
-const maxCapacityTokens = BigInt(7e14);
+const maxMembersCount = BigInt(420);
 const maxFeeRate = BigInt(1e5);
-const maxMembersCount = BigInt(650);
-const minMembersCount = BigInt(2);
-const typeCapacity = '1';
+const maxTokens = BigInt(7e14);
+const minMembersCount = BigInt(3);
 const typeCount = '2';
 const typeRate = '3';
+const typeSize = '1';
 const typeVersion = '0';
 const version = '1';
 
-/** Decode channel group details
+/** Decode fanout group details
 
   {
     records: [{
@@ -28,53 +26,44 @@ const version = '1';
 
   @returns
   {
-    capacity: <Channel Capacity Tokens Number>
+    capacity: <Output Size Tokens Number>
     count: <Target Members Count Number>
-    funding: <Amount Of Funding Required Tokens Number>
     rate: <Chain Fee Rate Number>
   }
 */
 module.exports = ({records}) => {
   if (!isArray(records)) {
-    throw new Error('ExpectedArrayOfRecordsToDecodeGroupDetails');
-  }
-
-  if (!isArray(records)) {
-    throw new Error('ExpectedArrayOfRecordsToDecodeGroupDetails');
+    throw new Error('ExpectedArrayOfRecordsToDecodeFanoutGroupDetails');
   }
 
   const versionRecord = findRecord(records, typeVersion);
 
   if (!versionRecord) {
-    throw new Error('ExpectedVersionOfGroupDetailsRecords');
+    throw new Error('ExpectedVersionOfFanoutGroupDetailsRecords');
   }
 
   try {
     decodeBigSize({encoded: versionRecord.value});
   } catch (err) {
-    throw new Error('ExpectedValidVersionNumberInGroupRecords');
+    throw new Error('ExpectedValidVersionNumberInFanoutGroupRecords');
   }
 
   if (decodeBigSize({encoded: versionRecord.value}).decoded !== version) {
-    throw new Error('UnsupportedGroupVersion');
+    throw new Error('UnsupportedFanoutGroupVersion');
   }
 
-  const capacityRecord = findRecord(records, typeCapacity);
+  const capacityRecord = findRecord(records, typeSize);
 
   try {
     decodeBigSize({encoded: capacityRecord.value});
   } catch (err) {
-    throw new Error('ExpectedValidCapacityRecordNumberInGroupRecords');
+    throw new Error('ExpectedValidSizeRecordNumberInFanoutGroupRecords');
   }
 
   const capacity = decodeBigSize({encoded: capacityRecord.value}).decoded;
 
-  if (BigInt(capacity) > maxCapacityTokens) {
-    throw new Error('UnexpectedValueForCapacityInGroupRecords');
-  }
-
-  if (isOdd(Number(capacity))) {
-    throw new Error('ExpectedEvenChannelCapacityInGroupRecords');
+  if (BigInt(capacity) > maxTokens) {
+    throw new Error('UnexpectedValueForSizeInFanoutGroupRecords');
   }
 
   const countRecord = findRecord(records, typeCount);
@@ -82,17 +71,17 @@ module.exports = ({records}) => {
   try {
     decodeBigSize({encoded: countRecord.value});
   } catch (err) {
-    throw new Error('ExpectedValidCountRecordNumberInGroupRecords');
+    throw new Error('ExpectedValidCountRecordNumberInFanoutGroupRecords');
   }
 
   const count = decodeBigSize({encoded: countRecord.value}).decoded;
 
   if (BigInt(count) > maxMembersCount) {
-    throw new Error('UnexpectedValueForCountInGroupRecords');
+    throw new Error('UnexpectedHighValueForCountInFanoutGroupRecords');
   }
 
   if (BigInt(count) < minMembersCount) {
-    throw new Error('ExpectedHigherMembersCountInGroupDetails');
+    throw new Error('ExpectedHigherMembersCountInFanoutGroupDetails');
   }
 
   const rateRecord = findRecord(records, typeRate);
@@ -100,19 +89,18 @@ module.exports = ({records}) => {
   try {
     decodeBigSize({encoded: rateRecord.value});
   } catch (err) {
-    throw new Error('ExpectedValidRateRecordNumberInGroupRecords');
+    throw new Error('ExpectedValidRateRecordNumberInFanoutGroupRecords');
   }
 
   const rate = decodeBigSize({encoded: rateRecord.value}).decoded;
 
   if (BigInt(rate) > maxFeeRate) {
-    throw new Error('UnexpectedValueForFeeRateInGroupRecords');
+    throw new Error('UnexpectedValueForFeeRateInFanoutGroupRecords');
   }
 
   return {
     capacity: Number(capacity),
     count: Number(count),
-    funding: funding(Number(capacity), Number(count)),
     rate: Number(rate),
   };
 };
