@@ -1,8 +1,10 @@
 const {once} = require('events');
 
 const {addPeer} = require('ln-service');
+const asyncEach = require('async/each');
 const asyncMap = require('async/map');
 const asyncRetry = require('async/retry');
+const {componentsOfTransaction} = require('@alexbosworth/blockchain');
 const {createChainAddress} = require('ln-service');
 const {getChainTransactions} = require('ln-service');
 const {getNetwork} = require('ln-sync');
@@ -21,11 +23,14 @@ const asOutpoint = utxo => `${utxo.transaction_id}:${utxo.transaction_vout}`;
 const capacity = 1e5;
 const count = 101;
 const feeRate = 1;
+const format = 'p2tr';
 const interval = 10;
 const outputCount = 2;
+const outputCountControl = 4;
 const size = 3;
 const tokens = 1e6;
 const times = 2000;
+const uniq = arr => Array.from(new Set(arr));
 
 // Make a joint transaction fanout group
 test(`Setup joint fanout group`, async ({end, equal, strictSame}) => {
@@ -52,10 +57,7 @@ test(`Setup joint fanout group`, async ({end, equal, strictSame}) => {
     await sendToChainAddress({lnd, tokens, address: targetAddress.address});
 
     // Create a remote chain address
-    const remoteAddress = await createChainAddress({
-      format: 'p2tr',
-      lnd: remote.lnd,
-    });
+    const remoteAddress = await createChainAddress({format, lnd: remote.lnd});
 
     // Send coins to remote
     await sendToChainAddress({lnd, tokens, address: remoteAddress.address});
@@ -102,15 +104,17 @@ test(`Setup joint fanout group`, async ({end, equal, strictSame}) => {
     // Get utxos of the coordinator
     const controlUtxos = await getUtxos({lnd: control.lnd});
 
+    const [utxoForControl] = controlUtxos.utxos.map(asOutpoint).reverse();
+
     // Start the coordination
     const assemble = assembleGroup({
       capacity,
       ecp,
       count: nodes.length,
       identity: control.id,
-      inputs: controlUtxos.utxos.map(n => asOutpoint(n)),
+      inputs: [utxoForControl],
       lnd: control.lnd,
-      outputs: outputCount,
+      outputs: outputCountControl,
       rate: feeRate,
     });
 
@@ -148,22 +152,60 @@ test(`Setup joint fanout group`, async ({end, equal, strictSame}) => {
     // Transaction ids of the open should be returned
     const ids = joins.map(n => n.id);
 
+    strictSame(uniq(ids).length, 1, 'Only one transaction id');
+
     // Finished, wait for confirmations on fanout utxos
     await generate({count});
 
+    const expected = [
+      {
+        lnd: control.lnd,
+        count: outputCountControl,
+      },
+      {
+        lnd: target.lnd,
+        count: outputCount,
+      },
+      {
+        lnd: remote.lnd,
+        count: outputCount,
+      },
+    ];
+
     // Check if the expected utxos are confirmed
     await asyncRetry({interval, times}, async () => {
-      await Promise.all(nodes.map(async ({lnd}) => {
+      await asyncEach(expected, async ({count, lnd}) => {
+        const [txId] = ids;
         const {utxos} = await getUtxos({lnd, min_confirmations: 1});
 
-        const utxosCount = utxos.filter(n => n.tokens === capacity).length;
+        const utxosCount = utxos
+          .filter(n => n.transaction_id === txId)
+          .filter(n => n.tokens === capacity)
+          .length;
 
-        if (outputCount !== utxosCount) {
-          throw new Error('ExpectedCorrectFanoutUtxoCount');
-        }
-      }));
+        strictSame(utxosCount, count, 'Got expected UTXOs count');
+      });
     });
 
+    const components = componentsOfTransaction({
+      transaction: events.broadcast.transaction,
+    });
+
+    const controlExtra = components.outputs.find(n => n.tokens === 4999599712);
+    const fundedOuts = components.outputs.filter(n => n.tokens === capacity);
+
+    const changeOutput1 = components.outputs
+      .find(n => n.tokens === 799798 || n.tokens === 799799);
+
+    const changeOutput2 = components.outputs
+      .find(n => n.tokens === 799809 || n.tokens === 799810);
+
+    strictSame(components.inputs.length, 3, 'Got expected inputs count');
+    strictSame(components.outputs.length, 11, 'Got expected outputs count');
+    strictSame(fundedOuts.length, 8, 'Got expected funded outputs count');
+    strictSame(!!changeOutput1, true, 'Got change output 1');
+    strictSame(!!changeOutput2, true, 'Got change output 2');
+    strictSame(!!controlExtra, true, 'Got control change output');
     strictSame(ids, [events.broadcast.id, events.broadcast.id], 'Got tx ids');
     strictSame(events.broadcast.id.length, 64, 'Got broadcast tx id');
     strictSame(!!events.broadcast.transaction, true, 'Got broadcast tx');
