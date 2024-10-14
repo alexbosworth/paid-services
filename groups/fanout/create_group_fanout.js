@@ -121,11 +121,13 @@ module.exports = (args, cbk) => {
         return getChainBalance({lnd: args.lnd}, cbk);
       }],
 
+      // Get identity public key to include self in the group
+      getIdentity: ['validate', ({}, cbk) => {
+        return getIdentity({lnd: args.lnd}, cbk);
+      }],
+
       // Get UTXOs to use for input selection and final fee rate calculation
       getUtxos: ['validate', ({}, cbk) => getUtxos({lnd: args.lnd}, cbk)],
-
-      // Get identity public key
-      getIdentity: ['validate', ({}, cbk) => getIdentity({lnd: args.lnd}, cbk)],
 
       // Get methods to confim partial signing is supported
       getMethods: ['validate', ({}, cbk) => getMethods({lnd: args.lnd}, cbk)],
@@ -150,7 +152,7 @@ module.exports = (args, cbk) => {
         return cbk();
       }],
 
-      // Select inputs to spend
+      // Interactively select inputs to spend
       utxos: ['getUtxos', ({getUtxos}, cbk) => {
         // Exit early when UTXOs are all specified already
         if (!!args.inputs.length) {
@@ -162,7 +164,7 @@ module.exports = (args, cbk) => {
           return cbk(null, []);
         }
 
-        // Only selecting confirmed utxos is supported
+        // Only selecting confirmed P2TR or P2WPKH UTXOs is supported
         const utxos = getUtxos.utxos
           .filter(n => !!n.confirmation_count)
           .filter(n => allowedAddressFormats.includes(n.address_format));
@@ -178,6 +180,7 @@ module.exports = (args, cbk) => {
             value: asOutpoint(utxo),
           })),
           loop: false,
+          message: 'Select UTXOs to spend',
           name: 'inputs',
           type: 'checkbox',
           validate: input => {

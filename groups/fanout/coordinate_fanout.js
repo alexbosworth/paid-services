@@ -208,7 +208,7 @@ module.exports = ({capacity, count, ecp, identity, lnd, members, rate}) => {
     return res.success({records});
   });
 
-  // Listen for and respond to pending open registrations
+  // Listen for and respond to fanout proposal registrations
   service.request({type: serviceTypeRegisterPendingFanout}, (req, res) => {
     if (!isArray(req.records)) {
       return res.failure([400, 'ExpectedArrayOfRecordsForPendingFanout']);

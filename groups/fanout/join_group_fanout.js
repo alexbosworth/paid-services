@@ -89,8 +89,23 @@ module.exports = (args, cbk) => {
         return cbk();
       }],
 
+      // Decode the group invite code and get group details
+      getJoinDetails: ['confirmSigner', ({}, cbk) => {
+        return confirmFanoutJoin({
+          code: args.code,
+          count: args.output_count,
+          lnd: args.lnd,
+          logger: args.logger,
+        },
+        cbk);
+      }],
+
       // Select inputs to spend
-      utxos: ['getUtxos', ({getUtxos}, cbk) => {
+      utxos: [
+        'getJoinDetails',
+        'getUtxos',
+        ({getJoinDetails, getUtxos}, cbk) =>
+      {
         // Exit early when UTXOs are all specified already
         if (!!args.inputs.length) {
           return cbk(null, args.inputs);
@@ -117,6 +132,7 @@ module.exports = (args, cbk) => {
             value: asOutpoint(utxo),
           })),
           loop: false,
+          message: 'Select UTXOs to spend',
           name: 'inputs',
           type: 'checkbox',
           validate: input => {
@@ -129,7 +145,7 @@ module.exports = (args, cbk) => {
               return utxos.find(n => asOutpoint(n) === utxo.value).tokens;
             }));
 
-            const capacity = args.capacity * args.output_count;
+            const capacity = getJoinDetails.capacity * args.output_count;
 
             const missingTok = asBigUnit(capacity - tokens);
 
@@ -141,17 +157,6 @@ module.exports = (args, cbk) => {
           }
         },
         ({inputs}) => cbk(null, inputs));
-      }],
-
-      // Decode the group invite code and get group details
-      getJoinDetails: ['confirmSigner', 'utxos', ({}, cbk) => {
-        return confirmFanoutJoin({
-          code: args.code,
-          count: args.output_count,
-          lnd: args.lnd,
-          logger: args.logger,
-        },
-        cbk);
       }],
 
       // Join the fanout group

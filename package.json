@@ -17,7 +17,7 @@
     "ecpair": "2.1.0",
     "goldengate": "14.0.8",
     "invoices": "3.0.0",
-    "ln-service": "57.20.2",
+    "ln-service": "57.22.0",
     "ln-sync": "6.4.0",
     "psbt": "3.0.0",
     "p2tr": "2.0.0",

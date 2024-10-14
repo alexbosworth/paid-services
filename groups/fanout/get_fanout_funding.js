@@ -128,6 +128,7 @@ module.exports = ({capacity, inputs, lnd, outputs, rate}, cbk) => {
       fund: ['getAddresses', 'spend', ({getAddresses, spend}, cbk) => {
         return fundPsbt({
           lnd,
+          change_format: format,
           inputs: spend.map(input => ({
             transaction_id: input.transaction_id,
             transaction_vout: input.transaction_vout,
