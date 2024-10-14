@@ -1,5 +1,9 @@
 # Versions
 
+## Version 6.2.0
+
+- `createGroupFanout`, `joinGroupFanout`: Add methods to make and join fanouts
+
 ## Version 6.1.7
 
 - `manageSwap`: Add support for Loop Out to external address
