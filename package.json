@@ -15,9 +15,9 @@
     "bolt01": "2.0.0",
     "bolt07": "1.9.4",
     "ecpair": "2.1.0",
-    "goldengate": "14.0.9",
+    "goldengate": "14.0.10",
     "invoices": "3.0.0",
-    "ln-service": "57.22.0",
+    "ln-service": "57.22.3",
     "ln-sync": "6.4.0",
     "psbt": "3.0.0",
     "p2tr": "2.0.0",
@@ -28,7 +28,7 @@
     "@alexbosworth/tap": "15.0.12",
     "ln-docker-daemons": "6.0.23",
     "mock-lnd": "2.0.0",
-    "secp256k1": "5.0.0"
+    "secp256k1": "5.0.1"
   },
   "engines": {
     "node": ">=18"
@@ -45,8 +45,8 @@
     "url": "https://github.com/alexbosworth/paid-services.git"
   },
   "scripts": {
-    "integration-tests": "tap -j 2 --branches=1 --functions=1 --lines=1 --statements=1 -t 2700 test/integration/*.js",
+    "integration-tests": "tap -j 1 --branches=1 --functions=1 --lines=1 --statements=1 -t 2700 test/integration/*.js",
     "test": "tap --branches=1 --functions=1 --lines=1 --statements=1 -t 60 test/actions/*.js test/balanced/*.js test/capacity/*.js test/client/*.js test/config/*.js test/p2p/*.js test/records/*.js test/respond/*.js test/server/*.js test/swaps/*.js test/services/*.js test/trades/*.js"
   },
-  "version": "6.2.0"
+  "version": "6.2.1"
 }
