@@ -23,7 +23,7 @@ const decodeLoopResponse = require('./decode_loop_response');
 const decodeOffToOnRecovery = require('./decode_off_to_on_recovery');
 const encodeLoopResponse = require('./encode_loop_response');
 
-const defaultFundAt = () => new Date(Date.now() + (1000 * 60)).toISOString();
+const defaultFundAt = () => new Date(Date.now() + (1000 * 3600)).toISOString();
 const family = 805;
 const hexAsBuffer = hex => Buffer.from(hex, 'hex');
 const maxServiceFee = 1337;

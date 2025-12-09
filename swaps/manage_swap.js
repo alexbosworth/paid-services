@@ -203,7 +203,7 @@ module.exports = (args, cbk) => {
             value: actionPushRequest,
           },
           {
-            name: 'Request a swap from Lightning Loop (experimental)',
+            name: 'Request a swap from Lightning Loop',
             value: actionLoopRequest,
           },
           {
