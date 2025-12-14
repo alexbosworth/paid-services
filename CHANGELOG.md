@@ -1,6 +1,6 @@
 # Versions
 
-## Version 6.2.2
+## Version 6.2.3
 
 - `createGroupFanout`, `joinGroupFanout`: Add methods to make and join fanouts
 

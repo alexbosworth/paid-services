@@ -17,8 +17,8 @@
     "ecpair": "2.1.0",
     "goldengate": "14.0.10",
     "invoices": "4.0.0",
-    "ln-service": "57.27.1",
-    "ln-sync": "6.5.0",
+    "ln-service": "57.27.3",
+    "ln-sync": "6.5.2",
     "psbt": "4.0.0",
     "p2tr": "2.0.0",
     "tiny-secp256k1": "2.2.4"
@@ -26,7 +26,7 @@
   "description": "Lightning Paid Services library",
   "devDependencies": {
     "@alexbosworth/tap": "15.0.12",
-    "ln-docker-daemons": "6.0.27",
+    "ln-docker-daemons": "6.0.28",
     "mock-lnd": "2.0.0",
     "secp256k1": "5.0.1"
   },
@@ -48,5 +48,5 @@
     "integration-tests": "tap -j 1 --branches=1 --functions=1 --lines=1 --statements=1 -t 2700 test/integration/*.js",
     "test": "tap --branches=1 --functions=1 --lines=1 --statements=1 -t 60 test/actions/*.js test/balanced/*.js test/capacity/*.js test/client/*.js test/config/*.js test/p2p/*.js test/records/*.js test/respond/*.js test/server/*.js test/swaps/*.js test/services/*.js test/trades/*.js"
   },
-  "version": "6.2.2"
+  "version": "6.2.3"
 }
