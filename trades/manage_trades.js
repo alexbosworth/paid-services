@@ -93,7 +93,7 @@ module.exports = ({ask, lnd, logger, request, separator}, cbk) => {
           loop: false,
           message: 'Trade?',
           name: 'action',
-          type: 'list',
+          type: 'select',
         },
         res => cbk(null, res));
       }],
@@ -210,7 +210,7 @@ module.exports = ({ask, lnd, logger, request, separator}, cbk) => {
           }),
           message: 'Trade?',
           name: 'manage',
-          type: 'list',
+          type: 'select',
         },
         res => cbk(null, res));
       }],
@@ -230,7 +230,7 @@ module.exports = ({ask, lnd, logger, request, separator}, cbk) => {
           ],
           message: 'Trade?',
           name: 'trade',
-          type: 'list',
+          type: 'select',
         },
         res => cbk(null, res));
       }],

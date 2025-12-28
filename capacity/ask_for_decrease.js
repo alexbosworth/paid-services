@@ -81,7 +81,7 @@ module.exports = ({ask, lnd, max}, cbk) => {
           ],
           message: 'How do you want to change the channel capacity?',
           name: 'decrease',
-          type: 'list',
+          type: 'select',
         },
         ({decrease}) => cbk(null, decrease));
       }],

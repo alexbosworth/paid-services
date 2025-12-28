@@ -171,7 +171,7 @@ module.exports = ({ask, lnd, logger, request}, cbk) => {
           ],
           message: '?',
           name: 'type',
-          type: 'list',
+          type: 'select',
         },
         res => cbk(null, res));
       }],

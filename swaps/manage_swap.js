@@ -224,7 +224,7 @@ module.exports = (args, cbk) => {
           choices: choices.concat(pushes),
           message: 'Off-chain to on-chain swap:',
           name: 'action',
-          type: 'list',
+          type: 'select',
         },
         ({action}) => cbk(null, action));
       }],

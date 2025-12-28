@@ -180,7 +180,7 @@ module.exports = ({ask, lnd, logger}, cbk) => {
           ],
           message: ' ',
           name: 'action',
-          type: 'list',
+          type: 'select',
         },
         res => cbk(null, res));
       }],
@@ -242,7 +242,7 @@ module.exports = ({ask, lnd, logger}, cbk) => {
           ],
           message: ' ',
           name: 'action',
-          type: 'list',
+          type: 'select',
         },
         res => cbk(null, res));
       }],

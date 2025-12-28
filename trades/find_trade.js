@@ -186,7 +186,7 @@ module.exports = ({ask, id, lnd, logger, nodes}, cbk) => {
           })),
           message: 'What would you like to buy?',
           name: 'id',
-          type: 'list',
+          type: 'select',
         },
         res => cbk(null, res));
       }],

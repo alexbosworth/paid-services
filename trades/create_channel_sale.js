@@ -126,7 +126,7 @@ module.exports = ({ask, lnd, logger, request}, cbk) => {
           default: pricePpm,
           message: '?',
           name: 'action',
-          type: 'list',
+          type: 'select',
         },
         res => cbk(null, res));
       }],

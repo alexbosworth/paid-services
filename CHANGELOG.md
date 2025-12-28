@@ -1,5 +1,11 @@
 # Versions
 
+## Verison 7.0.0
+
+### Breaking Changes
+
+- node.js 18 is no longer supported, node.js 20+ required
+
 ## Version 6.2.3
 
 - `createGroupFanout`, `joinGroupFanout`: Add methods to make and join fanouts

@@ -50,7 +50,7 @@ module.exports = ({ask, lnd, logger}, cbk) => {
             {name: 'Coordinate new group', value: createOption},
           ],
           name: 'option',
-          type: 'list',
+          type: 'select',
         },
         ({option}) => cbk(null, option));
       }],

@@ -211,7 +211,7 @@ module.exports = ({ask, id, lnd, nodes}, cbk) => {
           loop: false,
           message: 'Channel to change?',
           name: 'id',
-          type: 'list',
+          type: 'select',
         },
         ({id}) => cbk(null, id));
       }],
@@ -341,7 +341,7 @@ module.exports = ({ask, id, lnd, nodes}, cbk) => {
           choices,
           message: 'How do you want to change the channel capacity?',
           name: 'direction',
-          type: 'list',
+          type: 'select',
         },
         ({direction}) => cbk(null, direction));
       }],
@@ -368,7 +368,7 @@ module.exports = ({ask, id, lnd, nodes}, cbk) => {
           })),
           message: 'Move channel to?',
           name: 'migration',
-          type: 'list',
+          type: 'select',
         },
         ({migration}) => cbk(null, potentialNodes[migration]));
       }],
@@ -494,7 +494,7 @@ module.exports = ({ask, id, lnd, nodes}, cbk) => {
           default: channel.is_private ? 'Private' : 'Public',
           message: 'Replacement channel type?',
           name: 'type',
-          type: 'list',
+          type: 'select',
         },
         ({type}) => cbk(null, {is_private: type === 'Private'}));
       }],
