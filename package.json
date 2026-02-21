@@ -7,26 +7,26 @@
     "url": "https://github.com/alexbosworth/paid-services/issues"
   },
   "dependencies": {
-    "@alexbosworth/blockchain": "2.0.0",
+    "@alexbosworth/blockchain": "3.2.0",
     "@alexbosworth/fiat": "2.0.0",
     "async": "3.2.6",
     "asyncjs-util": "1.2.12",
     "bech32": "2.0.0",
-    "bolt01": "2.0.0",
-    "bolt07": "1.9.4",
+    "bolt01": "3.0.0",
+    "bolt07": "1.9.5",
     "ecpair": "2.1.0",
-    "goldengate": "14.0.11",
-    "invoices": "4.0.0",
-    "ln-service": "57.27.3",
-    "ln-sync": "6.5.2",
-    "psbt": "4.0.0",
+    "goldengate": "15.0.0",
+    "invoices": "5.0.2",
+    "ln-service": "58.0.2",
+    "ln-sync": "7.0.0",
+    "psbt": "5.0.0",
     "p2tr": "2.0.0",
     "tiny-secp256k1": "2.2.4"
   },
   "description": "Lightning Paid Services library",
   "devDependencies": {
     "@alexbosworth/tap": "15.0.12",
-    "ln-docker-daemons": "6.0.28",
+    "ln-docker-daemons": "7.0.0",
     "mock-lnd": "2.0.0",
     "secp256k1": "5.0.1"
   },
@@ -48,5 +48,5 @@
     "integration-tests": "tap -j 1 --branches=1 --functions=1 --lines=1 --statements=1 -t 2700 test/integration/*.js",
     "test": "tap --branches=1 --functions=1 --lines=1 --statements=1 -t 60 test/actions/*.js test/balanced/*.js test/capacity/*.js test/client/*.js test/config/*.js test/p2p/*.js test/records/*.js test/respond/*.js test/server/*.js test/swaps/*.js test/services/*.js test/trades/*.js"
   },
-  "version": "7.0.1"
+  "version": "7.0.2"
 }
