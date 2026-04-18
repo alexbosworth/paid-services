@@ -1,4 +1,7 @@
-const {once} = require('events');
+const {deepStrictEqual} = require('node:assert').strict;
+const {equal} = require('node:assert').strict;
+const {once} = require('node:events');
+const test = require('node:test');
 
 const {addPeer} = require('ln-service');
 const asyncMap = require('async/map');
@@ -11,7 +14,6 @@ const {getUtxos} = require('ln-service');
 const {networks} = require('bitcoinjs-lib');
 const {sendToChainAddress} = require('ln-service');
 const {spawnLightningCluster} = require('ln-docker-daemons');
-const {test} = require('@alexbosworth/tap');
 const tinysecp = require('tiny-secp256k1');
 
 const assembleChannelGroup = require('./../../groups/assemble_channel_group');
@@ -28,7 +30,7 @@ const tokens = 1e6;
 const times = 2000;
 
 // Make a joint transaction channel group
-test(`Setup joint channel group`, async ({end, equal, strictSame}) => {
+test(`Setup joint channel group`, async () => {
   const ecp = (await import('ecpair')).ECPairFactory(tinysecp);
   const {kill, nodes} = await spawnLightningCluster({size});
 
@@ -129,15 +131,13 @@ test(`Setup joint channel group`, async ({end, equal, strictSame}) => {
       }
     });
 
-    strictSame(ids, [events.broadcast.id], 'Got tx ids');
-    strictSame(events.broadcast.id.length, 64, 'Got broadcast tx id');
-    strictSame(!!events.broadcast.transaction, true, 'Got broadcast tx');
-    strictSame(events.filled.ids.length, nodes.length, 'Got filled event');
+    deepStrictEqual(ids, [events.broadcast.id], 'Got tx ids');
+    equal(events.broadcast.id.length, 64, 'Got broadcast tx id');
+    equal(!!events.broadcast.transaction, true, 'Got broadcast tx');
+    equal(events.filled.ids.length, nodes.length, 'Got filled event');
   } catch (err) {
-    strictSame(err, null, 'Expected no failure');
+    equal(err, null, 'Expected no failure');
   } finally {
     await kill({});
   }
-
-  return end();
 });

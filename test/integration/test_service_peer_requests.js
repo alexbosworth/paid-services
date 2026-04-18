@@ -1,6 +1,9 @@
+const {deepStrictEqual} = require('node:assert').strict;
+const {equal} = require('node:assert').strict;
+const test = require('node:test');
+
 const {addPeer} = require('ln-service');
 const {spawnLightningCluster} = require('ln-docker-daemons');
-const {test} = require('@alexbosworth/tap');
 
 const {makePeerRequest} = require('./../../');
 const {servicePeerRequests} = require('./../../');
@@ -12,7 +15,7 @@ const size = 2;
 const type = '0';
 
 // Adding a listener for peer requests should allow responding to peer requests
-test(`Listen for peer requests`, async ({end, equal, strictSame}) => {
+test(`Listen for peer requests`, async () => {
   const {kill, nodes} = await spawnLightningCluster({size});
 
   const [{id, lnd}, target] = nodes;
@@ -34,7 +37,7 @@ test(`Listen for peer requests`, async ({end, equal, strictSame}) => {
       to: id,
     });
 
-    strictSame(records, got.records, 'Got response records');
+    deepStrictEqual(records, got.records, 'Got response records');
   } catch (err) {
     equal(err, null, 'Expected no error making peer request');
   }
@@ -48,12 +51,10 @@ test(`Listen for peer requests`, async ({end, equal, strictSame}) => {
       to: id,
     });
 
-    strictSame(got, null, 'Expected failure response for failure type');
+    equal(got, null, 'Expected failure response for failure type');
   } catch (err) {
-    strictSame(err, failure, 'Got failure response for failure type');
+    deepStrictEqual(err, failure, 'Got failure response for failure type');
   }
 
   await kill({});
-
-  return end();
 });

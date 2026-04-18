@@ -1,3 +1,6 @@
+const {equal} = require('node:assert').strict;
+const test = require('node:test');
+
 const {address} = require('bitcoinjs-lib');
 const asyncAuto = require('async/auto');
 const asyncMap = require('async/map');
@@ -12,7 +15,6 @@ const {getNetwork} = require('ln-sync');
 const {networks} = require('bitcoinjs-lib');
 const {openChannel} = require('ln-service');
 const {spawnLightningCluster} = require('ln-docker-daemons');
-const {test} = require('@alexbosworth/tap');
 const {Transaction} = require('bitcoinjs-lib');
 
 const accept = require('./../../capacity/accept_capacity_change');
@@ -38,7 +40,7 @@ const {toOutputScript} = address;
 const weightAsVBytes = n => Math.ceil(n / 4);
 
 // A capacity replacement proposal should be counter signed and accepted
-test(`Accept capacity replacement`, async ({end, equal, strictSame}) => {
+test(`Accept capacity replacement`, async () => {
   const {kill, nodes} = await spawnLightningCluster({size});
 
   const [control, target] = nodes;
@@ -125,8 +127,6 @@ test(`Accept capacity replacement`, async ({end, equal, strictSame}) => {
           transaction_vout: channel.transaction_vout,
         });
 
-        proposeDone = true;
-
         return;
       },
 
@@ -164,7 +164,7 @@ test(`Accept capacity replacement`, async ({end, equal, strictSame}) => {
           throw new Error('ExpectedChannelActivation');
         });
 
-        strictSame(recreated.is_active, true, 'Recreated channel is active');
+        equal(recreated.is_active, true, 'Recreated channel is active');
       }],
 
       confirmControl: ['accept', 'propose', async ({}) => {
@@ -190,14 +190,12 @@ test(`Accept capacity replacement`, async ({end, equal, strictSame}) => {
           throw new Error('ExpectedChannelActivation');
         });
 
-        strictSame(recreated.is_active, true, 'Recreated channel is active');
+        equal(recreated.is_active, true, 'Recreated channel is active');
       }],
     });
   } catch (err) {
-    strictSame(err, null, 'Expected no failure');
+    equal(err, null, 'Expected no failure');
   } finally {
     await kill({});
   }
-
-  return end();
 });

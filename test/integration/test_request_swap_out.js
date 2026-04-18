@@ -1,3 +1,6 @@
+const {equal} = require('node:assert').strict;
+const test = require('node:test');
+
 const asyncRetry = require('async/retry');
 const {broadcastChainTransaction} = require('ln-service');
 const {createChainAddress} = require('ln-service');
@@ -9,7 +12,6 @@ const {openChannel} = require('ln-service');
 const {pay} = require('ln-service');
 const {sendToChainAddress} = require('ln-service');
 const {spawnLightningCluster} = require('ln-docker-daemons');
-const {test} = require('@alexbosworth/tap');
 
 const requestSwapOut = require('./../../swaps/request_swap_out');
 const respondToSwapOut = require('./../../swaps/respond_to_swap_out_request');
@@ -24,7 +26,7 @@ const times = 3000;
 const tokens = 1e5;
 
 // Start an offchain swap
-test(`Start offchain swap`, async ({end, equal, strictSame}) => {
+test(`Start offchain swap`, async () => {
   const {kill, nodes} = await spawnLightningCluster({size});
 
   const [{generate, id, lnd}, target] = nodes;
@@ -35,7 +37,7 @@ test(`Start offchain swap`, async ({end, equal, strictSame}) => {
   if (!keys.find(n => n.derivation_path === taprootDerivationPath)) {
     await kill({});
 
-    return end();
+    return;
   }
 
   try {
@@ -166,10 +168,8 @@ test(`Start offchain swap`, async ({end, equal, strictSame}) => {
       min_confirmations: 3,
     });
   } catch (err) {
-    strictSame(err, null, 'Expected no failure');
+    equal(err, null, 'Expected no failure');
   }
 
   await kill({});
-
-  return end();
 });

@@ -1,4 +1,6 @@
-const {once} = require('events');
+const {equal} = require('node:assert').strict;
+const {once} = require('node:events');
+const test = require('node:test');
 
 const {addPeer} = require('ln-service');
 const asyncMap = require('async/map');
@@ -11,7 +13,6 @@ const {getUtxos} = require('ln-service');
 const {networks} = require('bitcoinjs-lib');
 const {sendToChainAddress} = require('ln-service');
 const {spawnLightningCluster} = require('ln-docker-daemons');
-const {test} = require('@alexbosworth/tap');
 const tinysecp = require('tiny-secp256k1');
 
 const assembleChannelGroup = require('./../../groups/assemble_channel_group');
@@ -28,7 +29,7 @@ const tokens = 1e6;
 const times = 2000;
 
 // Make a joint transaction channel group with a sort defined
-test(`Setup sorted channel group`, async ({end, equal, strictSame}) => {
+test(`Setup sorted channel group`, async () => {
   const ecp = (await import('ecpair')).ECPairFactory(tinysecp);
   const {kill, nodes} = await spawnLightningCluster({size});
 
@@ -149,26 +150,26 @@ test(`Setup sorted channel group`, async ({end, equal, strictSame}) => {
 
       switch (node.id) {
       case (extra.id):
-        strictSame(inbound, control.id, 'Extra inbound is control');
-        strictSame(outbound, remote.id, 'Extra outbound is remote');
+        equal(inbound, control.id, 'Extra inbound is control');
+        equal(outbound, remote.id, 'Extra outbound is remote');
         break;
 
       case (remote.id):
-        strictSame(inbound, extra.id, 'Remote inbound is extra');
-        strictSame(outbound, target.id, 'Remote outbound is target');
+        equal(inbound, extra.id, 'Remote inbound is extra');
+        equal(outbound, target.id, 'Remote outbound is target');
         break;
 
       case (target.id):
-        strictSame(inbound, remote.id, 'Target inbound is remote');
-        strictSame(outbound, control.id, 'Target outbound is control');
+        equal(inbound, remote.id, 'Target inbound is remote');
+        equal(outbound, control.id, 'Target outbound is control');
         break;
 
       default:
         break;
       }
 
-      strictSame(!!inbound, true, 'Received inbound peer');
-      strictSame(!!outbound, true, 'Received outbound peer');
+      equal(!!inbound, true, 'Received inbound peer');
+      equal(!!outbound, true, 'Received outbound peer');
 
       const [tx] = await once(join, 'end');
 
@@ -189,14 +190,12 @@ test(`Setup sorted channel group`, async ({end, equal, strictSame}) => {
       }
     });
 
-    strictSame(events.broadcast.id.length, 64, 'Got broadcast tx id');
-    strictSame(!!events.broadcast.transaction, true, 'Got broadcast tx');
-    strictSame(events.filled.ids.length, nodes.length, 'Got filled event');
+    equal(events.broadcast.id.length, 64, 'Got broadcast tx id');
+    equal(!!events.broadcast.transaction, true, 'Got broadcast tx');
+    equal(events.filled.ids.length, nodes.length, 'Got filled event');
   } catch (err) {
-    strictSame(err, null, 'Expected no failure');
+    equal(err, null, 'Expected no failure');
   } finally {
     await kill({});
   }
-
-  return end();
 });

@@ -1,3 +1,6 @@
+const {equal} = require('node:assert').strict;
+const test = require('node:test');
+
 const {addPeer} = require('ln-service');
 const {address} = require('bitcoinjs-lib');
 const asyncAuto = require('async/auto');
@@ -13,7 +16,6 @@ const {getNetwork} = require('ln-sync');
 const {networks} = require('bitcoinjs-lib');
 const {openChannel} = require('ln-service');
 const {spawnLightningCluster} = require('ln-docker-daemons');
-const {test} = require('@alexbosworth/tap');
 const {Transaction} = require('bitcoinjs-lib');
 
 const {changeChannelCapacity} = require('./../../capacity');
@@ -33,7 +35,7 @@ const {toOutputScript} = address;
 const weightAsVBytes = n => Math.ceil(n / 4);
 
 // A capacity movement proposal should be counter signed and accepted
-test(`Move channel capacity`, async ({end, equal, strictSame}) => {
+test(`Move channel capacity`, async () => {
   const {kill, nodes} = await spawnLightningCluster({size});
 
   const [control, target, remote] = nodes;
@@ -221,10 +223,8 @@ test(`Move channel capacity`, async ({end, equal, strictSame}) => {
       }],
     });
   } catch (err) {
-    strictSame(err, null, 'Expected no failure');
+    equal(err, null, 'Expected no failure');
   } finally {
     await kill({});
   }
-
-  return end();
 });

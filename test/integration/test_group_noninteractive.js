@@ -1,8 +1,8 @@
-const {once} = require('events');
+const {equal} = require('node:assert').strict;
+const test = require('node:test');
 
 const {addPeer} = require('ln-service');
 const asyncAuto = require('async/auto');
-const asyncMap = require('async/map');
 const asyncRetry = require('async/retry');
 const {createChainAddress} = require('ln-service');
 const {getChainTransactions} = require('ln-service');
@@ -12,7 +12,6 @@ const {getUtxos} = require('ln-service');
 const {networks} = require('bitcoinjs-lib');
 const {sendToChainAddress} = require('ln-service');
 const {spawnLightningCluster} = require('ln-docker-daemons');
-const {test} = require('@alexbosworth/tap');
 
 const {createGroupChannel} = require('./../../');
 const {joinGroupChannel} = require('./../../');
@@ -26,7 +25,7 @@ const tokens = 1e6;
 const times = 2000;
 
 // Make a joint transaction channel group non-interactively
-test(`Setup joint channel group`, async ({end, equal, strictSame}) => {
+test(`Setup joint channel group`, async () => {
   const {kill, nodes} = await spawnLightningCluster({size});
 
   const [control, target] = nodes;
@@ -121,12 +120,10 @@ test(`Setup joint channel group`, async ({end, equal, strictSame}) => {
 
     const ids = [group.join.transaction_id, group.create.transaction_id];
 
-    strictSame(ids.length, nodes.length, 'Got tx ids');
+    equal(ids.length, nodes.length, 'Got tx ids');
   } catch (err) {
-    strictSame(err, null, 'Expected no failure');
+    equal(err, null, 'Expected no failure');
   } finally {
     await kill({});
   }
-
-  return end();
 });

@@ -1,4 +1,7 @@
-const {once} = require('events');
+const {deepStrictEqual} = require('node:assert').strict;
+const {equal} = require('node:assert').strict;
+const {once} = require('node:events');
+const test = require('node:test');
 
 const {addPeer} = require('ln-service');
 const asyncEach = require('async/each');
@@ -12,7 +15,6 @@ const {getUtxos} = require('ln-service');
 const {networks} = require('bitcoinjs-lib');
 const {sendToChainAddress} = require('ln-service');
 const {spawnLightningCluster} = require('ln-docker-daemons');
-const {test} = require('@alexbosworth/tap');
 const tinysecp = require('tiny-secp256k1');
 
 const assembleGroup = require('./../../groups/fanout/assemble_fanout_group');
@@ -24,7 +26,7 @@ const capacity = 1e5;
 const count = 101;
 const feeRate = 1;
 const format = 'p2tr';
-const interval = 10;
+const interval = 50;
 const outputCount = 2;
 const outputCountControl = 4;
 const size = 3;
@@ -33,7 +35,7 @@ const times = 2000;
 const uniq = arr => Array.from(new Set(arr));
 
 // Make a joint transaction fanout group
-test(`Setup joint fanout group`, async ({end, equal, strictSame}) => {
+test(`Setup joint fanout group`, async () => {
   const ecp = (await import('ecpair')).ECPairFactory(tinysecp);
   const {kill, nodes} = await spawnLightningCluster({size});
 
@@ -75,6 +77,8 @@ test(`Setup joint fanout group`, async ({end, equal, strictSame}) => {
 
     // Wait for UTXOs to be confirmed
     await asyncRetry({interval, times}, async () => {
+      await generate({});
+
       const remoteUtxos = await getUtxos({lnd: remote.lnd});
       const targetUtxos = await getUtxos({lnd: target.lnd});
 
@@ -152,7 +156,7 @@ test(`Setup joint fanout group`, async ({end, equal, strictSame}) => {
     // Transaction ids of the open should be returned
     const ids = joins.map(n => n.id);
 
-    strictSame(uniq(ids).length, 1, 'Only one transaction id');
+    equal(uniq(ids).length, 1, 'Only one transaction id');
 
     // Finished, wait for confirmations on fanout utxos
     await generate({count});
@@ -183,7 +187,7 @@ test(`Setup joint fanout group`, async ({end, equal, strictSame}) => {
           .filter(n => n.tokens === capacity)
           .length;
 
-        strictSame(utxosCount, count, 'Got expected UTXOs count');
+        equal(utxosCount, count, 'Got expected UTXOs count');
       });
     });
 
@@ -200,21 +204,19 @@ test(`Setup joint fanout group`, async ({end, equal, strictSame}) => {
     const changeOutput2 = components.outputs
       .find(n => n.tokens === 799809 || n.tokens === 799810);
 
-    strictSame(components.inputs.length, 3, 'Got expected inputs count');
-    strictSame(components.outputs.length, 11, 'Got expected outputs count');
-    strictSame(fundedOuts.length, 8, 'Got expected funded outputs count');
-    strictSame(!!changeOutput1, true, 'Got change output 1');
-    strictSame(!!changeOutput2, true, 'Got change output 2');
-    strictSame(!!controlExtra, true, 'Got control change output');
-    strictSame(ids, [events.broadcast.id, events.broadcast.id], 'Got tx ids');
-    strictSame(events.broadcast.id.length, 64, 'Got broadcast tx id');
-    strictSame(!!events.broadcast.transaction, true, 'Got broadcast tx');
-    strictSame(events.filled.ids.length, nodes.length, 'Got filled event');
+    equal(components.inputs.length, 3, 'Got expected inputs count');
+    equal(components.outputs.length, 11, 'Got expected outputs count');
+    equal(fundedOuts.length, 8, 'Got expected funded outputs count');
+    equal(!!changeOutput1, true, 'Got change output 1');
+    equal(!!changeOutput2, true, 'Got change output 2');
+    equal(!!controlExtra, true, 'Got control change output');
+    deepStrictEqual(ids, [events.broadcast.id, events.broadcast.id], 'Got id');
+    equal(events.broadcast.id.length, 64, 'Got broadcast tx id');
+    equal(!!events.broadcast.transaction, true, 'Got broadcast tx');
+    equal(events.filled.ids.length, nodes.length, 'Got filled event');
   } catch (err) {
-    strictSame(err, null, 'Expected no failure');
+    equal(err, null, 'Expected no failure');
   } finally {
     await kill({});
   }
-
-  return end();
 });

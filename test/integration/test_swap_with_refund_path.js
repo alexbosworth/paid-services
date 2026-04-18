@@ -1,3 +1,7 @@
+const {deepStrictEqual} = require('node:assert').strict;
+const {equal} = require('node:assert').strict;
+const test = require('node:test');
+
 const asyncRetry = require('async/retry');
 const {createChainAddress} = require('ln-service');
 const {createInvoice} = require('ln-service');
@@ -8,7 +12,6 @@ const {openChannel} = require('ln-service');
 const {pay} = require('ln-service');
 const {sendToChainAddress} = require('ln-service');
 const {spawnLightningCluster} = require('ln-docker-daemons');
-const {test} = require('@alexbosworth/tap');
 
 const requestSwapOut = require('./../../swaps/request_swap_out');
 const respondToSwapOut = require('./../../swaps/respond_to_swap_out_request');
@@ -23,7 +26,7 @@ const times = 3000;
 const tokens = 1e5;
 
 // Start an offchain swap but do not cooperate and eventually force a refund
-test(`Timeout a swap`, async ({end, equal, strictSame}) => {
+test(`Timeout a swap`, async () => {
   const {kill, nodes} = await spawnLightningCluster({size});
 
   const [{generate, id, lnd}, target] = nodes;
@@ -37,7 +40,7 @@ test(`Timeout a swap`, async ({end, equal, strictSame}) => {
   if (!keys.find(n => n.derivation_path === taprootDerivationPath)) {
     await kill({});
 
-    return end();
+    return;
   }
 
   try {
@@ -153,7 +156,7 @@ test(`Timeout a swap`, async ({end, equal, strictSame}) => {
               },
             });
           } catch (err) {
-            strictSame(err, [503, 'SwapFailedViaTimeout']);
+            deepStrictEqual(err, [503, 'SwapFailedViaTimeout']);
 
             return;
           }
@@ -180,14 +183,12 @@ test(`Timeout a swap`, async ({end, equal, strictSame}) => {
   } catch (err) {
     const [, msg] = err;
 
-    strictSame(msg, 'PaymentRejectedByDestination', 'Expected failed swap');
+    equal(msg, 'PaymentRejectedByDestination', 'Expected failed swap');
   }
 
   const complete = responder.find(n => !!n.swap_timeout_complete);
 
-  strictSame(!!complete, true, 'Swap refund completed');
+  equal(!!complete, true, 'Swap refund completed');
 
   await kill({});
-
-  return end();
 });

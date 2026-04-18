@@ -1,3 +1,6 @@
+const {equal} = require('node:assert').strict;
+const test = require('node:test');
+
 const {address} = require('bitcoinjs-lib');
 const asyncMap = require('async/map');
 const asyncRetry = require('async/retry');
@@ -9,7 +12,6 @@ const {getChannels} = require('ln-service');
 const {networks} = require('bitcoinjs-lib');
 const {openChannel} = require('ln-service');
 const {spawnLightningCluster} = require('ln-docker-daemons');
-const {test} = require('@alexbosworth/tap');
 const {Transaction} = require('bitcoinjs-lib');
 
 const finalize = require('./../../capacity/finalize_capacity_replacement');
@@ -31,7 +33,7 @@ const {toOutputScript} = address;
 const weightAsVBytes = n => Math.ceil(n / 4);
 
 // Signing a capacity replacement transaction should result in a valid sig
-test(`Sign capacity replacement`, async ({end, equal, strictSame}) => {
+test(`Sign capacity replacement`, async () => {
   const {kill, nodes} = await spawnLightningCluster({size});
 
   const [{generate, lnd}, target] = nodes;
@@ -133,12 +135,10 @@ test(`Sign capacity replacement`, async ({end, equal, strictSame}) => {
       return tx.id === fromHex(transaction).getId();
     });
 
-    strictSame(done.is_confirmed, true, 'Signed replacement is confirmed');
+    equal(done.is_confirmed, true, 'Signed replacement is confirmed');
   } catch (err) {
-    strictSame(err, null, 'Expected no failure');
+    equal(err, null, 'Expected no failure');
   } finally {
     await kill({});
   }
-
-  return end();
 });
