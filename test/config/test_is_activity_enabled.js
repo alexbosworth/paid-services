@@ -1,4 +1,5 @@
-const {test} = require('@alexbosworth/tap');
+const {strictEqual, throws} = require('node:assert/strict');
+const {test} = require('node:test');
 
 const method = require('./../../config/is_activity_enabled');
 
@@ -29,15 +30,21 @@ const tests = [
 ];
 
 tests.forEach(({args, description, error, expected}) => {
-  return test(description, async ({end, strictSame, throws}) => {
+  test(description, () => {
     if (!!error) {
-      throws(() => method(args), new Error(error), 'Got error');
+      throws(
+        () => method(args),
+        err => {
+          strictEqual(err.message, error, 'Got error');
+
+          return true;
+        },
+        'Got error'
+      );
     } else {
       const res = method(args);
 
-      strictSame(res, expected, 'Got expected result');
+      strictEqual(res, expected, 'Got expected result');
     }
-
-    return end();
   });
 });

@@ -1,4 +1,5 @@
-const {test} = require('@alexbosworth/tap');
+const {deepStrictEqual, throws} = require('node:assert/strict');
+const {test} = require('node:test');
 
 const method = require('./../../server/invoice_as_request');
 
@@ -30,15 +31,21 @@ const tests = [
 ];
 
 tests.forEach(({args, description, error, expected}) => {
-  return test(description, async ({end, strictSame, throws}) => {
+  test(description, () => {
     if (!!error) {
-      throws(() => method(args), error, 'Got error');
+      throws(
+        () => method(args),
+        err => {
+          deepStrictEqual(err, error, 'Got error');
+
+          return true;
+        },
+        'Got error'
+      );
     } else {
       const res = method(args);
 
-      strictSame(res, expected, 'Got expected result');
+      deepStrictEqual(res, expected, 'Got expected result');
     }
-
-    return end();
   });
 });

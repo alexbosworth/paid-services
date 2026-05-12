@@ -1,4 +1,5 @@
-const {test} = require('@alexbosworth/tap');
+const {deepStrictEqual, rejects} = require('node:assert/strict');
+const {test} = require('node:test');
 
 const method = require('./../../actions/send_postmark_email');
 
@@ -60,15 +61,21 @@ const tests = [
 ];
 
 tests.forEach(({args, description, error, expected}) => {
-  return test(description, async ({end, strictSame, rejects}) => {
+  test(description, async () => {
     if (!!error) {
-      await rejects(method(args), error, 'Got error');
+      await rejects(
+        method(args),
+        err => {
+          deepStrictEqual(err, error, 'Got error');
+
+          return true;
+        },
+        'Got error'
+      );
     } else {
       const res = await method(args);
 
-      strictSame(res, expected, 'Got expected result');
+      deepStrictEqual(res, expected, 'Got expected result');
     }
-
-    return end();
   });
 });

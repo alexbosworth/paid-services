@@ -1,10 +1,12 @@
+const {deepStrictEqual, rejects} = require('node:assert/strict');
+const {test} = require('node:test');
+
 const {encodeTlvStream} = require('bolt01');
 const {makeInvoice} = require('mock-lnd');
 const {makeInvoiceSubscription} = require('mock-lnd');
 const {makeLnd} = require('mock-lnd');
 const {makePaySubscription} = require('mock-lnd');
 const {makePayViaRoutesResponse} = require('mock-lnd');
-const {test} = require('@alexbosworth/tap');
 
 const messagesForResponse = require('./../../respond/messages_for_response');
 const method = require('./../../client/make_service_request');
@@ -66,15 +68,21 @@ const tests = [
 ];
 
 tests.forEach(({args, description, error, expected}) => {
-  return test(description, async ({end, equal, rejects, strictSame}) => {
+  test(description, async () => {
     if (!!error) {
-      await rejects(method(args), error, 'Got expected error');
+      await rejects(
+        method(args),
+        err => {
+          deepStrictEqual(err, error, 'Got expected error');
+
+          return true;
+        },
+        'Got expected error'
+      );
     } else {
       const res = await method(args);
 
-      strictSame(res, expected, 'Got expected result');
+      deepStrictEqual(res, expected, 'Got expected result');
     }
-
-    return end();
   });
 });

@@ -1,5 +1,7 @@
+const {deepStrictEqual, strictEqual, throws} = require('node:assert/strict');
+const {test} = require('node:test');
+
 const {encodeTlvStream} = require('bolt01');
-const {test} = require('@alexbosworth/tap');
 
 const errorRecordsAsError = require('./../../client/error_records_as_error');
 
@@ -42,15 +44,21 @@ const tests = [
 ];
 
 tests.forEach(({args, description, error, expected}) => {
-  return test(description, async ({end, strictSame, throws}) => {
+  test(description, () => {
     if (!!error) {
-      throws(() => errorRecordsAsError(args), new Error(error), 'Got error');
+      throws(
+        () => errorRecordsAsError(args),
+        err => {
+          strictEqual(err.message, error, 'Got error');
+
+          return true;
+        },
+        'Got error'
+      );
     } else {
       const res = errorRecordsAsError(args);
 
-      strictSame(res, expected, 'Got expected result');
+      deepStrictEqual(res, expected, 'Got expected result');
     }
-
-    return end();
   });
 });

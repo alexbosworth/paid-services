@@ -1,4 +1,5 @@
-const {test} = require('@alexbosworth/tap');
+const {deepStrictEqual, strictEqual, throws} = require('node:assert/strict');
+const {test} = require('node:test');
 
 const errorAsErrorRecords = require('./../../respond/error_as_error_records');
 
@@ -26,15 +27,21 @@ const tests = [
 ];
 
 tests.forEach(({args, description, error, expected}) => {
-  return test(description, async ({end, strictSame, throws}) => {
+  test(description, () => {
     if (!!error) {
-      throws(() => errorAsErrorRecords(args), new Error(error), 'Got error');
+      throws(
+        () => errorAsErrorRecords(args),
+        err => {
+          strictEqual(err.message, error, 'Got error');
+
+          return true;
+        },
+        'Got error'
+      );
     } else {
       const res = errorAsErrorRecords(args);
 
-      strictSame(res, expected, 'Got expected result');
+      deepStrictEqual(res, expected, 'Got expected result');
     }
-
-    return end();
   });
 });

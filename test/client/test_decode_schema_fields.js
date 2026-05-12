@@ -1,6 +1,7 @@
-const {encodeBigSize} = require('bolt01');
+const {deepStrictEqual, strictEqual, throws} = require('node:assert/strict');
+const {test} = require('node:test');
+
 const {encodeTlvStream} = require('bolt01');
-const {test} = require('@alexbosworth/tap');
 
 const method = require('./../../client/decode_schema_fields');
 
@@ -82,15 +83,21 @@ const tests = [
 ];
 
 tests.forEach(({args, description, error, expected}) => {
-  return test(description, async ({end, strictSame, throws}) => {
+  test(description, () => {
     if (!!error) {
-      throws(() => method(args), new Error(error), 'Got error');
+      throws(
+        () => method(args),
+        err => {
+          strictEqual(err.message, error, 'Got error');
+
+          return true;
+        },
+        'Got error'
+      );
     } else {
       const res = method(args);
 
-      strictSame(res, expected, 'Got expected result');
+      deepStrictEqual(res, expected, 'Got expected result');
     }
-
-    return end();
   });
 });
