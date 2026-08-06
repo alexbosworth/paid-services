@@ -7,7 +7,7 @@
     "url": "https://github.com/alexbosworth/paid-services/issues"
   },
   "dependencies": {
-    "@alexbosworth/blockchain": "3.2.0",
+    "@alexbosworth/blockchain": "4.0.0",
     "@alexbosworth/fiat": "2.0.0",
     "async": "3.2.6",
     "asyncjs-util": "1.2.12",
@@ -17,7 +17,7 @@
     "ecpair": "2.1.0",
     "goldengate": "16.0.4",
     "invoices": "5.0.2",
-    "ln-service": "59.2tes.1",
+    "ln-service": "59.2.3",
     "ln-sync": "8.0.3",
     "psbt": "5.0.0",
     "p2tr": "2.0.0",
@@ -46,5 +46,5 @@
     "integration-tests": "node test/integration",
     "test": "node --experimental-test-coverage --test test/actions/*.js test/balanced/*.js test/capacity/*.js test/client/*.js test/config/*.js test/p2p/*.js test/records/*.js test/respond/*.js test/server/*.js test/swaps/*.js test/services/*.js test/trades/*.js"
   },
-  "version": "8.0.4"
+  "version": "8.0.5"
 }
