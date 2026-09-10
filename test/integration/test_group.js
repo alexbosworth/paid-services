@@ -73,6 +73,8 @@ test(`Setup joint channel group`, async () => {
       }
     });
 
+    await generate({});
+
     // Wait for UTXOs to be confirmed
     await asyncRetry({interval, times}, async () => {
       const remoteUtxos = await getUtxos({lnd: remote.lnd});

@@ -75,6 +75,8 @@ test(`Setup sorted channel group`, async () => {
       }
     });
 
+    await target.generate({});
+
     // Wait for UTXOs to be confirmed
     await asyncRetry({interval, times}, async () => {
       const remoteUtxos = await getUtxos({lnd: remote.lnd});
@@ -83,6 +85,8 @@ test(`Setup sorted channel group`, async () => {
       if (!targetUtxos.utxos.filter(n => !!n.confirmation_count).length) {
         throw new Error('ExpectedConfirmedUtxoOnTarget');
       }
+
+      await remote.generate({});
 
       if (!remoteUtxos.utxos.filter(n => !!n.confirmation_count).length) {
         throw new Error('ExpectedConfirmUtxoOnRemote');

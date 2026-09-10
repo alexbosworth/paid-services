@@ -3,6 +3,7 @@ const {equal} = require('node:assert').strict;
 const test = require('node:test');
 
 const {addPeer} = require('ln-service');
+const asyncRetry = require('async/retry');
 const {spawnLightningCluster} = require('ln-docker-daemons');
 
 const {makePeerRequest} = require('./../../');
@@ -10,8 +11,10 @@ const {servicePeerRequests} = require('./../../');
 
 const failure = [402, 'PurchaseRequired'];
 const failureType = '1';
+const interval = 100;
 const records = [{type: '1', value: '01'}];
 const size = 2;
+const times = 3000;
 const type = '0';
 
 // Adding a listener for peer requests should allow responding to peer requests
@@ -20,7 +23,9 @@ test(`Listen for peer requests`, async () => {
 
   const [{id, lnd}, target] = nodes;
 
-  await addPeer({lnd, public_key: target.id, socket: target.socket});
+  await asyncRetry({interval, times}, async () => {
+    await addPeer({lnd, public_key: target.id, socket: target.socket});
+  });
 
   // Start the server and respond to requests
   const listener = servicePeerRequests({lnd});
