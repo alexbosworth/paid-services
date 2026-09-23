@@ -1,5 +1,11 @@
 # Versions
 
+## Version 9.0.0
+
+### Breaking Changes
+
+- `changeChannelCapacity`: Remove method to change channel capacity
+
 ## Version 8.0.7
 
 ### Breaking Changes

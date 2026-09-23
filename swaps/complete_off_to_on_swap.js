@@ -7,7 +7,6 @@ const asyncMapSeries = require('async/mapSeries');
 const asyncRace = require('async/race');
 const asyncReflect = require('async/reflect');
 const asyncTimeout = require('async/timeout');
-const {bech32m} = require('bech32');
 const {beginGroupSigningSession} = require('ln-service');
 const {broadcastChainTransaction} = require('ln-service');
 const {cancelSwapOut} = require('goldengate');
@@ -15,6 +14,7 @@ const {confirmationFee} = require('goldengate');
 const {controlBlock} = require('p2tr');
 const {createChainAddress} = require('ln-service');
 const {diffieHellmanComputeSecret} = require('ln-service');
+const {encodeBech32Address} = require('@alexbosworth/blockchain');
 const {findConfirmedOutput} = require('ln-sync');
 const {findDeposit} = require('goldengate');
 const {getChainFeeRate} = require('ln-service');
@@ -61,7 +61,6 @@ const defaultMaxFeeMultiplier = 1000;
 const defaultMaxPreimagePushFee = 10;
 const defaultMinSweepBlocks = 20;
 const defaultWaitForChainFundingMs = 1000 * 60 * 60 * 3;
-const encodeAddress = (prefix, data) => bech32m.encode(prefix, data);
 const externalKeyAsOutputScript = key => `5120${key}`;
 const family = 805;
 const {floor} = Math;
@@ -92,7 +91,7 @@ const sweepInputIndex = 0;
 const times = n => Array(n).fill(null).map((_, i) => i);
 const tokensForPushPreimage = 1;
 const uniqBy = (a,b) => a.filter((e,i) => a.findIndex(n => n[b] == e[b]) == i);
-const v1AddressWords = key => [].concat(1).concat(bech32m.toWords(key));
+const witnessVersionTaproot = 1;
 
 /** Complete the off to on swap
 
@@ -691,7 +690,11 @@ module.exports = (args, cbk) => {
         const outputScript = swap.output_script;
         const prefix = networks[getNetwork.bitcoinjs].bech32;
 
-        const address = encodeAddress(prefix, v1AddressWords(key));
+        const {address} = encodeBech32Address({
+          prefix,
+          program: key,
+          version: witnessVersionTaproot,
+        });
 
         args.emitter.emit('update', {
           waiting_for_chain_funding: address,
