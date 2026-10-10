@@ -4,7 +4,6 @@ const {broadcastTransaction} = require('ln-sync');
 const {getIdentity} = require('ln-service');
 const {getNodeAlias} = require('ln-sync');
 const {returnResult} = require('asyncjs-util');
-const tinysecp = require('tiny-secp256k1');
 
 const askForGroupDetails = require('./ask_for_group_details');
 const assembleChannelGroup = require('./assemble_channel_group');
@@ -26,9 +25,6 @@ const niceName = ({alias, id}) => `${alias} ${id}`.trim();
 module.exports = ({ask, lnd, logger}, cbk) => {
   return new Promise((resolve, reject) => {
     return asyncAuto({
-      // Import ECPair library
-      ecp: async () => (await import('ecpair')).ECPairFactory(tinysecp),
-
       // Check arguments
       validate: cbk => {
         if (!ask) {
@@ -56,13 +52,11 @@ module.exports = ({ask, lnd, logger}, cbk) => {
 
       // Fund and assemble the group
       assembleGroup: [
-        'ecp',
         'askForDetails',
         'getIdentity',
-        ({ecp, askForDetails, getIdentity}, cbk) =>
+        ({askForDetails, getIdentity}, cbk) =>
       {
         const coordinate = assembleChannelGroup({
-          ecp,
           lnd,
           capacity: askForDetails.capacity,
           count: askForDetails.count,

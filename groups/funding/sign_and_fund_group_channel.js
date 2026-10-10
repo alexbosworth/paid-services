@@ -5,7 +5,6 @@ const {fundPendingChannels} = require('ln-service');
 const {getPendingChannels} = require('ln-service');
 const {returnResult} = require('asyncjs-util');
 const {signAndFundPsbt} = require('ln-sync');
-const tinysecp = require('tiny-secp256k1');
 const {Transaction} = require('bitcoinjs-lib');
 
 const {fromHex} = Transaction;
@@ -45,9 +44,6 @@ const times = 500;
 module.exports = ({id, lnd, psbt, utxos}, cbk) => {
   return new Promise((resolve, reject) => {
     return asyncAuto({
-      // Import ECPair library
-      ecp: async () => (await import('ecpair')).ECPairFactory(tinysecp),
-
       // Check arguments
       validate: cbk => {
         if (!lnd) {
@@ -86,13 +82,13 @@ module.exports = ({id, lnd, psbt, utxos}, cbk) => {
       }],
 
       // Confirm that the outgoing pending channel is present
-      confirmOutPending: ['ecp', 'fundChannel', ({ecp}, cbk) => {
+      confirmOutPending: ['fundChannel', ({}, cbk) => {
         // Exit early when this is a pair channel and there is no proposal
         if (!id) {
           return cbk();
         }
 
-        const tx = fromHex(decodePsbt({ecp, psbt}).unsigned_transaction);
+        const tx = fromHex(decodePsbt({psbt}).unsigned_transaction);
 
         // Wait for the outgoing pending channel to be present
         return asyncRetry({interval, times}, cbk => {

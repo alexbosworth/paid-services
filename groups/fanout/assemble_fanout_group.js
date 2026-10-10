@@ -18,7 +18,6 @@ const transactionFeeRate = require('./../transaction_fee_rate');
   {
     capacity: <Output Size Tokens Number>
     count: <Fanout Members Count Number>
-    ecp: <ECPair Library Object>
     identity: <Coordinator Identity Public Key Hex String>
     inputs: [<Utxo Outpoint String>]
     lnd: <Authenticated LND API Object>
@@ -74,7 +73,6 @@ module.exports = args => {
   const coordinator = coordinateFanout({
     capacity: args.capacity,
     count: args.count,
-    ecp: args.ecp,
     identity: args.identity,
     lnd: args.lnd,
     members: args.members,
@@ -150,18 +148,17 @@ module.exports = args => {
 
     try {
       // Merge all the partial signed PSBTs into a single PSBT with all sigs
-      const combined = combinePsbts({psbts, ecp: args.ecp});
+      const combined = combinePsbts({psbts});
 
       // Finalize the PSBT to convert partial signatures to final signatures
-      const finalized = finalizePsbt({ecp: args.ecp, psbt: combined.psbt});
+      const finalized = finalizePsbt({psbt: combined.psbt});
 
       // Pull out the raw transaction from the PSBT
       const {transaction} = extractTransaction({
-        ecp: args.ecp,
         psbt: finalized.psbt,
       });
 
-      const {inputs} = decodePsbt({ecp: args.ecp, psbt: combined.psbt});
+      const {inputs} = decodePsbt({psbt: combined.psbt});
 
       // Make sure the final transaction fee rate is not too low
       if (transactionFeeRate({inputs, transaction}).rate < args.rate) {

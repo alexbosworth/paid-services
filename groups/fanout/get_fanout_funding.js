@@ -6,7 +6,6 @@ const {fundPsbt} = require('ln-service');
 const {decodePsbt} = require('psbt');
 const {getUtxos} = require('ln-service');
 const {returnResult} = require('asyncjs-util');
-const tinysecp = require('tiny-secp256k1');
 const {unlockUtxo} = require('ln-service');
 
 const allowedAddressFormats = ['p2tr', 'p2wpkh'];
@@ -52,9 +51,6 @@ const sumOf = arr => arr.reduce((sum, n) => sum + n, 0);
 module.exports = ({capacity, inputs, lnd, outputs, rate}, cbk) => {
   return new Promise((resolve, reject) => {
     return asyncAuto({
-      // Import ECPair library
-      ecp: async () => (await import('ecpair')).ECPairFactory(tinysecp),
-
       // Check arguments
       validate: cbk => {
         if (!capacity) {
@@ -157,10 +153,10 @@ module.exports = ({capacity, inputs, lnd, outputs, rate}, cbk) => {
       }],
 
       // Put together final funding elements to use for PSBT construction
-      funding: ['ecp', 'fund', ({ecp, fund}, cbk) => {
+      funding: ['fund', ({fund}, cbk) => {
         const change = fund.outputs.find(n => n.is_change) || {};
         const funding = fund.outputs.filter(n => !n.is_change);
-        const {inputs} = decodePsbt({ecp, psbt: fund.psbt});
+        const {inputs} = decodePsbt({psbt: fund.psbt});
 
         // UTXOs have been selected
         return cbk(null, {

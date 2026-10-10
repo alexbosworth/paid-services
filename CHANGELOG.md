@@ -1,5 +1,11 @@
 # Versions
 
+## Version 9.1.0
+
+- `createGroupFanout`: Fix error response for an invalid key spend signature
+- `createSupportOffer`: Add method to create a support offer
+- `serviceSupportOffer`: Add method to receive payments to a support offer
+
 ## Version 9.0.1
 
 ### Breaking Changes

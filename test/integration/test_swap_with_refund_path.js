@@ -1,5 +1,6 @@
 const {deepStrictEqual} = require('node:assert').strict;
 const {equal} = require('node:assert').strict;
+const {rejects} = require('node:assert').strict;
 const test = require('node:test');
 
 const asyncRetry = require('async/retry');
@@ -18,32 +19,44 @@ const respondToSwapOut = require('./../../swaps/respond_to_swap_out_request');
 
 const capacity = 1e6;
 const count = 50;
+const delay = ms => new Promise(done => setTimeout(done, ms).unref());
 const interval = 100;
+const isRejected = err => err[1] === 'PaymentRejectedByDestination';
 const maturity = 100;
+const settleMs = 1000 * 60;
 const size = 2;
 const taprootDerivationPath = `m/86'/0'/0'`;
 const times = 3000;
 const tokens = 1e5;
+const waitTimes = 600;
 
 // Start an offchain swap but do not cooperate and eventually force a refund
 test(`Timeout a swap`, async () => {
   const {kill, nodes} = await spawnLightningCluster({size});
 
-  const [{generate, id, lnd}, target] = nodes;
+  // Swap callbacks keep running in the background, like the responder that
+  // finishes its side of the swap, so their failures are collected and they
+  // get a chance to finish before the nodes that they use are killed
+  const background = [];
+  const failures = [];
 
-  const {keys} = await getMasterPublicKeys({lnd});
-
-  // Collect response messages
-  const responder = [];
-
-  // Exit early when taproot is not supported
-  if (!keys.find(n => n.derivation_path === taprootDerivationPath)) {
-    await kill({});
-
-    return;
-  }
+  const track = method => (...args) => {
+    return background.push(method(...args).catch(err => failures.push(err)));
+  };
 
   try {
+    const [{generate, lnd}, target] = nodes;
+
+    const {keys} = await getMasterPublicKeys({lnd});
+
+    // Collect response messages
+    const responder = [];
+
+    // Exit early when taproot is not supported
+    if (!keys.find(n => n.derivation_path === taprootDerivationPath)) {
+      return;
+    }
+
     await generate({count: maturity});
 
     // Setup a channel between the nodes
@@ -102,10 +115,13 @@ test(`Timeout a swap`, async () => {
     // Collect request messages
     const messages = [];
 
-    // Make a swap out request
-    await requestSwapOut({
+    // Collect responder failures
+    const responseErrors = [];
+
+    // Make an uncooperative swap out request that ends in a refund
+    const swap = requestSwapOut({
       lnd,
-      ask: async (args, cbk) => {
+      ask: track(async (args, cbk) => {
         if (args.name === 'tokens') {
           return cbk({tokens: '10000'});
         }
@@ -136,7 +152,7 @@ test(`Timeout a swap`, async () => {
               },
               lnd: target.lnd,
               logger: {
-                info: async message => {
+                info: track(async message => {
                   responder.push(message);
 
                   // Push chain forward to timeout
@@ -152,13 +168,12 @@ test(`Timeout a swap`, async () => {
                   if (!!message.funding_transaction_id) {
                     return await target.generate({count});
                   }
-                },
+                }),
               },
             });
           } catch (err) {
-            deepStrictEqual(err, [503, 'SwapFailedViaTimeout']);
-
-            return;
+            // The responder gives up when the swap is refunded on timeout
+            return responseErrors.push(err);
           }
         }
 
@@ -167,28 +182,45 @@ test(`Timeout a swap`, async () => {
         }
 
         throw new Error('UnrecognizedQueryForRequest');
-      },
+      }),
       is_avoiding_broadcast: true,
       is_uncooperative: true,
       logger: {
-        info: async message => {
+        info: track(async message => {
           if (message.broadcasting_tx_to_resolve_swap) {
             await generate({count});
           }
 
           return messages.push(message);
-        },
+        }),
       },
     });
-  } catch (err) {
-    const [, msg] = err;
 
-    equal(msg, 'PaymentRejectedByDestination', 'Expected failed swap');
+    await rejects(swap, isRejected, 'Swap payment is rejected by responder');
+
+    // Keep this wait well within the runner timeout to surface a clear failure
+    await asyncRetry({interval, times: waitTimes}, async () => {
+      if (!responseErrors.length) {
+        throw new Error('WaitingForResponderToFinish');
+      }
+    });
+
+    const timeout = [503, 'SwapFailedViaTimeout'];
+
+    deepStrictEqual(responseErrors, [timeout], 'Responder swap timed out');
+
+    const complete = responder.find(n => !!n.swap_timeout_complete);
+
+    equal(!!complete, true, 'Swap refund completed');
+
+    // Background work like the responder finishing its side must not fail
+    await Promise.race([Promise.all(background), delay(settleMs)]);
+
+    deepStrictEqual(failures, [], 'No failures in swap callbacks');
+  } finally {
+    // Give background work a chance to finish before its nodes go away
+    await Promise.race([Promise.all(background), delay(settleMs)]);
+
+    await kill({});
   }
-
-  const complete = responder.find(n => !!n.swap_timeout_complete);
-
-  equal(!!complete, true, 'Swap refund completed');
-
-  await kill({});
 });

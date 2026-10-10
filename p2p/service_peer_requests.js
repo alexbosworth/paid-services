@@ -1,8 +1,5 @@
-const {sendMessageToPeer} = require('ln-service');
 const {subscribeToPeerMessages} = require('ln-service');
 
-const defaultServerError = [500, 'InternalServiceError'];
-const encodePeerResponse = require('./encode_peer_response');
 const parseRequestFailure = (report, n) => { report([503, n]); return {}; };
 const parseRequestMessage = require('./parse_request_message');
 const returnFailureResponse = require('./return_failure_response');

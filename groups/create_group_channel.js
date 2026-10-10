@@ -6,7 +6,6 @@ const {getIdentity} = require('ln-service');
 const {getMethods} = require('ln-service');
 const {getNodeAlias} = require('ln-sync');
 const {returnResult} = require('asyncjs-util');
-const tinysecp = require('tiny-secp256k1');
 
 const assembleChannelGroup = require('./assemble_channel_group');
 
@@ -44,9 +43,6 @@ const staleMs = 1000 * 60 * 5;
 module.exports = (args, cbk) => {
   return new Promise((resolve, reject) => {
     return asyncAuto({
-      // Import ECPair library
-      ecp: async () => (await import('ecpair')).ECPairFactory(tinysecp),
-
       // Check arguments
       validate: cbk => {
         if (!args.capacity) {
@@ -102,7 +98,9 @@ module.exports = (args, cbk) => {
       }],
 
       // Get identity public key
-      getIdentity: ['validate', ({}, cbk) => getIdentity({lnd: args.lnd}, cbk)],
+      getIdentity: ['validate', ({}, cbk) => {
+        return getIdentity({lnd: args.lnd}, cbk);
+      }],
 
       // Get methods to confim partial signing is supported
       getMethods: ['validate', ({}, cbk) => getMethods({lnd: args.lnd}, cbk)],
@@ -134,18 +132,16 @@ module.exports = (args, cbk) => {
 
       // Fund and assemble the group
       create: [
-        'ecp',
         'confirmBalance',
         'confirmSigner',
         'getBalance',
         'getIdentity',
-        ({ecp, getIdentity}, cbk) =>
+        ({getIdentity}, cbk) =>
       {
         const announced = [];
         const members = [getIdentity.public_key].concat(args.members);
 
         const coordinate = assembleChannelGroup({
-          ecp,
           capacity: args.capacity,
           count: args.count,
           identity: getIdentity.public_key,

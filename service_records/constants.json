@@ -1,0 +1,21 @@
+{
+  "lengthSaltBytes": 32,
+  "lengthServiceIdBytes": 16,
+  "lengthTagBytes": 16,
+  "maxRecordKeyIndex": 2147483647,
+  "recordKeyFamily": 807,
+  "recordKeyTag": "service-records/record-key",
+  "recordPointTag": "service-records/record-point",
+  "recordPrefix": "626f73ff",
+  "serviceTypes": {
+    "support": "1"
+  },
+  "typeKeyIndex": "4",
+  "typeOfferService": "1000805805",
+  "typeSalt": "6",
+  "typeSealedData": "8",
+  "typeServiceId": "4",
+  "typeServiceSequence": "6",
+  "typeServiceType": "0",
+  "typeVersion": "2"
+}

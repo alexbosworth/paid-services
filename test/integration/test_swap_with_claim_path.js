@@ -1,4 +1,4 @@
-const {equal} = require('node:assert').strict;
+const {deepStrictEqual} = require('node:assert').strict;
 const test = require('node:test');
 
 const asyncRetry = require('async/retry');
@@ -18,8 +18,10 @@ const respondToSwapOut = require('./../../swaps/respond_to_swap_out_request');
 
 const capacity = 1e6;
 const count = 50;
+const delay = ms => new Promise(done => setTimeout(done, ms).unref());
 const interval = 100;
 const maturity = 100;
+const settleMs = 1000 * 60;
 const size = 2;
 const taprootDerivationPath = `m/86'/0'/0'`;
 const times = 3000;
@@ -29,18 +31,26 @@ const tokens = 1e5;
 test(`Swap with claim path`, async () => {
   const {kill, nodes} = await spawnLightningCluster({size});
 
-  const [{generate, id, lnd}, target] = nodes;
+  // Swap callbacks keep running in the background, like the responder that
+  // finishes its side of the swap, so their failures are collected and they
+  // get a chance to finish before the nodes that they use are killed
+  const background = [];
+  const failures = [];
 
-  const {keys} = await getMasterPublicKeys({lnd});
-
-  // Exit early when taproot is not supported
-  if (!keys.find(n => n.derivation_path === taprootDerivationPath)) {
-    await kill({});
-
-    return;
-  }
+  const track = method => (...args) => {
+    return background.push(method(...args).catch(err => failures.push(err)));
+  };
 
   try {
+    const [{generate, lnd}, target] = nodes;
+
+    const {keys} = await getMasterPublicKeys({lnd});
+
+    // Exit early when taproot is not supported
+    if (!keys.find(n => n.derivation_path === taprootDerivationPath)) {
+      return;
+    }
+
     await generate({count: maturity});
 
     // Setup a channel between the nodes
@@ -100,7 +110,7 @@ test(`Swap with claim path`, async () => {
     // Make a swap out request
     await requestSwapOut({
       lnd,
-      ask: async (args, cbk) => {
+      ask: track(async (args, cbk) => {
         if (args.name === 'tokens') {
           return cbk({tokens: '10000'});
         }
@@ -130,7 +140,7 @@ test(`Swap with claim path`, async () => {
             },
             lnd: target.lnd,
             logger: {
-              info: async message => {
+              info: track(async message => {
                 // Make sure that target gets the funding transaction
                 if (message.funding_transaction) {
                   await broadcastChainTransaction({
@@ -147,7 +157,7 @@ test(`Swap with claim path`, async () => {
                 if (!!message.funding_transaction_id) {
                   return await target.generate({count});
                 }
-              },
+              }),
             },
           });
         }
@@ -157,21 +167,27 @@ test(`Swap with claim path`, async () => {
         }
 
         throw new Error('UnrecognizedQueryForRequest');
-      },
+      }),
       is_uncooperative: true,
       logger: {
-        info: async message => {
+        info: track(async message => {
           if (message.broadcasting_tx_to_resolve_swap) {
             await generate({count});
           }
 
           return messages.push(message);
-        },
+        }),
       },
     });
-  } catch (err) {
-    equal(err, null, 'Expected no failure');
-  }
 
-  await kill({});
+    // Background work like the responder finishing its side must not fail
+    await Promise.race([Promise.all(background), delay(settleMs)]);
+
+    deepStrictEqual(failures, [], 'No failures in swap callbacks');
+  } finally {
+    // Give background work a chance to finish before its nodes go away
+    await Promise.race([Promise.all(background), delay(settleMs)]);
+
+    await kill({});
+  }
 });

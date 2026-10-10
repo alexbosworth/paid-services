@@ -10,12 +10,9 @@ const asyncRetry = require('async/retry');
 const {componentsOfTransaction} = require('@alexbosworth/blockchain');
 const {createChainAddress} = require('ln-service');
 const {getChainTransactions} = require('ln-service');
-const {getNetwork} = require('ln-sync');
 const {getUtxos} = require('ln-service');
-const {networks} = require('bitcoinjs-lib');
 const {sendToChainAddress} = require('ln-service');
 const {spawnLightningCluster} = require('ln-docker-daemons');
-const tinysecp = require('tiny-secp256k1');
 
 const assembleGroup = require('./../../groups/fanout/assemble_fanout_group');
 const getFanoutDetails = require('./../../groups/fanout/get_fanout_details');
@@ -36,7 +33,6 @@ const uniq = arr => Array.from(new Set(arr));
 
 // Make a joint transaction fanout group
 test(`Setup joint fanout group`, async () => {
-  const ecp = (await import('ecpair')).ECPairFactory(tinysecp);
   const {kill, nodes} = await spawnLightningCluster({size});
 
   const [control, target, remote] = nodes;
@@ -48,9 +44,6 @@ test(`Setup joint fanout group`, async () => {
 
     // Make some funds for control
     await generate({count});
-
-    // Get the bitcoinjs network
-    const network = networks[(await getNetwork({lnd})).bitcoinjs];
 
     // Create a target chain address
     const targetAddress = await createChainAddress({lnd: target.lnd});
@@ -113,7 +106,6 @@ test(`Setup joint fanout group`, async () => {
     // Start the coordination
     const assemble = assembleGroup({
       capacity,
-      ecp,
       count: nodes.length,
       identity: control.id,
       inputs: [utxoForControl],
@@ -214,8 +206,6 @@ test(`Setup joint fanout group`, async () => {
     equal(events.broadcast.id.length, 64, 'Got broadcast tx id');
     equal(!!events.broadcast.transaction, true, 'Got broadcast tx');
     equal(events.filled.ids.length, nodes.length, 'Got filled event');
-  } catch (err) {
-    equal(err, null, 'Expected no failure');
   } finally {
     await kill({});
   }

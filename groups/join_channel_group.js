@@ -3,11 +3,8 @@ const EventEmitter = require('events');
 const asyncAuto = require('async/auto');
 const asyncReflect = require('async/reflect');
 const asyncRetry = require('async/retry');
-const {cancelPendingChannel} = require('ln-service');
 const {decodePsbt} = require('psbt');
 const {deletePendingChannel} = require('ln-service');
-const {returnResult} = require('asyncjs-util');
-const tinysecp = require('tiny-secp256k1');
 const {Transaction} = require('bitcoinjs-lib');
 
 const {confirmIncomingChannel} = require('./funding');
@@ -56,9 +53,6 @@ module.exports = ({capacity, coordinator, count, id, lnd, rate}, cbk) => {
   const emitter = new EventEmitter();
 
   asyncAuto({
-    // Import ECPair library
-    ecp: async () => (await import('ecpair')).ECPairFactory(tinysecp),
-
     // Check arguments
     validate: cbk => {
       if (!capacity) {
@@ -150,13 +144,12 @@ module.exports = ({capacity, coordinator, count, id, lnd, rate}, cbk) => {
 
     // Decode the unsigned PSBT
     transaction: [
-      'ecp',
       'propose',
       'register',
-      ({ecp, propose, register}, cbk) =>
+      ({propose, register}, cbk) =>
     {
       const funding = hexAsBuffer(propose.funding);
-      const psbt = decodePsbt({ecp, psbt: register.psbt});
+      const psbt = decodePsbt({psbt: register.psbt});
 
       const tx = fromHex(psbt.unsigned_transaction);
 
@@ -169,11 +162,10 @@ module.exports = ({capacity, coordinator, count, id, lnd, rate}, cbk) => {
 
     // Confirm the incoming channel
     incoming: [
-      'ecp',
       'partners',
       'register',
       'transaction',
-      asyncReflect(({ecp, partners, register, transaction}, cbk) =>
+      asyncReflect(({partners, register, transaction}, cbk) =>
     {
       // Exit early when there is no inbound partner
       if (!partners.inbound) {

@@ -25,7 +25,6 @@ const times = 2 * 60 * 10;
   {
     capacity: <Channel Capacity Tokens Number>
     count: <Channel Members Count Number>
-    ecp: <ECPair Library Object>
     identity: <Coordinator Identity Public Key Hex String>
     lnd: <Authenticated LND API Object>
     [members]: [<Member Identity Public Key Hex String>]
@@ -75,7 +74,7 @@ const times = 2 * 60 * 10;
   @event 'signed'
   {}
 */
-module.exports = ({capacity, count, ecp, identity, lnd, members, rate}) => {
+module.exports = ({capacity, count, identity, lnd, members, rate}) => {
   if (count < minGroupCount) {
     throw new Error('ExpectedHigherGroupCountToAssembleChannelGroup');
   }
@@ -83,7 +82,6 @@ module.exports = ({capacity, count, ecp, identity, lnd, members, rate}) => {
   const coordinator = coordinateGroup({
     capacity,
     count,
-    ecp,
     identity,
     lnd,
     members,
@@ -162,7 +160,7 @@ module.exports = ({capacity, count, ecp, identity, lnd, members, rate}) => {
     emitter.emit('proposed', {unsigned: coordinator.unsigned()});
 
     try {
-      const basePsbt = decodePsbt({ecp, psbt: coordinator.unsigned()});
+      const basePsbt = decodePsbt({psbt: coordinator.unsigned()});
 
       // Sign the unsigned funding transaction
       const signed = await signAndFundGroupChannel({
@@ -202,15 +200,15 @@ module.exports = ({capacity, count, ecp, identity, lnd, members, rate}) => {
 
     try {
       // Merge partial PSBTs into a single PSBT
-      const combined = combinePsbts({ecp, psbts});
+      const combined = combinePsbts({psbts});
 
       // Finalize the PSBT to convert partial signatures to final signatures
-      const finalized = finalizePsbt({ecp, psbt: combined.psbt});
+      const finalized = finalizePsbt({psbt: combined.psbt});
 
       // Pull out the raw transaction from the PSBT
-      const {transaction} = extractTransaction({ecp, psbt: finalized.psbt});
+      const {transaction} = extractTransaction({psbt: finalized.psbt});
 
-      const {inputs} = decodePsbt({ecp, psbt: combined.psbt});
+      const {inputs} = decodePsbt({psbt: combined.psbt});
 
       // Make sure the final transaction fee rate is not too low
       if (transactionFeeRate({inputs, transaction}).rate < rate) {

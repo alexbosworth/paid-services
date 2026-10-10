@@ -5,7 +5,6 @@ const {cancelPendingChannel} = require('ln-service');
 const {connectPeer} = require('ln-sync');
 const {decodePsbt} = require('psbt');
 const {returnResult} = require('asyncjs-util');
-const tinysecp = require('tiny-secp256k1');
 const {Transaction} = require('bitcoinjs-lib');
 
 const {decodeUnsignedFunding} = require('./../messages');
@@ -23,7 +22,6 @@ const {fromHex} = Transaction;
 const hexAsBuffer = hex => Buffer.from(hex, 'hex');
 const {isArray} = Array;
 const missingGroupPartners = 'NoGroupPartnersFound';
-const typeGroupChannelId = '1';
 
 /** Register pending open with the coordinator
 
@@ -56,9 +54,6 @@ const typeGroupChannelId = '1';
 module.exports = (args, cbk) => {
   return new Promise((resolve, reject) => {
     return asyncAuto({
-      // Import ECPair library
-      ecp: async () => (await import('ecpair')).ECPairFactory(tinysecp),
-
       // Check arguments
       validate: cbk => {
         if (!args.capacity) {
@@ -175,14 +170,14 @@ module.exports = (args, cbk) => {
       }],
 
       // Check the unsigned funding transaction represents the partial open
-      check: ['clean', 'ecp', 'request', ({ecp, request}, cbk) => {
+      check: ['clean', 'request', ({request}, cbk) => {
         try {
-          decodePsbt({ecp, psbt: request.value});
+          decodePsbt({psbt: request.value});
         } catch (err) {
           return cbk([503, 'ExpectedValidUnsignedResponsePsbt', {err}]);
         }
 
-        const psbt = decodePsbt({ecp, psbt: request.value});
+        const psbt = decodePsbt({psbt: request.value});
 
         if (!!psbt.inputs.find(n => !n.witness_utxo)) {
           return cbk([503, 'ExpectedAllGroupInputsSpendingWitnessUtxos']);

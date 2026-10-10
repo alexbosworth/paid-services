@@ -12,24 +12,25 @@
     "url": "https://github.com/alexbosworth/paid-services/issues"
   },
   "dependencies": {
-    "@alexbosworth/blockchain": "4.10.0",
+    "@alexbosworth/blockchain": "4.11.0",
     "@alexbosworth/fiat": "2.0.0",
     "async": "3.2.6",
     "asyncjs-util": "1.2.12",
-    "bolt01": "4.0.0",
+    "bolt01": "4.0.1",
+    "bolt04": "1.3.0",
     "bolt07": "2.0.0",
     "ecpair": "2.1.0",
     "goldengate": "16.0.8",
-    "invoices": "6.2.0",
-    "ln-service": "60.1.2",
+    "invoices": "6.3.0",
+    "ln-service": "60.1.4",
     "ln-sync": "8.0.7",
-    "psbt": "6.0.4",
+    "psbt": "7.0.0",
     "p2tr": "3.0.0",
     "tiny-secp256k1": "2.2.4"
   },
   "description": "Lightning Paid Services library",
   "devDependencies": {
-    "ln-docker-daemons": "8.1.0",
+    "ln-docker-daemons": "8.1.1",
     "mock-lnd": "4.0.0"
   },
   "engines": {
@@ -44,12 +45,16 @@
     "groups/",
     "index.js",
     "jobs/",
+    "network/",
+    "offers/",
     "p2p/",
     "records/",
     "respond/",
     "server/",
     "service_types.json",
+    "service_records/",
     "services/",
+    "support/",
     "swaps/",
     "trades/"
   ],
@@ -66,7 +71,7 @@
   },
   "scripts": {
     "integration-tests": "node test/integration",
-    "test": "node --experimental-test-coverage --test test/actions/*.js test/balanced/*.js test/client/*.js test/config/*.js test/p2p/*.js test/records/*.js test/respond/*.js test/server/*.js test/swaps/*.js test/services/*.js test/trades/*.js"
+    "test": "node --experimental-test-coverage --test test/actions/*.js test/balanced/*.js test/client/*.js test/config/*.js test/network/*.js test/offers/*.js test/p2p/*.js test/records/*.js test/respond/*.js test/server/*.js test/service_records/*.js test/swaps/*.js test/services/*.js test/support/*.js test/trades/*.js"
   },
-  "version": "9.0.1"
+  "version": "9.1.0"
 }

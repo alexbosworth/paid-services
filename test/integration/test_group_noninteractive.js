@@ -7,9 +7,7 @@ const asyncRetry = require('async/retry');
 const {createChainAddress} = require('ln-service');
 const {getChainTransactions} = require('ln-service');
 const {getChannels} = require('ln-service');
-const {getNetwork} = require('ln-sync');
 const {getUtxos} = require('ln-service');
-const {networks} = require('bitcoinjs-lib');
 const {sendToChainAddress} = require('ln-service');
 const {spawnLightningCluster} = require('ln-docker-daemons');
 
@@ -37,9 +35,6 @@ test(`Setup joint channel group`, async () => {
 
     // Make some funds for control
     await generate({count});
-
-    // Get the bitcoinjs network
-    const network = networks[(await getNetwork({lnd})).bitcoinjs];
 
     // Create a target chain address
     const targetAddress = await createChainAddress({lnd: target.lnd});
@@ -121,8 +116,6 @@ test(`Setup joint channel group`, async () => {
     const ids = [group.join.transaction_id, group.create.transaction_id];
 
     equal(ids.length, nodes.length, 'Got tx ids');
-  } catch (err) {
-    equal(err, null, 'Expected no failure');
   } finally {
     await kill({});
   }

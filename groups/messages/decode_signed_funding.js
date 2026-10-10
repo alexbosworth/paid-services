@@ -3,14 +3,12 @@ const {decodePsbt} = require('psbt');
 const findRecord = (records, type) => records.find(n => n.type === type);
 const {isArray} = Array;
 const nonEmpty = arr => arr.filter(n => !!n);
-const typeGroupChannelId = '1';
 const typeSignedFunding = '2';
 const typeVersion = '0';
 
 /** Decode signed funding records
 
   {
-    ecp: <ECPair Library Object>
     records: [{
       type: <Type Number String>
       value: <Value Hex String>
@@ -26,7 +24,7 @@ const typeVersion = '0';
     psbt: <Signed PSBT Hex String>
   }
 */
-module.exports = ({ecp, records}) => {
+module.exports = ({records}) => {
   if (!isArray(records)) {
     throw new Error('ExpectedArrayOfRecordsToDecodeSignedFunding');
   }
@@ -44,12 +42,12 @@ module.exports = ({ecp, records}) => {
   }
 
   try {
-    decodePsbt({ecp, psbt: signedFundingRecord.value});
+    decodePsbt({psbt: signedFundingRecord.value});
   } catch (err) {
     throw new Error('ExpectedValidPsbtRecordInSignedFunding');
   }
 
-  const {inputs} = decodePsbt({ecp, psbt: signedFundingRecord.value});
+  const {inputs} = decodePsbt({psbt: signedFundingRecord.value});
 
   return {
     p2tr: nonEmpty(inputs.map(input => input.taproot_key_spend_sig)),

@@ -2,14 +2,12 @@ const EventEmitter = require('events');
 
 const asyncAuto = require('async/auto');
 const {decodePsbt} = require('psbt');
-const tinysecp = require('tiny-secp256k1');
 const {Transaction} = require('bitcoinjs-lib');
 
 const getFanoutFunding = require('./get_fanout_funding');
 const {registerGroupConnected} = require('./../p2p');
 const {registerFanoutProposal} = require('./../p2p');
 const {registerFanoutSigned} = require('./../p2p');
-const {serviceTypeRegisterPendingFanout} = require('./../../service_types')
 
 const {fromHex} = Transaction;
 const {isArray} = Array;
@@ -44,9 +42,6 @@ module.exports = (args, cbk) => {
   const emitter = new EventEmitter();
 
   asyncAuto({
-    // Import ECPair library
-    ecp: async () => (await import('ecpair')).ECPairFactory(tinysecp),
-
     // Check arguments
     validate: cbk => {
       if (!isArray(args.inputs)) {
@@ -130,8 +125,8 @@ module.exports = (args, cbk) => {
     }],
 
     // Decode the unsigned PSBT given back by registration
-    transaction: ['ecp', 'register', ({ecp, register}, cbk) => {
-      const psbt = decodePsbt({ecp, psbt: register.psbt});
+    transaction: ['register', ({register}, cbk) => {
+      const psbt = decodePsbt({psbt: register.psbt});
 
       const tx = fromHex(psbt.unsigned_transaction);
 

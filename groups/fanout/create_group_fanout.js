@@ -7,7 +7,6 @@ const {getMethods} = require('ln-service');
 const {getUtxos} = require('ln-service');
 const {getNodeAlias} = require('ln-sync');
 const {returnResult} = require('asyncjs-util');
-const tinysecp = require('tiny-secp256k1');
 
 const assembleFanoutGroup = require('./assemble_fanout_group');
 
@@ -52,9 +51,6 @@ const sumOf = arr => arr.reduce((sum, n) => sum + n, Number());
 module.exports = (args, cbk) => {
   return new Promise((resolve, reject) => {
     return asyncAuto({
-      // Import ECPair library
-      ecp: async () => (await import('ecpair')).ECPairFactory(tinysecp),
-
       // Check arguments
       validate: cbk => {
         if (!args.ask) {
@@ -209,19 +205,17 @@ module.exports = (args, cbk) => {
 
       // Fund and assemble the group
       create: [
-        'ecp',
         'confirmBalance',
         'confirmSigner',
         'getBalance',
         'getIdentity',
         'utxos',
-        ({ecp, getIdentity, utxos}, cbk) =>
+        ({getIdentity, utxos}, cbk) =>
       {
         const announced = [];
         const members = [getIdentity.public_key].concat(args.members);
 
         const coordinate = assembleFanoutGroup({
-          ecp,
           capacity: args.capacity,
           count: args.count,
           identity: getIdentity.public_key,

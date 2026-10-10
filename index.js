@@ -3,6 +3,7 @@ const {confirmServiceUse} = require('./client');
 const {createAnchoredTrade} = require('./trades');
 const {createGroupChannel} = require('./groups');
 const {createGroupFanout} = require('./groups');
+const {createSupportOffer} = require('./support');
 const {decodeTrade} = require('./trades');
 const {encodeTrade} = require('./trades');
 const {getAnchoredTrade} = require('./trades');
@@ -19,6 +20,7 @@ const {schema} = require('./services');
 const {serviceAnchoredTrades} = require('./trades');
 const {servicePaidRequests} = require('./server');
 const {servicePeerRequests} = require('./p2p');
+const {serviceSupportOffer} = require('./support');
 
 const serviceIds = schema.types;
 
@@ -28,6 +30,7 @@ module.exports = {
   createAnchoredTrade,
   createGroupChannel,
   createGroupFanout,
+  createSupportOffer,
   decodeTrade,
   encodeTrade,
   getAnchoredTrade,
@@ -44,4 +47,5 @@ module.exports = {
   serviceIds,
   servicePaidRequests,
   servicePeerRequests,
+  serviceSupportOffer,
 };
