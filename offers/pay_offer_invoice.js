@@ -7,12 +7,17 @@ const {returnResult} = require('asyncjs-util');
 
 const {resolvePathIntroductions} = require('./../network');
 
+const hasBit = (features, bit) => !!features.find(n => n.bit === bit);
 const isMtokens = n => typeof n === 'string' && /^\d+$/.test(n);
+const requiredMppBit = 16;
 
 /** Pay a BOLT 12 invoice over its blinded payment paths
 
   The invoice is not checked against an offer. Pay an invoice from
   `getOfferInvoice`, which checks that it is for the offer and amount asked.
+
+  The invoice is paid over one route, so an invoice that requires multi-part
+  payment is not supported.
 
   {
     invoice: <BOLT 12 Invoice String>
@@ -69,6 +74,11 @@ module.exports = (args, cbk) => {
 
         if (details.network !== getNetwork.bitcoinjs) {
           return cbk([400, 'ExpectedInvoiceForNodeNetworkToPay']);
+        }
+
+        // BOLT 12 pays over multiple paths when the invoice requires MPP
+        if (hasBit(details.features, requiredMppBit)) {
+          return cbk([400, 'UnsupportedMultiPartPaymentRequiredToPayInvoice']);
         }
 
         if (!details.paths.length) {

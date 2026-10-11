@@ -33,19 +33,26 @@ const paymentPath = start => ({
 });
 
 // Make an invoice of an offer for a network over payment paths
-const makeOfferInvoice = ({created_at, expires_at, network, paths}) => {
+const makeOfferInvoice = args => {
   const {encoded} = makeRequest({
-    network,
     mtokens: '1000',
+    network: args.network,
     offer: createOffer({
       issuer_id: asKey(1),
-      networks: [network],
+      networks: [args.network],
       paths: [offerPath],
     })
     .offer,
   });
 
-  return makeInvoice({created_at, encoded, expires_at, paths}).invoice;
+  return makeInvoice({
+    encoded,
+    created_at: args.created_at,
+    expires_at: args.expires_at,
+    features: args.features,
+    paths: args.paths,
+  })
+  .invoice;
 };
 
 // Make a fake LND that fails to look up channels
@@ -118,6 +125,32 @@ const tests = [
     },
     description: 'An invoice is paid on the network of the node',
     error: [400, 'ExpectedInvoiceForNodeNetworkToPay'],
+  },
+  {
+    args: {
+      invoice: makeOfferInvoice({
+        features: [{bit: 16}],
+        network: 'bitcoin',
+        paths: [paymentPath({introduction_node: node})],
+      }),
+      lnd: makeTestLnd(),
+      max_fee_mtokens: '0',
+    },
+    description: 'An invoice that requires multi-part payment is not paid',
+    error: [400, 'UnsupportedMultiPartPaymentRequiredToPayInvoice'],
+  },
+  {
+    args: {
+      invoice: makeOfferInvoice({
+        features: [{bit: 17}],
+        network: 'bitcoin',
+        paths: [paymentPath({introduction_edge: '0x0x1x0'})],
+      }),
+      lnd: makeTestLnd(),
+      max_fee_mtokens: '0',
+    },
+    description: 'An invoice that allows multi-part payment goes on to pay',
+    error: [503, 'FailedToFindStartOfOfferInvoicePaymentPaths'],
   },
   {
     args: {

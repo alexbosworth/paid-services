@@ -38,13 +38,32 @@ const recordKey = keyForSecret({
 
 const read = record => decodeRecord({record, key: recordKey});
 
-const makeTestLnd = ({keys, locators} = {}) => {
+const makeTestLnd = ({keys, locators, peers} = {}) => {
   const lnd = makeLnd({});
 
   const {getInfo} = lnd.default;
 
   lnd.default.getInfo = (args, cbk) => getInfo(args, (err, res) => {
     return cbk(err, {...res, identity_pubkey: identity});
+  });
+
+  // The connected peers that a created path can start at
+  lnd.default.listPeers = ({}, cbk) => cbk(null, {
+    peers: (peers || []).map(key => ({
+      address: '127.0.0.1:9735',
+      bytes_recv: '0',
+      bytes_sent: '0',
+      errors: [],
+      features: {},
+      flap_count: 0,
+      inbound: false,
+      last_flap_ns: '0',
+      ping_time: '0',
+      pub_key: key,
+      sat_recv: '0',
+      sat_sent: '0',
+      sync_type: 'ACTIVE_SYNC',
+    })),
   });
 
   lnd.signer = {
@@ -102,10 +121,12 @@ const given = (value, values) => {
 };
 
 // Create a support offer and describe it and its record
-const create = async ({keys, ...args}) => {
+const create = async ({keys, peers, ...args}) => {
   const locators = [];
 
-  const res = await method({...args, lnd: makeTestLnd({keys, locators})});
+  const lnd = makeTestLnd({keys, locators, peers});
+
+  const res = await method({...args, lnd});
 
   const {id, ...label} = readServiceLabel({offer: res.offer});
   const offer = parseOffer({offer: res.offer});
@@ -203,6 +224,12 @@ const tests = [
         {hops: 2, introduction_node: path2.introduction_node},
       ],
     },
+    method: create,
+  },
+  {
+    args: {introduction: peer, peers: [peer]},
+    description: 'A support offer path can start at a connected peer',
+    expected: {...created, paths: [{hops: 2, introduction_node: peer}]},
     method: create,
   },
   {
@@ -306,6 +333,24 @@ const tests = [
     args: {max_unpaid_invoices_per_hour: 0},
     description: 'An unpaid invoices limit is expected to be positive',
     error: [400, 'ExpectedPositiveMaxUnpaidForSupportOffer'],
+    method: create,
+  },
+  {
+    args: {introduction: '00'},
+    description: 'An introduction peer is a public key',
+    error: [400, 'ExpectedIntroductionPublicKeyForSupportOffer'],
+    method: create,
+  },
+  {
+    args: {introduction: peer, paths: [path1]},
+    description: 'An introduction peer is not given with paths',
+    error: [400, 'ExpectedEitherIntroductionPeerOrGivenPaths'],
+    method: create,
+  },
+  {
+    args: {introduction: peer},
+    description: 'An introduction peer has to be connected',
+    error: [503, 'ExpectedConnectedIntroductionPeerToCreatePath'],
     method: create,
   },
   {

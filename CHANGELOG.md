@@ -1,5 +1,13 @@
 # Versions
 
+## Version 10.1.0
+
+- `createSupportOffer`: Add `introduction` to start the created offer path at
+    a connected peer, for a node that is connected only by private channels
+- `getOfferInvoice`: Check the offer before deriving the payer key, so that a
+    refused offer does not use up a payer key index
+- `payOfferInvoice`: Refuse invoices that require multi-part payment
+
 ## Version 10.0.0
 
 - `getOfferInvoice`: Add `features` to show the features of the invoice

@@ -19,6 +19,7 @@ const {payerKeyFamily} = require('./../../offers/constants');
 const bufferAsHex = buffer => buffer.toString('hex');
 const asKey = n => bufferAsHex(keyOf(Buffer.alloc(32, n)));
 const compareKeys = (a, b) => Buffer.compare(hexAsBuffer(a), hexAsBuffer(b));
+const derivedBefore = [{key_family: payerKeyFamily, key_index: 0}];
 const hexAsBuffer = hex => Buffer.from(hex, 'hex');
 const ended = [503, 'NetworkReplyListenerEnded'];
 const keyOf = secret => Buffer.from(pointFromScalar(secret));
@@ -59,14 +60,18 @@ const pathNumbers = {[first.key]: 1, [second.key]: 2};
 // The issuer of the offers is the node of secret 1
 const issuer = asKey(1);
 
-// The offer of the issuer of secret 1
-const offer = createOffer({
+// Make an offer of the issuer of secret 1 with the two offer paths
+const makeOffer = args => createOffer({
   description: 'thing',
   issuer_id: issuer,
   networks: ['bitcoin'],
   paths: [first, second],
+  ...args,
 })
 .offer;
+
+// The offer of the issuer of secret 1
+const offer = makeOffer({});
 
 // An offer of the issuer of secret 1 that has no paths
 const issuerOnly = createOffer({
@@ -155,8 +160,8 @@ const secretAt = ({key_family, key_index}) => {
   return sha256(Buffer.from(`${key_family}:${key_index}`));
 };
 
-// The derived public key of a key locator, as LND answers for the locator
-const derived = locator => ({
+// The public key at a key locator, as LND answers for the locator
+const keyAt = locator => ({
   key_loc: locator,
   raw_key_bytes: keyOf(secretAt(locator)),
 });
@@ -186,23 +191,26 @@ const makeTestLnd = ([toFirst, toSecond], channel) => {
   lnd.requested = [];
   lnd.sent = [];
   lnd.signer = {signMessage};
-  lnd.wallet.deriveKey = (locator, cbk) => cbk(null, derived(locator));
+  lnd.wallet.deriveKey = (locator, cbk) => cbk(null, keyAt(locator));
 
   // A request sent to the issuer over a path made to it gets the first reply
   lnd.replies[issuer] = toFirst;
 
-  // A payer key was derived before, so the next payer key is at index 1
-  lnd.derived = [{key_family: payerKeyFamily, key_index: 0}];
+  // The keys that are derived for the request
+  lnd.derived = [];
 
-  // The next key in a family is the one after the keys derived in it so far
+  // The next key in a family is the one after the keys derived in it so far,
+  // and a payer key was derived before, so the next payer key is at index 1
   lnd.wallet.deriveNextKey = ({key_family}, cbk) => {
-    const inFamily = lnd.derived.filter(n => n.key_family === key_family);
+    const keys = [].concat(derivedBefore).concat(lnd.derived);
+
+    const inFamily = keys.filter(n => n.key_family === key_family);
 
     const locator = {key_family, key_index: inFamily.length};
 
     lnd.derived.push(locator);
 
-    return cbk(null, derived(locator));
+    return cbk(null, keyAt(locator));
   };
 
   return lnd;
@@ -213,6 +221,18 @@ const underived = () => {
   const lnd = makeTestLnd([invoice, invoice]);
 
   lnd.wallet.deriveNextKey = ({}, cbk) => cbk('err');
+
+  return lnd;
+};
+
+// A fake LND that derives a key that is not a public key
+const misderived = () => {
+  const lnd = makeTestLnd([invoice, invoice]);
+
+  lnd.wallet.deriveNextKey = ({key_family}, cbk) => cbk(null, {
+    key_loc: {key_family, key_index: 1},
+    raw_key_bytes: hexAsBuffer(`02${'ff'.repeat(32)}`),
+  });
 
   return lnd;
 };
@@ -238,6 +258,9 @@ const missigned = () => {
 
   return lnd;
 };
+
+// The payer keys that were derived for the request, by their key index
+const keysDerived = lnd => lnd.derived.map(n => n.key_index);
 
 // The paths that requests were sent over, by their number or by their start
 const tried = lnd => lnd.requested.map(path => {
@@ -297,6 +320,7 @@ const tests = [
   },
   {
     args: {mtokens, offer, lnd: makeTestLnd([invoice, invoice])},
+    derived: [1],
     description: 'An invoice is returned with the derived key of the payer',
     expected: {
       mtokens,
@@ -362,14 +386,114 @@ const tests = [
   },
   {
     args: {mtokens, lnd: makeTestLnd([invoice, invoice]), offer: 'lno1'},
+    derived: [],
     description: 'An offer has to be valid to request an invoice for it',
     error: [400, 'ExpectedValidOfferToPay'],
+    requested: [],
+  },
+  {
+    args: {
+      mtokens,
+      lnd: makeTestLnd([invoice, invoice]),
+      offer: makeOffer({amount: '100', currency: 'USD'}),
+    },
+    derived: [],
+    description: 'An offer with an amount in a currency has no key derived',
+    error: [400, 'UnsupportedCurrencyAmountInOfferToPay'],
+    requested: [],
+  },
+  {
+    args: {
+      mtokens,
+      lnd: makeTestLnd([invoice, invoice]),
+      offer: makeOffer({networks: ['regtest']}),
+    },
+    derived: [],
+    description: 'An offer for another network has no payer key derived',
+    error: [400, 'ExpectedOfferForNetworkToPay'],
+    requested: [],
+  },
+  {
+    args: {
+      mtokens,
+      lnd: makeTestLnd([invoice, invoice]),
+      offer: makeOffer({expires_at: past}),
+    },
+    derived: [],
+    description: 'An expired offer has no payer key derived',
+    error: [400, 'ExpectedUnexpiredOfferToPay'],
+    requested: [],
+  },
+  {
+    args: {
+      mtokens,
+      lnd: makeTestLnd([invoice, invoice]),
+      offer: makeOffer({max_quantity: 2}),
+    },
+    derived: [],
+    description: 'An offer with a quantity has no payer key derived',
+    error: [400, 'ExpectedOfferWithoutQuantityToPay'],
+    requested: [],
+  },
+  {
+    args: {offer, lnd: makeTestLnd([invoice, invoice])},
+    derived: [],
+    description: 'An offer without an amount has no key derived without one',
+    error: [400, 'ExpectedMillitokensToPayOfferWithoutAmount'],
+    requested: [],
+  },
+  {
+    args: {
+      mtokens,
+      lnd: makeTestLnd([invoice, invoice]),
+      offer: makeOffer({mtokens: '5000'}),
+    },
+    derived: [],
+    description: 'An offer paid less than its amount has no key derived',
+    error: [400, 'ExpectedAtLeastOfferAmountToPayOffer'],
+    requested: [],
+  },
+  {
+    args: {
+      mtokens,
+      offer,
+      bip353_name: 'alice',
+      lnd: makeTestLnd([invoice, invoice]),
+    },
+    derived: [],
+    description: 'A name that the offer was found with is user at domain',
+    error: [400, 'ExpectedUserAtDomainBip353NameToPayOffer'],
+    requested: [],
+  },
+  {
+    args: {
+      mtokens,
+      offer,
+      bip353_name: `${'a'.repeat(256)}@example.com`,
+      lnd: makeTestLnd([invoice, invoice]),
+    },
+    derived: [],
+    description: 'A name too long for the request has no payer key derived',
+    error: [400, 'ExpectedBip353NamePartsWithinMaximumLengthToEncode'],
+    requested: [],
+  },
+  {
+    args: {mtokens, offer, lnd: makeTestLnd([invoice, invoice]), payer_note: 1},
+    derived: [],
+    description: 'A payer note that is not a string has no payer key derived',
+    error: [400, 'ExpectedPayerNoteStringToCreateInvoiceRequest'],
     requested: [],
   },
   {
     args: {mtokens, offer, lnd: underived()},
     description: 'A payer key has to be derived to make the request',
     error: [503, 'UnexpectedErrGettingPublicKeyFromSeed', {err: 'err'}],
+    requested: [],
+  },
+  {
+    args: {mtokens, offer, lnd: misderived()},
+    description: 'A payer key that is derived has to be a public key',
+    error: [400, 'ExpectedPayerIdPublicKeyToPayOffer'],
     requested: [],
   },
   {
@@ -429,6 +553,7 @@ const tests = [
   },
   {
     args: {mtokens, lnd: makeTestLnd([invoice, invoice]), offer: unknownEdge},
+    derived: [],
     description: 'A path has to start at a node that can be found',
     error: [503, 'FailedToFindIntroductionNodesOfOfferPaths'],
     requested: [],
@@ -469,12 +594,17 @@ const tests = [
   },
 ];
 
-tests.forEach(({args, description, error, expected, requested}) => {
+tests.forEach(({args, derived, description, error, expected, requested}) => {
   test(description, async () => {
     if (!!error) {
       await rejects(method(args), error, 'Got error');
     } else {
       deepStrictEqual(await getInvoice(args), expected, 'Got expected result');
+    }
+
+    // The payer keys that were derived are checked when they are given
+    if (!!derived) {
+      deepStrictEqual(keysDerived(args.lnd), derived, 'Got expected derived');
     }
 
     // The paths that were tried are checked when they are given

@@ -28,6 +28,7 @@ const bufferAsHex = buffer => Buffer.from(buffer).toString('hex');
 const isHex = n => typeof n === 'string' && /^([0-9a-f]{2})+$/i.test(n);
 const isLimit = n => n === undefined || (isSafeInteger(n) && n > 0);
 const isPathId = n => isHex(n) && n.length / 2 >= minPathIdBytes;
+const isPublicKey = n => typeof n === 'string' && /^[0-9A-F]{66}$/i.test(n);
 const isSequence = n => n === undefined || (isSafeInteger(n) && n >= 0);
 const isServiceId = n => isHex(n) && n.length / 2 === serviceIdBytes;
 
@@ -38,8 +39,12 @@ const isServiceId = n => isHex(n) && n.length / 2 === serviceIdBytes;
 
   The offer has blinded paths to self. Give `paths` made to self, each with
   the `id` given to self in its final hop, at least 16 random bytes kept
-  private, to keep the node private. Otherwise a path that starts at self is
-  created. Keep the offer small, with one path, so that its invoices fit in
+  private, to keep the node private. Otherwise a path is created that starts
+  at a connected `introduction` peer, or at self when none is given. A node
+  with only private channels gives an `introduction` peer that has public
+  channels and relays onion messages, since BOLT 12 requires paths from
+  publicly reachable nodes in the offer of a node connected only by private
+  channels. Keep the offer small, with one path, so that its invoices fit in
   onion messages of the regular size.
 
   The offer has its own issuer id, a derived key that is not linked to the
@@ -63,6 +68,7 @@ const isServiceId = n => isHex(n) && n.length / 2 === serviceIdBytes;
 
   {
     [description]: <Offer Description String>
+    [introduction]: <Introduction Peer Public Key Hex String>
     [issuer]: <Issuer Identifier String>
     [issuer_record]: <Use Issuer Id of Support Record Hex String>
     lnd: <Authenticated LND API Object>
@@ -124,6 +130,15 @@ module.exports = (args, cbk) => {
 
         if (!!args.paths && !isArray(args.paths)) {
           return cbk([400, 'ExpectedArrayOfPathsForSupportOffer']);
+        }
+
+        if (!!args.introduction && !isPublicKey(args.introduction)) {
+          return cbk([400, 'ExpectedIntroductionPublicKeyForSupportOffer']);
+        }
+
+        // An introduction peer starts a created path, not a given path
+        if (!!args.introduction && !!args.paths) {
+          return cbk([400, 'ExpectedEitherIntroductionPeerOrGivenPaths']);
         }
 
         if (!!args.suggested_mtokens && !!args.suggested_amounts) {
@@ -275,7 +290,11 @@ module.exports = (args, cbk) => {
           return cbk();
         }
 
-        return createNetworkPath({lnd: args.lnd}, cbk);
+        return createNetworkPath({
+          introduction: args.introduction,
+          lnd: args.lnd,
+        },
+        cbk);
       }],
 
       // Create the offer

@@ -4,6 +4,7 @@ const {createSignedInvoiceRequest} = require('invoices');
 const {getNetwork} = require('ln-sync');
 const {getPeers} = require('ln-service');
 const {getPublicKey} = require('ln-service');
+const {pointFromScalar} = require('tiny-secp256k1');
 const {returnResult} = require('asyncjs-util');
 const {signBytes} = require('ln-service');
 
@@ -14,8 +15,10 @@ const requestOfferInvoice = require('./request_offer_invoice');
 const {resolvePathIntroductions} = require('./../network');
 
 const {isSafeInteger} = Number;
+const bufferAsHex = buffer => Buffer.from(buffer).toString('hex');
 const defaultTimeoutMs = 30000;
 const isTimeout = n => isSafeInteger(n) && n > 0;
+const placeholderPayerId = bufferAsHex(pointFromScalar(Buffer.alloc(32, 1)));
 const typeSchnorr = 'schnorr';
 
 /** Get an invoice for a BOLT 12 offer
@@ -30,9 +33,10 @@ const typeSchnorr = 'schnorr';
   request sent to its issuer id.
 
   The request is signed by the `payer_id`, a new key that LND derives in key
-  family 808 at `payer_key_index`. Keep the index to be able to prove, with
-  the key derived again from the seed, that the request and the payment of
-  its invoice were made by the payer.
+  family 808 at `payer_key_index`, only once the request is known to be one
+  that can be made, so that a refused request uses no index. Keep the index
+  to be able to prove, with the key derived again from the seed, that the
+  request and the payment of its invoice were made by the payer.
 
   {
     [bip353_name]: <BIP 353 Human Readable Name Offer Was Found With String>
@@ -98,12 +102,48 @@ module.exports = (args, cbk) => {
       // Get the connected peers to start the reply path at one of them
       getPeers: ['validate', ({}, cbk) => getPeers({lnd: args.lnd}, cbk)],
 
+      // Make the request with a placeholder payer id, to check that it can be
+      // made before a payer key is derived for it
+      checkRequest: ['getNetwork', ({getNetwork}, cbk) => {
+        try {
+          return cbk(null, invoiceRequestForOffer({
+            bip353_name: args.bip353_name,
+            mtokens: args.mtokens,
+            network: getNetwork.bitcoinjs,
+            offer: args.offer,
+            payer_id: placeholderPayerId,
+            payer_note: args.payer_note,
+          }));
+        } catch (err) {
+          return cbk([400, err.message]);
+        }
+      }],
+
+      // Find the introduction node of each offer path, to not reply from it
+      getPaths: ['checkRequest', ({checkRequest}, cbk) => {
+        return resolvePathIntroductions({
+          lnd: args.lnd,
+          paths: checkRequest.paths,
+        },
+        cbk);
+      }],
+
+      // The offer paths to send the request over
+      offerPaths: ['getPaths', ({getPaths}, cbk) => {
+        // Exit early when no path has a known introduction node
+        if (!getPaths.paths.length) {
+          return cbk([503, 'FailedToFindIntroductionNodesOfOfferPaths']);
+        }
+
+        return cbk(null, getPaths.paths);
+      }],
+
       // Get a new derived key for the payer id, to derive again from the seed
-      getPayerKey: ['validate', ({}, cbk) => {
+      getPayerKey: ['offerPaths', ({}, cbk) => {
         return getPublicKey({family: payerKeyFamily, lnd: args.lnd}, cbk);
       }],
 
-      // Make the unsigned invoice request for the offer
+      // Make the unsigned invoice request for the offer with the payer id
       unsigned: [
         'getNetwork',
         'getPayerKey',
@@ -148,25 +188,6 @@ module.exports = (args, cbk) => {
         } catch (err) {
           return cbk([503, 'FailedToCreateSignedInvoiceRequest', {err}]);
         }
-      }],
-
-      // Find the introduction node of each offer path, to not reply from it
-      getPaths: ['unsigned', ({unsigned}, cbk) => {
-        return resolvePathIntroductions({
-          lnd: args.lnd,
-          paths: unsigned.paths,
-        },
-        cbk);
-      }],
-
-      // The offer paths to send the request over
-      offerPaths: ['getPaths', ({getPaths}, cbk) => {
-        // Exit early when no path has a known introduction node
-        if (!getPaths.paths.length) {
-          return cbk([503, 'FailedToFindIntroductionNodesOfOfferPaths']);
-        }
-
-        return cbk(null, getPaths.paths);
       }],
 
       // Send the request over each path in turn until the recipient answers
