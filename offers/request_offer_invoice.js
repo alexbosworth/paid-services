@@ -51,6 +51,11 @@ const isAnswered = replies => replies.some(n => !!n.error || !!n.invoice);
     [error]: [<Error Code Number>, <Error Message String>, <Details Object>]
     [invoice]: {
       expires_at: <Invoice Expires At ISO 8601 Date String>
+      features: [{
+        bit: <BOLT 09 Feature Bit Number>
+        is_required: <Feature Support is Required To Pay Bool>
+        type: <Feature Type String>
+      }]
       id: <Payment Hash Hex String>
       invoice: <BOLT 12 Invoice String>
       mtokens: <Invoice Amount Millitokens String>
@@ -130,6 +135,7 @@ module.exports = (args, cbk) => {
 
         const {error, invoice} = checkOfferInvoiceReply({
           reply,
+          path: args.path,
           request: args.request,
         });
 

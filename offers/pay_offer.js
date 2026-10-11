@@ -11,8 +11,12 @@ const isTimeout = n => isSafeInteger(n) && n > 0;
 /** Pay a BOLT 12 offer: `getOfferInvoice` and then `payOfferInvoice`
 
   `mtokens` defaults to the offer amount, and is required when the offer has
-  no amount, or an amount in a currency. Give the `bip353_name` that the
-  offer was found with, as BOLT 12 requires.
+  no amount. An offer with an amount in a currency is not supported. Give the
+  `bip353_name` that the offer was found with, as BOLT 12 requires.
+
+  The `payer_id` is a new key that LND derives in key family 808 at
+  `payer_key_index`. Keep the index to be able to prove that the request and
+  the payment were made by the payer.
 
   {
     [bip353_name]: <BIP 353 Human Readable Name Offer Was Found With String>
@@ -31,7 +35,7 @@ const isTimeout = n => isSafeInteger(n) && n > 0;
     invoice: <BOLT 12 Invoice String>
     mtokens: <Invoice Amount Millitokens String>
     payer_id: <Payer Public Key Hex String>
-    payer_secret: <Payer Secret Key Hex String>
+    payer_key_index: <Payer Id Key Index Number>
     secret: <Payment Preimage Hex String>
   }
 */
@@ -91,7 +95,7 @@ module.exports = (args, cbk) => {
           invoice: getInvoice.invoice,
           mtokens: pay.mtokens,
           payer_id: getInvoice.payer_id,
-          payer_secret: getInvoice.payer_secret,
+          payer_key_index: getInvoice.payer_key_index,
           secret: pay.secret,
         });
       }],

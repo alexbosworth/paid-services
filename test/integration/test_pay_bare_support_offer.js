@@ -7,6 +7,7 @@ const {createSignedInvoiceRequest} = require('invoices');
 const {createUnsignedInvoiceRequest} = require('invoices');
 const {decodeTlvStream} = require('bolt01');
 const {getInvoice} = require('ln-service');
+const {getPublicKey} = require('ln-service');
 const {parseInvoice} = require('invoices');
 const {parseInvoiceError} = require('invoices');
 const {parseOffer} = require('invoices');
@@ -17,6 +18,7 @@ const {spawnLightningCluster} = require('ln-docker-daemons');
 
 const {createSupportOffer} = require('./../../');
 const {getOfferInvoice} = require('./../../offers');
+const {payerKeyFamily} = require('./../../offers/constants');
 const {payOffer} = require('./../../offers');
 const {payOfferInvoice} = require('./../../offers');
 const {requestNetworkReply} = require('./../../network');
@@ -24,7 +26,6 @@ const {serviceSupportOffer} = require('./../../');
 
 const bufferAsHex = buffer => buffer.toString('hex');
 const capacity = 1e6;
-const hexAsBuffer = hex => Buffer.from(hex, 'hex');
 const interval = 1000;
 const keyOf = secret => bufferAsHex(Buffer.from(pointFromScalar(secret)));
 const maxFeeMtokens = '100000';
@@ -202,12 +203,16 @@ test(`Pay a bare support offer as a BOLT 12 offer`, async () => {
 
     equal(offerInvoice.mtokens, mtokens, 'Got an invoice for the amount');
     equal(offerInvoice.payer_id === payerId, false, 'With a new payer id');
-    equal(
-      keyOf(hexAsBuffer(offerInvoice.payer_secret)),
-      offerInvoice.payer_id,
-      'With the secret of the payer id'
-    );
     equal(Date.parse(offerInvoice.expires_at) > Date.now(), true, 'Unexpired');
+
+    // The payer id is a key that the payer node derives at the key index
+    const derivedKey = await getPublicKey({
+      family: payerKeyFamily,
+      index: offerInvoice.payer_key_index,
+      lnd: client.lnd,
+    });
+
+    equal(derivedKey.public_key, offerInvoice.payer_id, 'Derived payer id');
 
     const paidInvoice = await payOfferInvoice({
       invoice: offerInvoice.invoice,
@@ -253,10 +258,19 @@ test(`Pay a bare support offer as a BOLT 12 offer`, async () => {
     equal(payments[2].id, paidOffer.id, 'Got the third payment');
     equal(payments[2].payer_id, paidOffer.payer_id, 'Got the third payer id');
 
+    // Each payment has its own payer id, at the next key index
+    const thirdKey = await getPublicKey({
+      family: payerKeyFamily,
+      index: paidOffer.payer_key_index,
+      lnd: client.lnd,
+    });
+
+    equal(thirdKey.public_key, paidOffer.payer_id, 'Derived third payer id');
+    equal(paidOffer.payer_id !== offerInvoice.payer_id, true, 'New payer id');
     equal(
-      keyOf(hexAsBuffer(paidOffer.payer_secret)),
-      paidOffer.payer_id,
-      'Got the secret of the third payer id'
+      paidOffer.payer_key_index,
+      offerInvoice.payer_key_index + 1,
+      'Payer id keys are derived in turn'
     );
 
     // Invoices cannot be made until the channels are known, which is retried

@@ -1,30 +1,37 @@
-const {createSignedInvoiceRequest} = require('invoices');
 const {createUnsignedInvoiceRequest} = require('invoices');
-const {isPrivate} = require('tiny-secp256k1');
+const {isPoint} = require('tiny-secp256k1');
 const {parseOffer} = require('invoices');
-const {pointFromScalar} = require('tiny-secp256k1');
 
-const randomSecret = require('./random_secret');
+const issuerPath = require('./issuer_path');
 
-const bufferAsHex = buffer => buffer.toString('hex');
 const hexAsBuffer = hex => Buffer.from(hex, 'hex');
+const isHex = n => typeof n === 'string' && /^([0-9a-f]{2})+$/i.test(n);
+const isKey = n => isHex(n) && n.length === 66 && isPoint(hexAsBuffer(n));
 const isMtokens = n => typeof n === 'string' && /^[1-9]\d*$/.test(n);
 const isName = n => typeof n === 'string' && namePattern.test(n);
-const isSecret = n => typeof n === 'string' && /^[0-9a-f]{64}$/i.test(n);
 const namePattern = /^[0-9a-zA-Z\-_.]+@[0-9a-zA-Z\-_.]+$/;
 
-/** Make a signed BOLT 12 invoice request, with a random payer key by default
+/** Make an unsigned BOLT 12 invoice request for an offer, with a payer id
+
+  `mtokens` defaults to the offer amount, and is required when the offer has
+  no amount. An offer with an amount in a currency is not supported.
 
   Give the `bip353_name` that the offer was found with, as BOLT 12 requires,
   so that the recipient knows which name was used
+
+  Sign `root` with `tag` as the tagged hash tag, with the key of `payer_id`,
+  and give the signature to `createSignedInvoiceRequest` to finish the request
+
+  The request is sent over the `paths`: the paths of the offer, or a path to
+  the issuer id of an offer that has no paths, as BOLT 12 requires
 
   {
     [bip353_name]: <BIP 353 Human Readable Name Offer Was Found With String>
     [mtokens]: <Millitokens to Pay String>
     network: <Network Name String>
     offer: <BOLT 12 Offer String>
+    payer_id: <Payer Public Key Hex String>
     [payer_note]: <Payer Note String>
-    [secret]: <Payer Secret Key Hex String>
   }
 
   @throws
@@ -33,7 +40,7 @@ const namePattern = /^[0-9a-zA-Z\-_.]+@[0-9a-zA-Z\-_.]+$/;
   @returns
   {
     [description]: <Offer Description String>
-    encoded: <Signed Invoice Request TLV Stream Hex String>
+    encoded: <Unsigned Invoice Request TLV Stream Hex String>
     mtokens: <Requested Millitokens String>
     paths: [{
       hops: [{
@@ -44,9 +51,8 @@ const namePattern = /^[0-9a-zA-Z\-_.]+@[0-9a-zA-Z\-_.]+$/;
       [introduction_node]: <Introduction Node Public Key Hex String>
       key: <First Hop Path Key Public Key Hex String>
     }]
-    payer_id: <Payer Public Key Hex String>
-    payer_secret: <Payer Secret Key Hex String>
-    request: <BOLT 12 Invoice Request String>
+    root: <Merkle Root Hash To Sign Hex String>
+    tag: <Signature Tagged Hash Tag String>
   }
 */
 module.exports = args => {
@@ -62,13 +68,8 @@ module.exports = args => {
     throw new Error('ExpectedNetworkToPayOffer');
   }
 
-  if (args.secret !== undefined && !isSecret(args.secret)) {
-    throw new Error('ExpectedPayerSecretKeyToPayOffer');
-  }
-
-  // A secret that is out of the range of private keys has no public key
-  if (args.secret !== undefined && !isPrivate(hexAsBuffer(args.secret))) {
-    throw new Error('ExpectedValidPayerSecretKeyToPayOffer');
+  if (!isKey(args.payer_id)) {
+    throw new Error('ExpectedPayerIdPublicKeyToPayOffer');
   }
 
   // Exit early when the offer cannot be read
@@ -93,14 +94,9 @@ module.exports = args => {
     throw new Error('ExpectedOfferWithoutQuantityToPay');
   }
 
-  // Requests are sent over the blinded paths of the offer
-  if (!details.paths || !details.paths.length) {
-    throw new Error('ExpectedOfferWithPathsToPay');
-  }
-
-  // An amount in a currency is converted to millitokens by the payer
-  if (!!details.currency && !args.mtokens) {
-    throw new Error('ExpectedMillitokensToPayOfferWithCurrencyAmount');
+  // An amount in a currency needs an exchange rate, which is not supported
+  if (!!details.currency) {
+    throw new Error('UnsupportedCurrencyAmountInOfferToPay');
   }
 
   const amount = args.mtokens || details.mtokens;
@@ -110,40 +106,29 @@ module.exports = args => {
     throw new Error('ExpectedMillitokensToPayOfferWithoutAmount');
   }
 
-  const hasOfferAmount = !details.currency && !!details.mtokens;
-
   // An offer with an amount is paid at least that amount
-  if (hasOfferAmount && BigInt(amount) < BigInt(details.mtokens)) {
+  if (!!details.mtokens && BigInt(amount) < BigInt(details.mtokens)) {
     throw new Error('ExpectedAtLeastOfferAmountToPayOffer');
   }
 
-  const payerSecret = args.secret || randomSecret().secret;
-
-  const payerId = pointFromScalar(hexAsBuffer(payerSecret));
-
-  const payer = bufferAsHex(Buffer.from(payerId));
+  // A request is sent over the offer paths, or to the issuer id without them
+  const paths = details.paths || [issuerPath({id: details.issuer_id})];
 
   const unsigned = createUnsignedInvoiceRequest({
     bip353_name: args.bip353_name,
     mtokens: amount,
     network: args.network,
     offer: args.offer,
-    payer_id: payer,
+    payer_id: args.payer_id,
     payer_note: args.payer_note,
   });
 
-  const signed = createSignedInvoiceRequest({
-    encoded: unsigned.encoded,
-    secret: payerSecret,
-  });
-
   return {
+    paths,
     description: details.description,
-    encoded: signed.encoded,
+    encoded: unsigned.encoded,
     mtokens: amount,
-    paths: details.paths,
-    payer_id: payer,
-    payer_secret: payerSecret,
-    request: signed.request,
+    root: unsigned.root,
+    tag: unsigned.tag,
   };
 };

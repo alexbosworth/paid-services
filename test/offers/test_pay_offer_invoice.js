@@ -7,14 +7,13 @@ const {makeLnd} = require('mock-lnd');
 const {pointFromScalar} = require('tiny-secp256k1');
 
 const makeInvoice = require('./fixtures/make_invoice');
+const makeRequest = require('./fixtures/make_request');
 const method = require('./../../offers/pay_offer_invoice');
-const requestForOffer = require('./../../offers/invoice_request_for_offer');
 
 const bufferAsHex = buffer => buffer.toString('hex');
 const asKey = n => bufferAsHex(keyOf(Buffer.alloc(32, n)));
 const keyOf = secret => Buffer.from(pointFromScalar(secret));
 const node = asKey(9);
-const secret = bufferAsHex(Buffer.alloc(32, 4));
 
 const blinded = blindedPathFromHops({hops: [node]});
 const {key} = blinded;
@@ -35,9 +34,8 @@ const paymentPath = start => ({
 
 // Make an invoice of an offer for a network over payment paths
 const makeOfferInvoice = ({created_at, expires_at, network, paths}) => {
-  const {encoded} = requestForOffer({
+  const {encoded} = makeRequest({
     network,
-    secret,
     mtokens: '1000',
     offer: createOffer({
       issuer_id: asKey(1),

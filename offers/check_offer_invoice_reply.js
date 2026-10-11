@@ -1,5 +1,6 @@
 const {parseInvoice} = require('invoices');
 const {parseInvoiceError} = require('invoices');
+const {parseOffer} = require('invoices');
 
 const {typeInvoiceError} = require('./constants');
 
@@ -8,7 +9,16 @@ const {typeInvoiceError} = require('./constants');
   An invoice error reply from the recipient, or an invoice that is not valid,
   that has expired, or that is not for the request, is a failed reply
 
+  An invoice for an offer without an issuer id has to be signed by the final
+  node of the `path` that the request was sent over, as BOLT 12 requires
+
   {
+    path: {
+      hops: [{
+        encrypted_data: <Encrypted Recipient Data Hex String>
+        relay_key: <Blinded Relaying Node Public Key Hex String>
+      }]
+    }
     reply: {
       type: <Reply Message Payload Record Type Number String>
       value: <Reply Message Payload Hex String>
@@ -24,6 +34,11 @@ const {typeInvoiceError} = require('./constants');
     [error]: [<Error Code Number>, <Error Message String>, <Details Object>]
     [invoice]: {
       expires_at: <Invoice Expires At ISO 8601 Date String>
+      features: [{
+        bit: <BOLT 09 Feature Bit Number>
+        is_required: <Feature Support is Required To Pay Bool>
+        type: <Feature Type String>
+      }]
       id: <Payment Hash Hex String>
       invoice: <BOLT 12 Invoice String>
       mtokens: <Invoice Amount Millitokens String>
@@ -49,7 +64,7 @@ const {typeInvoiceError} = require('./constants');
     }
   }
 */
-module.exports = ({reply, request}) => {
+module.exports = ({path, reply, request}) => {
   // Exit early when the recipient sent back an invoice error
   if (reply.type === typeInvoiceError) {
     try {
@@ -78,6 +93,16 @@ module.exports = ({reply, request}) => {
     request: request.request,
   });
 
+  // The offer that the invoice is for is copied into the invoice
+  const offer = parseOffer({offer: invoice.offer});
+
+  // An offer without an issuer id has its invoices signed by the path ends
+  const [finalHop] = [].concat(path.hops).reverse();
+
+  if (!offer.issuer_id && invoice.node_id !== finalHop.relay_key) {
+    return {error: [503, 'ExpectedInvoiceSignedByFinalNodeOfOfferPathUsed']};
+  }
+
   if (invoice.is_expired) {
     return {error: [503, 'ExpectedUnexpiredInvoiceForOffer']};
   }
@@ -93,6 +118,7 @@ module.exports = ({reply, request}) => {
   return {
     invoice: {
       expires_at: invoice.expires_at,
+      features: invoice.features,
       id: invoice.id,
       invoice: invoice.invoice,
       mtokens: invoice.mtokens,

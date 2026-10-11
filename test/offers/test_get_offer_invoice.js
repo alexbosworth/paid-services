@@ -1,3 +1,4 @@
+const {createHash} = require('node:crypto');
 const {deepStrictEqual, rejects} = require('node:assert/strict');
 const {mock} = require('node:test');
 const {test} = require('node:test');
@@ -5,12 +6,15 @@ const {test} = require('node:test');
 const {blindedPathFromHops} = require('bolt04');
 const {createInvoiceError} = require('invoices');
 const {createOffer} = require('invoices');
+const {getPublicKey} = require('ln-service');
 const {makeLnd} = require('mock-lnd');
 const {parseInvoiceRequest} = require('invoices');
 const {pointFromScalar} = require('tiny-secp256k1');
+const {signSchnorr} = require('tiny-secp256k1');
 
 const makeInvoice = require('./fixtures/make_invoice');
 const network = require('./../../network');
+const {payerKeyFamily} = require('./../../offers/constants');
 
 const bufferAsHex = buffer => buffer.toString('hex');
 const asKey = n => bufferAsHex(keyOf(Buffer.alloc(32, n)));
@@ -23,13 +27,17 @@ const node = asKey(9);
 const notFound = {details: 'edge not found'};
 const outpoint = `${bufferAsHex(Buffer.alloc(32))}:0`;
 const past = '2025-01-01T00:00:00.000Z';
+const sha256 = n => createHash('sha256').update(n).digest();
 
 // Reply to a request with the reply the fake LND has for the path
 const fakeReply = ({lnd, message, path}, cbk) => {
-  lnd.requested.push(path.key);
+  lnd.requested.push(path);
   lnd.sent.push(message.value);
 
-  return lnd.replies[path.key](message.value, cbk);
+  // A path that the payer made to an issuer id is replied to by the issuer
+  const reply = lnd.replies[path.key] || lnd.replies[path.introduction_node];
+
+  return reply(message.value, cbk);
 };
 
 // Replies are faked by the path the request is sent over, so that no onion
@@ -45,12 +53,26 @@ const [first, second] = [node, node].map(hop => {
   return {key, hops: path, introduction_node: hop};
 });
 
+// The offer paths by their number
+const pathNumbers = {[first.key]: 1, [second.key]: 2};
+
+// The issuer of the offers is the node of secret 1
+const issuer = asKey(1);
+
 // The offer of the issuer of secret 1
 const offer = createOffer({
   description: 'thing',
-  issuer_id: asKey(1),
+  issuer_id: issuer,
   networks: ['bitcoin'],
   paths: [first, second],
+})
+.offer;
+
+// An offer of the issuer of secret 1 that has no paths
+const issuerOnly = createOffer({
+  description: 'thing',
+  issuer_id: issuer,
+  networks: ['bitcoin'],
 })
 .offer;
 
@@ -91,8 +113,8 @@ const edgeChannel = {
 };
 
 // The recipient replies with an invoice for the request over payment paths
-const replyWith = paths => (encoded, cbk) => {
-  const {encoded: value} = makeInvoice({encoded, paths});
+const replyWith = (paths, features) => (encoded, cbk) => {
+  const {encoded: value} = makeInvoice({encoded, features, paths});
 
   return cbk(null, {reply: {value, type: '66'}});
 };
@@ -102,6 +124,9 @@ const invoice = replyWith([paymentPath]);
 
 // The recipient replies with an invoice to pay over a channel edge
 const edgeInvoice = replyWith([edgePath]);
+
+// The recipient replies with an invoice that has an invoice feature
+const featured = replyWith([paymentPath], [{bit: 17}]);
 
 // The recipient replies with an invoice that has expired
 const expired = (encoded, cbk) => {
@@ -125,8 +150,31 @@ const refused = (encoded, cbk) => {
 // There is no reply
 const unreplied = (encoded, cbk) => cbk(ended);
 
+// The fake LND has a secret key at every key locator, made from the locator
+const secretAt = ({key_family, key_index}) => {
+  return sha256(Buffer.from(`${key_family}:${key_index}`));
+};
+
+// The derived public key of a key locator, as LND answers for the locator
+const derived = locator => ({
+  key_loc: locator,
+  raw_key_bytes: keyOf(secretAt(locator)),
+});
+
+// Sign the tagged hash of a message with the key at a locator, as LND does
+const signMessage = ({key_loc, msg, tag}, cbk) => {
+  const tagHash = sha256(tag);
+
+  const hash = sha256(Buffer.concat([tagHash, tagHash, msg]));
+
+  return cbk(null, {
+    signature: Buffer.from(signSchnorr(hash, secretAt(key_loc))),
+  });
+};
+
 // Make a fake LND with replies to requests over the first and second paths,
-// that knows of a channel when it is given
+// that knows of a channel when it is given, and that derives and signs with
+// keys at key locators
 const makeTestLnd = ([toFirst, toSecond], channel) => {
   const lnd = makeLnd({});
 
@@ -137,30 +185,88 @@ const makeTestLnd = ([toFirst, toSecond], channel) => {
   lnd.replies = {[first.key]: toFirst, [second.key]: toSecond};
   lnd.requested = [];
   lnd.sent = [];
+  lnd.signer = {signMessage};
+  lnd.wallet.deriveKey = (locator, cbk) => cbk(null, derived(locator));
+
+  // A request sent to the issuer over a path made to it gets the first reply
+  lnd.replies[issuer] = toFirst;
+
+  // A payer key was derived before, so the next payer key is at index 1
+  lnd.derived = [{key_family: payerKeyFamily, key_index: 0}];
+
+  // The next key in a family is the one after the keys derived in it so far
+  lnd.wallet.deriveNextKey = ({key_family}, cbk) => {
+    const inFamily = lnd.derived.filter(n => n.key_family === key_family);
+
+    const locator = {key_family, key_index: inFamily.length};
+
+    lnd.derived.push(locator);
+
+    return cbk(null, derived(locator));
+  };
 
   return lnd;
 };
 
-// The paths that requests were sent over, by their number
-const tried = lnd => lnd.requested.map(key => key === first.key ? 1 : 2);
+// A fake LND that cannot derive a key
+const underived = () => {
+  const lnd = makeTestLnd([invoice, invoice]);
+
+  lnd.wallet.deriveNextKey = ({}, cbk) => cbk('err');
+
+  return lnd;
+};
+
+// A fake LND that cannot sign
+const unsigned = () => {
+  const lnd = makeTestLnd([invoice, invoice]);
+
+  lnd.signer.signMessage = ({}, cbk) => cbk('err');
+
+  return lnd;
+};
+
+// A fake LND that signs with another key than the one at the key locator
+const missigned = () => {
+  const lnd = makeTestLnd([invoice, invoice]);
+
+  lnd.signer.signMessage = ({msg, tag}, cbk) => {
+    const other = {key_family: payerKeyFamily, key_index: 99};
+
+    return signMessage({msg, tag, key_loc: other}, cbk);
+  };
+
+  return lnd;
+};
+
+// The paths that requests were sent over, by their number or by their start
+const tried = lnd => lnd.requested.map(path => {
+  return pathNumbers[path.key] || path.introduction_node;
+});
 
 // Get an invoice and see what it is like and which paths were tried
 const getInvoice = async args => {
   const got = await method(args);
 
-  const payerKey = keyOf(hexAsBuffer(got.payer_secret));
-
-  // The requests that were sent have the name the offer was found with
-  const names = args.lnd.sent.map(encoded => {
-    return parseInvoiceRequest({encoded}).bip353_name;
+  // The payer id is the key that LND derives at the payer key index
+  const payerKey = await getPublicKey({
+    family: payerKeyFamily,
+    index: got.payer_key_index,
+    lnd: args.lnd,
   });
+
+  // The requests that were sent are read, which checks their signatures
+  const sent = args.lnd.sent.map(encoded => parseInvoiceRequest({encoded}));
 
   return {
     description: got.description,
-    is_payer_key: bufferAsHex(payerKey) === got.payer_id,
+    features: got.features,
+    is_payer_key: payerKey.public_key === got.payer_id,
+    is_signed_by_payer: sent.every(n => n.payer_id === got.payer_id),
     mtokens: got.mtokens,
-    names: names.filter(n => !!n),
+    names: sent.map(n => n.bip353_name).filter(n => !!n),
     paths: got.paths,
+    payer_key_index: got.payer_key_index,
     requested: tried(args.lnd),
   };
 };
@@ -191,13 +297,16 @@ const tests = [
   },
   {
     args: {mtokens, offer, lnd: makeTestLnd([invoice, invoice])},
-    description: 'An invoice is returned with the key of the payer',
+    description: 'An invoice is returned with the derived key of the payer',
     expected: {
       mtokens,
       description: 'thing',
+      features: [],
       is_payer_key: true,
+      is_signed_by_payer: true,
       names: [],
       paths: [paymentPath],
+      payer_key_index: 1,
       requested: [1],
     },
   },
@@ -212,11 +321,70 @@ const tests = [
     expected: {
       mtokens,
       description: 'thing',
+      features: [],
       is_payer_key: true,
+      is_signed_by_payer: true,
       names: ['alice@example.com'],
       paths: [paymentPath],
+      payer_key_index: 1,
       requested: [1],
     },
+  },
+  {
+    args: {mtokens, lnd: makeTestLnd([invoice, invoice]), offer: issuerOnly},
+    description: 'An offer without paths is requested at its issuer id',
+    expected: {
+      mtokens,
+      description: 'thing',
+      features: [],
+      is_payer_key: true,
+      is_signed_by_payer: true,
+      names: [],
+      paths: [paymentPath],
+      payer_key_index: 1,
+      requested: [issuer],
+    },
+  },
+  {
+    args: {mtokens, offer, lnd: makeTestLnd([featured, invoice])},
+    description: 'An invoice is returned with its features',
+    expected: {
+      mtokens,
+      description: 'thing',
+      features: [{bit: 17, is_required: false, type: 'multipath_payments_v0'}],
+      is_payer_key: true,
+      is_signed_by_payer: true,
+      names: [],
+      paths: [paymentPath],
+      payer_key_index: 1,
+      requested: [1],
+    },
+  },
+  {
+    args: {mtokens, lnd: makeTestLnd([invoice, invoice]), offer: 'lno1'},
+    description: 'An offer has to be valid to request an invoice for it',
+    error: [400, 'ExpectedValidOfferToPay'],
+    requested: [],
+  },
+  {
+    args: {mtokens, offer, lnd: underived()},
+    description: 'A payer key has to be derived to make the request',
+    error: [503, 'UnexpectedErrGettingPublicKeyFromSeed', {err: 'err'}],
+    requested: [],
+  },
+  {
+    args: {mtokens, offer, lnd: unsigned()},
+    description: 'The request has to be signed to be sent',
+    error: [503, 'UnexpectedErrorWhenSigningBytes', {err: 'err'}],
+    requested: [],
+  },
+  {
+    args: {mtokens, offer, lnd: missigned()},
+    description: 'The request has to be signed by the payer id key',
+    error: [503, 'FailedToCreateSignedInvoiceRequest', {
+      err: new Error('ExpectedValidSignatureForSigningPublicKeyToSignStream'),
+    }],
+    requested: [],
   },
   {
     args: {mtokens, offer, lnd: makeTestLnd([refused, invoice])},
@@ -233,9 +401,12 @@ const tests = [
     expected: {
       mtokens,
       description: 'thing',
+      features: [],
       is_payer_key: true,
+      is_signed_by_payer: true,
       names: [],
       paths: [paymentPath],
+      payer_key_index: 1,
       requested: [1, 2],
     },
   },
@@ -272,7 +443,9 @@ const tests = [
     expected: {
       mtokens,
       description: 'thing',
+      features: [],
       is_payer_key: true,
+      is_signed_by_payer: true,
       names: [],
       paths: [{
         base_fee_mtokens: edgePath.base_fee_mtokens,
@@ -284,6 +457,7 @@ const tests = [
         max_htlc_mtokens: edgePath.max_htlc_mtokens,
         min_htlc_mtokens: edgePath.min_htlc_mtokens,
       }],
+      payer_key_index: 1,
       requested: [1],
     },
   },

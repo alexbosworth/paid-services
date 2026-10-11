@@ -1,5 +1,19 @@
 # Versions
 
+## Version 10.0.0
+
+- `getOfferInvoice`: Add `features` to show the features of the invoice
+- `getOfferInvoice`: Add support for offers with an issuer id and no paths
+- `getOfferInvoice`: Check that an invoice for an offer without an issuer id
+    is signed by the final node of the path that the request was sent over
+
+### Breaking Changes
+
+- `getOfferInvoice`: Refuse offers with an amount in a currency
+- `getOfferInvoice`: The payer id is now a key derived by LND in key family
+    808, and `payer_key_index` is returned in place of the removed
+    `payer_secret`
+
 ## Version 9.3.0
 
 - `getOfferInvoice`: Add `description` and `paths` to show and pay the invoice

@@ -8,8 +8,8 @@ const {createOffer} = require('invoices');
 const {pointFromScalar} = require('tiny-secp256k1');
 
 const makeInvoice = require('./fixtures/make_invoice');
+const makeRequest = require('./fixtures/make_request');
 const network = require('./../../network');
-const requestForOffer = require('./../../offers/invoice_request_for_offer');
 
 const asKey = n => bufferAsHex(keyOf(Buffer.alloc(32, n)));
 const bufferAsHex = buffer => buffer.toString('hex');
@@ -42,7 +42,7 @@ const offer = createOffer({
 })
 .offer;
 
-const request = requestForOffer({mtokens, offer, network: 'bitcoin'});
+const request = makeRequest({mtokens, offer, network: 'bitcoin'});
 
 // A payment path to pay an invoice over
 const paymentPath = {
@@ -57,6 +57,34 @@ const paymentPath = {
 };
 
 const good = makeInvoice({encoded: request.encoded, paths: [paymentPath]});
+
+// A path that ends at the node of a secret, as a path of an offer
+const pathTo = n => ({
+  hops: [{encrypted_data: '00', relay_key: asKey(n)}],
+  introduction_node: node,
+  key: asKey(7),
+});
+
+// An offer without an issuer id, with paths that end at nodes 5 and 6
+const unissued = createOffer({
+  networks: ['bitcoin'],
+  paths: [pathTo(5), pathTo(6)],
+})
+.offer;
+
+const unissuedRequest = makeRequest({
+  mtokens,
+  network: 'bitcoin',
+  offer: unissued,
+});
+
+// An invoice for the request to the offer without an issuer id, from node 6
+const fromNodeSix = makeInvoice({
+  encoded: unissuedRequest.encoded,
+  node_id: asKey(6),
+  paths: [paymentPath],
+  secret: bufferAsHex(Buffer.alloc(32, 6)),
+});
 
 const expired = makeInvoice({
   created_at: '2024-12-31T00:00:00.000Z',
@@ -150,6 +178,30 @@ const tests = [
       replies: [{err: 'ExpectedUnexpiredInvoiceForOffer', is_reply: true}],
       sent: 1,
     },
+  },
+  {
+    args: {
+      ...makeArgs({reply: replyWith('66', fromNodeSix.encoded)}),
+      path: pathTo(5),
+      request: unissuedRequest,
+    },
+    description: 'An invoice from the end of another path is a failure',
+    expected: {
+      replies: [{
+        err: 'ExpectedInvoiceSignedByFinalNodeOfOfferPathUsed',
+        is_reply: true,
+      }],
+      sent: 1,
+    },
+  },
+  {
+    args: {
+      ...makeArgs({reply: replyWith('66', fromNodeSix.encoded)}),
+      path: pathTo(6),
+      request: unissuedRequest,
+    },
+    description: 'An invoice from the end of the path sent over is added',
+    expected: {replies: [{invoice: fromNodeSix.invoice}], sent: 1},
   },
   {
     args: makeArgs({reply: ({}, cbk) => cbk(ended)}),
