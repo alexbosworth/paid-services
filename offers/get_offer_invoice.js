@@ -1,18 +1,13 @@
 const asyncAuto = require('async/auto');
-const asyncTryEach = require('async/tryEach');
+const asyncReduce = require('async/reduce');
 const {getNetwork} = require('ln-sync');
 const {getPeers} = require('ln-service');
 const {returnResult} = require('asyncjs-util');
 
-const checkOfferInvoiceReply = require('./check_offer_invoice_reply');
 const invoiceRequestForOffer = require('./invoice_request_for_offer');
 const offerInvoiceFailure = require('./offer_invoice_failure');
-const replyIntroduction = require('./../network/reply_introduction');
-const {requestNetworkReply} = require('./../network');
+const requestOfferInvoice = require('./request_offer_invoice');
 const {resolvePathIntroductions} = require('./../network');
-const {typeInvoice} = require('./constants');
-const {typeInvoiceError} = require('./constants');
-const {typeInvoiceRequest} = require('./constants');
 
 const {isSafeInteger} = Number;
 const defaultTimeoutMs = 30000;
@@ -40,10 +35,24 @@ const isTimeout = n => isSafeInteger(n) && n > 0;
 
   @returns via cbk or Promise
   {
+    [description]: <Offer Description String>
     expires_at: <Invoice Expires At ISO 8601 Date String>
     id: <Payment Hash Hex String>
     invoice: <BOLT 12 Invoice String>
     mtokens: <Invoice Amount Millitokens String>
+    paths: [{
+      base_fee_mtokens: <Accumulated Base Fee Millitokens String>
+      cltv_delta: <Accumulated CLTV Expiry Delta Number>
+      fee_rate: <Accumulated Fee Rate Millitokens Per Million Number>
+      hops: [{
+        encrypted_data: <Encrypted Recipient Data Hex String>
+        relay_key: <Blinded Relaying Node Public Key Hex String>
+      }]
+      introduction_node: <Introduction Node Public Key Hex String>
+      key: <First Hop Path Key Public Key Hex String>
+      max_htlc_mtokens: <Maximum HTLC Millitokens String>
+      min_htlc_mtokens: <Minimum HTLC Millitokens String>
+    }]
     payer_id: <Payer Public Key Hex String>
     payer_secret: <Payer Secret Key Hex String>
   }
@@ -95,95 +104,101 @@ module.exports = (args, cbk) => {
           lnd: args.lnd,
           paths: request.paths,
         },
-        (err, res) => {
-          if (!!err) {
-            return cbk(err);
-          }
-
-          // Exit early when no path has a known introduction node
-          if (!res.paths.length) {
-            return cbk([503, 'FailedToFindIntroductionNodesOfOfferPaths']);
-          }
-
-          return cbk(null, res.paths);
-        });
+        cbk);
       }],
 
-      // Send the request over each path in turn until there is an invoice
-      getInvoice: [
-        'getPaths',
+      // The offer paths to send the request over
+      offerPaths: ['getPaths', ({getPaths}, cbk) => {
+        // Exit early when no path has a known introduction node
+        if (!getPaths.paths.length) {
+          return cbk([503, 'FailedToFindIntroductionNodesOfOfferPaths']);
+        }
+
+        return cbk(null, getPaths.paths);
+      }],
+
+      // Send the request over each path in turn until the recipient answers
+      getReplies: [
         'getPeers',
+        'offerPaths',
         'request',
-        ({getPaths, getPeers, request}, cbk) =>
+        ({getPeers, offerPaths, request}, cbk) =>
       {
-        const failures = [];
-
-        // Make a task to send the request over a path and check the reply
-        const requestOver = path => cbk => {
-          const {introduction} = replyIntroduction({
+        return asyncReduce(offerPaths, [], (replies, path, cbk) => {
+          return requestOfferInvoice({
             path,
-            peers: getPeers.peers,
-          });
-
-          return requestNetworkReply({
-            introduction,
-            path,
+            replies,
+            request,
             lnd: args.lnd,
-            message: {type: typeInvoiceRequest, value: request.encoded},
+            peers: getPeers.peers,
             timeout: args.timeout || defaultTimeoutMs,
-            types: [typeInvoice, typeInvoiceError],
           },
-          (err, res) => {
-            // Exit early and try the next path when there was no reply
-            if (!!err) {
-              failures.push({err});
+          cbk);
+        },
+        cbk);
+      }],
 
-              return cbk(err);
-            }
+      // The invoice the recipient answered with
+      getInvoice: ['getReplies', ({getReplies}, cbk) => {
+        const answer = getReplies.find(n => !!n.error || !!n.invoice);
 
-            const {error, invoice} = checkOfferInvoiceReply({
-              request,
-              reply: res.reply,
-            });
+        // Exit early when no path gave back an answer from the recipient
+        if (!answer) {
+          const failures = getReplies.filter(n => !!n.err);
 
-            // Exit early and stop when the recipient sent an invoice error,
-            // since it got the request and said why there is no invoice
-            if (!!error && res.reply.type === typeInvoiceError) {
-              return cbk(null, {error});
-            }
+          return cbk(offerInvoiceFailure({failures}).error);
+        }
 
-            // Exit early and try the next path when there is no good invoice
-            if (!!error) {
-              failures.push({err: error, is_reply: true});
+        // Exit early when the recipient said why there is no invoice
+        if (!!answer.error) {
+          return cbk(answer.error);
+        }
 
-              return cbk(error);
-            }
+        return cbk(null, answer.invoice);
+      }],
 
-            return cbk(null, {invoice});
-          });
-        };
+      // Find the introduction node of each invoice path, to pay over it
+      getPaymentPaths: ['getInvoice', ({getInvoice}, cbk) => {
+        return resolvePathIntroductions({
+          lnd: args.lnd,
+          paths: getInvoice.paths,
+        },
+        cbk);
+      }],
 
-        return asyncTryEach(getPaths.map(requestOver), (err, res) => {
-          if (!!err) {
-            return cbk(offerInvoiceFailure({failures}).error);
-          }
+      // The payment paths to pay the invoice over
+      paymentPaths: ['getPaymentPaths', ({getPaymentPaths}, cbk) => {
+        // Exit early when no payment path has a known introduction node
+        if (!getPaymentPaths.paths.length) {
+          return cbk([503, 'FailedToFindStartOfPaymentPathsForOfferInvoice']);
+        }
 
-          // Exit early when the recipient said why there is no invoice
-          if (!!res.error) {
-            return cbk(res.error);
-          }
-
-          return cbk(null, res.invoice);
-        });
+        return cbk(null, getPaymentPaths.paths.map(path => ({
+          base_fee_mtokens: path.base_fee_mtokens,
+          cltv_delta: path.cltv_delta,
+          fee_rate: path.fee_rate,
+          hops: path.hops,
+          introduction_node: path.introduction_node,
+          key: path.key,
+          max_htlc_mtokens: path.max_htlc_mtokens,
+          min_htlc_mtokens: path.min_htlc_mtokens,
+        })));
       }],
 
       // The invoice for the request
-      invoice: ['getInvoice', 'request', ({getInvoice, request}, cbk) => {
+      invoice: [
+        'getInvoice',
+        'paymentPaths',
+        'request',
+        ({getInvoice, paymentPaths, request}, cbk) =>
+      {
         return cbk(null, {
+          description: request.description,
           expires_at: getInvoice.expires_at,
           id: getInvoice.id,
           invoice: getInvoice.invoice,
           mtokens: getInvoice.mtokens,
+          paths: paymentPaths,
           payer_id: request.payer_id,
           payer_secret: request.payer_secret,
         });

@@ -27,6 +27,25 @@ const {typeInvoiceError} = require('./constants');
       id: <Payment Hash Hex String>
       invoice: <BOLT 12 Invoice String>
       mtokens: <Invoice Amount Millitokens String>
+      paths: [{
+        base_fee_mtokens: <Accumulated Base Fee Millitokens String>
+        cltv_delta: <Accumulated CLTV Expiry Delta Number>
+        features: [{
+          bit: <BOLT 09 Feature Bit Number>
+          is_required: <Feature Support is Required To Pay Bool>
+          type: <Feature Type String>
+        }]
+        fee_rate: <Accumulated Fee Rate Millitokens Per Million Number>
+        hops: [{
+          encrypted_data: <Encrypted Recipient Data Hex String>
+          relay_key: <Blinded Relaying Node Public Key Hex String>
+        }]
+        [introduction_edge]: <Introduction Node Edge Format Channel Id String>
+        [introduction_node]: <Introduction Node Public Key Hex String>
+        key: <First Hop Path Key Public Key Hex String>
+        max_htlc_mtokens: <Maximum HTLC Millitokens String>
+        min_htlc_mtokens: <Minimum HTLC Millitokens String>
+      }]
     }
   }
 */
@@ -77,6 +96,7 @@ module.exports = ({reply, request}) => {
       id: invoice.id,
       invoice: invoice.invoice,
       mtokens: invoice.mtokens,
+      paths: invoice.paths,
     },
   };
 };

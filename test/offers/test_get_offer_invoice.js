@@ -14,11 +14,14 @@ const network = require('./../../network');
 
 const bufferAsHex = buffer => buffer.toString('hex');
 const asKey = n => bufferAsHex(keyOf(Buffer.alloc(32, n)));
+const compareKeys = (a, b) => Buffer.compare(hexAsBuffer(a), hexAsBuffer(b));
 const hexAsBuffer = hex => Buffer.from(hex, 'hex');
 const ended = [503, 'NetworkReplyListenerEnded'];
 const keyOf = secret => Buffer.from(pointFromScalar(secret));
 const mtokens = '1000';
 const node = asKey(9);
+const notFound = {details: 'edge not found'};
+const outpoint = `${bufferAsHex(Buffer.alloc(32))}:0`;
 const past = '2025-01-01T00:00:00.000Z';
 
 // Reply to a request with the reply the fake LND has for the path
@@ -44,6 +47,7 @@ const [first, second] = [node, node].map(hop => {
 
 // The offer of the issuer of secret 1
 const offer = createOffer({
+  description: 'thing',
   issuer_id: asKey(1),
   networks: ['bitcoin'],
   paths: [first, second],
@@ -62,12 +66,42 @@ const paymentPath = {
   min_htlc_mtokens: '1',
 };
 
-// The recipient replies with an invoice for the request
-const invoice = (encoded, cbk) => {
-  const {encoded: value} = makeInvoice({encoded, paths: [paymentPath]});
+// A payment path that starts at direction 1 of a channel edge
+const edgePath = {
+  base_fee_mtokens: paymentPath.base_fee_mtokens,
+  cltv_delta: paymentPath.cltv_delta,
+  fee_rate: paymentPath.fee_rate,
+  hops: paymentPath.hops,
+  introduction_edge: '1x1x1x1',
+  key: paymentPath.key,
+  max_htlc_mtokens: paymentPath.max_htlc_mtokens,
+  min_htlc_mtokens: paymentPath.min_htlc_mtokens,
+};
+
+// The nodes of the channel of the edge, the lesser key first
+const [edgeNode1, edgeNode2] = [asKey(2), asKey(3)].sort(compareKeys);
+
+// The channel of the edge, with the greater node key listed first
+const edgeChannel = {
+  capacity: '1',
+  chan_point: outpoint,
+  channel_id: '1',
+  node1_pub: edgeNode2,
+  node2_pub: edgeNode1,
+};
+
+// The recipient replies with an invoice for the request over payment paths
+const replyWith = paths => (encoded, cbk) => {
+  const {encoded: value} = makeInvoice({encoded, paths});
 
   return cbk(null, {reply: {value, type: '66'}});
 };
+
+// The recipient replies with an invoice for the request
+const invoice = replyWith([paymentPath]);
+
+// The recipient replies with an invoice to pay over a channel edge
+const edgeInvoice = replyWith([edgePath]);
 
 // The recipient replies with an invoice that has expired
 const expired = (encoded, cbk) => {
@@ -91,11 +125,14 @@ const refused = (encoded, cbk) => {
 // There is no reply
 const unreplied = (encoded, cbk) => cbk(ended);
 
-// Make a fake LND with replies to requests over the first and second paths
-const makeTestLnd = ([toFirst, toSecond]) => {
+// Make a fake LND with replies to requests over the first and second paths,
+// that knows of a channel when it is given
+const makeTestLnd = ([toFirst, toSecond], channel) => {
   const lnd = makeLnd({});
 
-  lnd.default.getChanInfo = ({}, cbk) => cbk({details: 'edge not found'});
+  lnd.default.getChanInfo = ({}, cbk) => {
+    return cbk(!channel ? notFound : null, channel);
+  };
   lnd.default.listPeers = ({}, cbk) => cbk(null, {peers: []});
   lnd.replies = {[first.key]: toFirst, [second.key]: toSecond};
   lnd.requested = [];
@@ -119,9 +156,11 @@ const getInvoice = async args => {
   });
 
   return {
+    description: got.description,
     is_payer_key: bufferAsHex(payerKey) === got.payer_id,
     mtokens: got.mtokens,
     names: names.filter(n => !!n),
+    paths: got.paths,
     requested: tried(args.lnd),
   };
 };
@@ -153,7 +192,14 @@ const tests = [
   {
     args: {mtokens, offer, lnd: makeTestLnd([invoice, invoice])},
     description: 'An invoice is returned with the key of the payer',
-    expected: {is_payer_key: true, mtokens, names: [], requested: [1]},
+    expected: {
+      mtokens,
+      description: 'thing',
+      is_payer_key: true,
+      names: [],
+      paths: [paymentPath],
+      requested: [1],
+    },
   },
   {
     args: {
@@ -165,8 +211,10 @@ const tests = [
     description: 'The request has the name that the offer was found with',
     expected: {
       mtokens,
+      description: 'thing',
       is_payer_key: true,
       names: ['alice@example.com'],
+      paths: [paymentPath],
       requested: [1],
     },
   },
@@ -182,7 +230,14 @@ const tests = [
   {
     args: {mtokens, offer, lnd: makeTestLnd([expired, invoice])},
     description: 'An expired invoice has the next path tried',
-    expected: {is_payer_key: true, mtokens, names: [], requested: [1, 2]},
+    expected: {
+      mtokens,
+      description: 'thing',
+      is_payer_key: true,
+      names: [],
+      paths: [paymentPath],
+      requested: [1, 2],
+    },
   },
   {
     args: {mtokens, offer, lnd: makeTestLnd([expired, unreplied])},
@@ -206,6 +261,37 @@ const tests = [
     description: 'A path has to start at a node that can be found',
     error: [503, 'FailedToFindIntroductionNodesOfOfferPaths'],
     requested: [],
+  },
+  {
+    args: {
+      mtokens,
+      offer,
+      lnd: makeTestLnd([edgeInvoice, invoice], edgeChannel),
+    },
+    description: 'A payment path at an edge starts at its direction node',
+    expected: {
+      mtokens,
+      description: 'thing',
+      is_payer_key: true,
+      names: [],
+      paths: [{
+        base_fee_mtokens: edgePath.base_fee_mtokens,
+        cltv_delta: edgePath.cltv_delta,
+        fee_rate: edgePath.fee_rate,
+        hops: edgePath.hops,
+        introduction_node: edgeNode2,
+        key: edgePath.key,
+        max_htlc_mtokens: edgePath.max_htlc_mtokens,
+        min_htlc_mtokens: edgePath.min_htlc_mtokens,
+      }],
+      requested: [1],
+    },
+  },
+  {
+    args: {mtokens, offer, lnd: makeTestLnd([edgeInvoice, invoice])},
+    description: 'A payment path has to start at a node that can be found',
+    error: [503, 'FailedToFindStartOfPaymentPathsForOfferInvoice'],
+    requested: [1],
   },
 ];
 

@@ -34,11 +34,12 @@ const priced = makeOffer({description: 'thing', mtokens: '5000'});
 
 // Make a request for an offer and read it back
 const make = args => {
-  const {encoded, mtokens, paths, payer_id} = method(args);
+  const {description, encoded, mtokens, paths, payer_id} = method(args);
 
   const request = parseInvoiceRequest({encoded});
 
   return {
+    description,
     mtokens,
     paths,
     payer_id,
@@ -70,11 +71,18 @@ const makeWithSecret = args => {
 };
 
 // A request for an offer by the payer of secret 4
-const requested = ({bip353_name, mtokens, offer, payer_note}) => ({
-  mtokens,
+const requested = args => ({
+  description: args.description,
+  mtokens: args.mtokens,
   paths,
   payer_id: asKey(4),
-  request: {bip353_name, mtokens, offer, payer_note, payer_id: asKey(4)},
+  request: {
+    bip353_name: args.bip353_name,
+    mtokens: args.mtokens,
+    offer: args.offer,
+    payer_id: asKey(4),
+    payer_note: args.payer_note,
+  },
 });
 
 const tests = [
@@ -148,13 +156,21 @@ const tests = [
   {
     args: {secret, network: 'regtest', offer: priced},
     description: 'An offer with an amount is paid its amount',
-    expected: requested({mtokens: '5000', offer: priced}),
+    expected: requested({
+      description: 'thing',
+      mtokens: '5000',
+      offer: priced,
+    }),
     method: make,
   },
   {
     args: {secret, mtokens: '6000', network: 'regtest', offer: priced},
     description: 'An offer with an amount can be paid more than its amount',
-    expected: requested({mtokens: '6000', offer: priced}),
+    expected: requested({
+      description: 'thing',
+      mtokens: '6000',
+      offer: priced,
+    }),
     method: make,
   },
   {

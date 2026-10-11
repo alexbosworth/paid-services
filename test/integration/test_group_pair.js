@@ -26,7 +26,7 @@ const tokens = 1e6;
 const times = 2000;
 
 // Make a joint transaction channel group
-test(`Setup joint channel group`, async () => {
+test(`Setup joint channel pair group`, async () => {
   const {kill, nodes} = await spawnLightningCluster({size});
 
   const [control, target] = nodes;

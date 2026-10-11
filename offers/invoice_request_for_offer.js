@@ -32,6 +32,7 @@ const namePattern = /^[0-9a-zA-Z\-_.]+@[0-9a-zA-Z\-_.]+$/;
 
   @returns
   {
+    [description]: <Offer Description String>
     encoded: <Signed Invoice Request TLV Stream Hex String>
     mtokens: <Requested Millitokens String>
     paths: [{
@@ -137,6 +138,7 @@ module.exports = args => {
   });
 
   return {
+    description: details.description,
     encoded: signed.encoded,
     mtokens: amount,
     paths: details.paths,

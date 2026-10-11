@@ -1,5 +1,9 @@
 # Versions
 
+## Version 9.3.0
+
+- `getOfferInvoice`: Add `description` and `paths` to show and pay the invoice
+
 ## Version 9.2.0
 
 - `getOfferInvoice`: Add method to get an invoice for a BOLT 12 offer
