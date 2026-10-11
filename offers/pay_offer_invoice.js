@@ -11,6 +11,9 @@ const isMtokens = n => typeof n === 'string' && /^\d+$/.test(n);
 
 /** Pay a BOLT 12 invoice over its blinded payment paths
 
+  The invoice is not checked against an offer. Pay an invoice from
+  `getOfferInvoice`, which checks that it is for the offer and amount asked.
+
   {
     invoice: <BOLT 12 Invoice String>
     lnd: <Authenticated LND API Object>

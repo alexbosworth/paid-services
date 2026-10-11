@@ -73,5 +73,5 @@
     "integration-tests": "node test/integration",
     "test": "node --experimental-test-coverage --test test/actions/*.js test/balanced/*.js test/client/*.js test/config/*.js test/network/*.js test/offers/*.js test/p2p/*.js test/records/*.js test/respond/*.js test/server/*.js test/service_records/*.js test/swaps/*.js test/services/*.js test/support/*.js test/trades/*.js"
   },
-  "version": "9.1.0"
+  "version": "9.2.0"
 }

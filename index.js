@@ -7,6 +7,7 @@ const {createSupportOffer} = require('./support');
 const {decodeTrade} = require('./trades');
 const {encodeTrade} = require('./trades');
 const {getAnchoredTrade} = require('./trades');
+const {getOfferInvoice} = require('./offers');
 const {getServiceSchema} = require('./client');
 const {getServicesList} = require('./client');
 const {joinGroupChannel} = require('./groups');
@@ -16,6 +17,7 @@ const {makeServiceRequest} = require('./client');
 const {manageGroupJoin} = require('./groups');
 const {manageSwap} = require('./swaps');
 const {manageTrades} = require('./trades');
+const {payOfferInvoice} = require('./offers');
 const {schema} = require('./services');
 const {serviceAnchoredTrades} = require('./trades');
 const {servicePaidRequests} = require('./server');
@@ -34,6 +36,7 @@ module.exports = {
   decodeTrade,
   encodeTrade,
   getAnchoredTrade,
+  getOfferInvoice,
   getServiceSchema,
   getServicesList,
   joinGroupChannel,
@@ -43,6 +46,7 @@ module.exports = {
   manageGroupJoin,
   manageSwap,
   manageTrades,
+  payOfferInvoice,
   serviceAnchoredTrades,
   serviceIds,
   servicePaidRequests,

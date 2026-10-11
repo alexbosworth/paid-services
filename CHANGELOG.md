@@ -1,5 +1,10 @@
 # Versions
 
+## Version 9.2.0
+
+- `getOfferInvoice`: Add method to get an invoice for a BOLT 12 offer
+- `payOfferInvoice`: Add method to pay a BOLT 12 invoice
+
 ## Version 9.1.0
 
 - `createGroupFanout`: Fix error response for an invalid key spend signature
