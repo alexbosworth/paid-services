@@ -176,23 +176,32 @@ module.exports = ({delay, ids, lnd}) => {
 
     const {encrypted, key, reply} = received;
 
-    let outbound;
+    let route;
 
-    // The route to the reply path is found once for a message
-    const getOutbound = () => {
+    // The route to the reply path, the hops and key to send over and the
+    // outbound hops to reach them, is found once for a message
+    const getRoute = () => {
       // Exit early when the route was already found or is being found
-      if (!!outbound) {
-        return outbound;
+      if (!!route) {
+        return route;
       }
 
-      const lookup = getPathOutbound({lnd, path: reply});
+      const lookup = getPathOutbound({
+        lnd,
+        path: {
+          hops: reply.inbound,
+          introduction_edge: reply.introduction_edge,
+          introduction_node: reply.introduction_node,
+          key: reply.key,
+        },
+      });
 
-      outbound = lookup;
+      route = lookup;
 
       // A failed lookup is not kept, so that a later reply can try again
       lookup.catch(() => {
-        if (outbound === lookup) {
-          outbound = undefined;
+        if (route === lookup) {
+          route = undefined;
         }
       });
 
@@ -224,7 +233,7 @@ module.exports = ({delay, ids, lnd}) => {
 
       // The caller is told outside of the promise chain, so that a throw in
       // the caller is not taken as a failure to send
-      return getOutbound()
+      return getRoute()
         .then(res => {
           // Exit early when the service stopped while the route was found
           if (isStopped) {
@@ -236,7 +245,7 @@ module.exports = ({delay, ids, lnd}) => {
             lnd,
             reply,
             message: response,
-            outbound: res.outbound,
+            route: res,
           });
         })
         .then(() => setImmediate(() => done()), err => {
@@ -253,11 +262,11 @@ module.exports = ({delay, ids, lnd}) => {
 
       // The caller is told outside of the promise chain, so that it is only
       // called once, even when it throws
-      return getOutbound()
+      return getRoute()
         .then(res => regularReplyBytes({
           type,
-          inbound: reply.inbound,
-          key: reply.key,
+          inbound: res.hops,
+          key: res.key,
           outbound: res.outbound,
         }))
         .then(res => setImmediate(() => cbk(null, res)), err => {

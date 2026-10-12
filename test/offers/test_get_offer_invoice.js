@@ -47,15 +47,26 @@ mock.method(network, 'requestNetworkReply', fakeReply);
 
 const method = require('./../../offers/get_offer_invoice');
 
-// Two offer paths, which each have their own key
-const [first, second] = [node, node].map(hop => {
-  const {key, path} = blindedPathFromHops({hops: [hop]});
+// The payer is the node of secret 4
+const payer = asKey(4);
 
-  return {key, hops: path, introduction_node: hop};
-});
+// Make an offer path through hops, which starts at the first hop
+const makePath = hops => {
+  const [introduction] = hops;
+
+  const {key, path} = blindedPathFromHops({hops});
+
+  return {key, hops: path, introduction_node: introduction};
+};
+
+// Two offer paths, which each have their own key
+const [first, second] = [[node], [node]].map(makePath);
+
+// An offer path that starts at the payer
+const fromPayer = makePath([payer, node]);
 
 // The offer paths by their number
-const pathNumbers = {[first.key]: 1, [second.key]: 2};
+const pathNumbers = {[first.key]: 1, [second.key]: 2, [fromPayer.key]: 3};
 
 // The issuer of the offers is the node of secret 1
 const issuer = asKey(1);
@@ -72,6 +83,9 @@ const makeOffer = args => createOffer({
 
 // The offer of the issuer of secret 1
 const offer = makeOffer({});
+
+// An offer of the issuer with a path that starts at the payer
+const fromPayerOffer = makeOffer({paths: [fromPayer]});
 
 // An offer of the issuer of secret 1 that has no paths
 const issuerOnly = createOffer({
@@ -183,9 +197,14 @@ const signMessage = ({key_loc, msg, tag}, cbk) => {
 const makeTestLnd = ([toFirst, toSecond], channel) => {
   const lnd = makeLnd({});
 
+  const {getInfo} = lnd.default;
+
   lnd.default.getChanInfo = ({}, cbk) => {
     return cbk(!channel ? notFound : null, channel);
   };
+  lnd.default.getInfo = (args, cbk) => getInfo(args, (err, res) => {
+    return cbk(err, {...res, identity_pubkey: payer});
+  });
   lnd.replies = {[first.key]: toFirst, [second.key]: toSecond};
   lnd.requested = [];
   lnd.sent = [];
@@ -194,6 +213,9 @@ const makeTestLnd = ([toFirst, toSecond], channel) => {
 
   // A request sent to the issuer over a path made to it gets the first reply
   lnd.replies[issuer] = toFirst;
+
+  // A request sent over the path that starts at the payer gets the first reply
+  lnd.replies[fromPayer.key] = toFirst;
 
   // The keys that are derived for the request
   lnd.derived = [];
@@ -351,6 +373,25 @@ const tests = [
       paths: [paymentPath],
       payer_key_index: 1,
       requested: [1],
+    },
+  },
+  {
+    args: {
+      mtokens,
+      lnd: makeTestLnd([invoice, invoice]),
+      offer: fromPayerOffer,
+    },
+    description: 'An offer path that starts at the payer is requested over',
+    expected: {
+      mtokens,
+      description: 'thing',
+      features: [],
+      is_payer_key: true,
+      is_signed_by_payer: true,
+      names: [],
+      paths: [paymentPath],
+      payer_key_index: 1,
+      requested: [3],
     },
   },
   {

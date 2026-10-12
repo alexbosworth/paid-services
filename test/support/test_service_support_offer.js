@@ -26,7 +26,9 @@ const supportNoteFor = require('./../../support/support_note_for_invoice');
 
 const asKey = n => Buffer.from(pointFromScalar(Buffer.alloc(32, n)))
   .toString('hex');
+const bufferAsHex = buffer => buffer.toString('hex');
 const hexAsBuffer = hex => Buffer.from(hex, 'hex');
+const identityKeyFamily = 6;
 const pathId = Buffer.alloc(32, 1).toString('hex');
 const secret = Buffer.alloc(32, 1);
 const sha256 = n => createHash('sha256').update(n).digest();
@@ -142,9 +144,10 @@ const payerOffer = bytes => ({
     .encoded,
 });
 
-// Make an RPC onion message with a request on the offer path
-const makeReceived = (value, replyHops, isLarge) => {
-  const hops = Array(replyHops || 1).fill(peer);
+// Make an RPC onion message with a request on the offer path, with a reply
+// path through hops, which starts at the first hop
+const makeReceivedOver = ({hops, isLarge, value}) => {
+  const [introduction] = hops;
 
   const reply = blindedPathFromHops({hops});
 
@@ -160,10 +163,18 @@ const makeReceived = (value, replyHops, isLarge) => {
         encrypted_data: hexAsBuffer(hop.encrypted_data),
       })),
       blinding_point: hexAsBuffer(reply.key),
-      introduction_node: hexAsBuffer(peer),
+      introduction_node: hexAsBuffer(introduction),
     },
   };
 };
+
+// Make an RPC onion message with a request on the offer path, with a reply
+// path of a number of hops through the peer
+const makeReceived = (value, replyHops, isLarge) => makeReceivedOver({
+  isLarge,
+  value,
+  hops: Array(replyHops || 1).fill(peer),
+});
 
 // The blinded payment path of invoices made by the fake LND
 const paymentPath = blindedPathFromHops({hops: [peer, identity]});
@@ -233,10 +244,14 @@ const makeRpcInvoice = ({expiry, index, memo, value_msat}) => {
 const makeLnd = ({is_paying, key, on_invoice, signs}) => {
   const counts = {invoices: 0, record_keys: 0, replies: [], signatures: 0};
   const created = new Map();
+  const signingKey = key || issuer;
   const subscriptions = [];
   const updates = new EventEmitter();
 
   updates.cancel = () => {};
+
+  // The node identity key is derived in its own key family
+  const keyIn = family => family === identityKeyFamily ? identity : signingKey;
 
   // Each subscription to messages is a new stream
   const subscribe = () => {
@@ -297,9 +312,14 @@ const makeLnd = ({is_paying, key, on_invoice, signs}) => {
           sync_type: 'ACTIVE_SYNC',
         }],
       }),
-      // Replies are counted by their size
-      sendOnionMessage: ({onion}, cbk) => {
-        counts.replies.push(onion.length);
+      // Replies are counted by their size, and only the peer is connected
+      sendOnionMessage: (args, cbk) => {
+        // Exit early when the reply is not sent to the connected peer
+        if (bufferAsHex(args.peer) !== peer) {
+          return cbk({details: 'peer is not connected'});
+        }
+
+        counts.replies.push(args.onion.length);
 
         return cbk();
       },
@@ -313,7 +333,7 @@ const makeLnd = ({is_paying, key, on_invoice, signs}) => {
     wallet: {
       deriveKey: ({key_family, key_index}, cbk) => cbk(null, {
         key_loc: {key_family, key_index},
-        raw_key_bytes: hexAsBuffer(key || issuer),
+        raw_key_bytes: hexAsBuffer(keyIn(key_family)),
       }),
     },
     signer: {
@@ -917,6 +937,22 @@ const tests = [
     args: {steps: [{received: [makeReceived(request, 20)]}]},
     description: 'An error that does not fit in the reply is not sent',
     expected: {...idle, errors: [[503, 'ErrorSendingInvoiceError']]},
+  },
+  {
+    args: {
+      is_paying: true,
+      steps: [{
+        received: [makeReceivedOver({hops: [identity, peer], value: request})],
+      }],
+    },
+    description: 'A reply path that starts at the server is sent to its peer',
+    expected: {
+      ...idle,
+      invoices: 1,
+      replies: [1366],
+      sent: [sentInvoice],
+      signatures: 2,
+    },
   },
   {
     args: {

@@ -12,5 +12,7 @@
   "codeInvalidArgument": 3,
   "codePermissionDenied": 7,
   "codeUnauthenticated": 16,
-  "codeUnimplemented": 12
+  "codeUnimplemented": 12,
+  "knownHopRecordTypes": ["1", "2", "4", "6", "8", "10", "12", "14"],
+  "typePathId": "6"
 }

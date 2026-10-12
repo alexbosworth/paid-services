@@ -29,11 +29,11 @@ const typeSchnorr = 'schnorr';
   The request is sent over each path of the offer in turn, waiting `timeout`
   for each, until a path gives back an invoice, or the recipient replies
   with an invoice error, which is returned. An offer without paths has the
-  request sent to its issuer id. The reply path of a request goes back along
-  its route, so that the recipient can reach it. The route to the start of a
-  path is found over the public graph and the channels of the payer, so a
-  payer that is only connected through a peer that is itself private is not
-  supported.
+  request sent to its issuer id. A path that starts at the payer is sent
+  from its next node. The reply path of a request goes back along its route,
+  so that the recipient can reach it. The route to the start of a path is
+  found over the public graph and the channels of the payer, so a payer that
+  is only connected through a peer that is itself private is not supported.
 
   The request is signed by the `payer_id`, a new key that LND derives in key
   family 808 at `payer_key_index`, only once the request is known to be one

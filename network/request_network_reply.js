@@ -27,6 +27,9 @@ const isTimeout = n => isSafeInteger(n) && n > 0;
   than `max_reply_hops` keeps the hops nearest self, and the recipient routes
   to its start.
 
+  A path that starts at self is sent from the next node of the path, and the
+  reply path goes back from there.
+
   {
     lnd: <Authenticated LND API Object>
     [max_reply_hops]: <Maximum Reply Path Hops Count Number>
@@ -135,9 +138,9 @@ module.exports = (args, cbk) => {
       {
         const {outbound} = getOutbound;
 
-        // The outbound hops end at the introduction node of the path, which
-        // is the recipient itself when the path has a single hop
-        const isRecipient = args.path.hops.length === 1;
+        // The outbound hops end at the introduction node of the hops that are
+        // sent, which is the recipient itself when there is a single hop
+        const isRecipient = getOutbound.hops.length === 1;
 
         const relays = !isRecipient ? outbound : outbound.slice(0, -1);
 
@@ -258,8 +261,8 @@ module.exports = (args, cbk) => {
 
         // Send the message with a reply path back the way it goes
         const sending = sendMessage({
-          inbound: args.path.hops,
-          key: args.path.key,
+          inbound: getOutbound.hops,
+          key: getOutbound.key,
           lnd: args.lnd,
           message: args.message,
           outbound: getOutbound.outbound,

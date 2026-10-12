@@ -14,8 +14,8 @@ const largeOnionBytes = 32834;
 
   With `is_regular`, the response is only sent when it fits in an onion
   message of the regular size. Otherwise it has to fit in a large one. A
-  response that does not fit is a 413 error. Give the `outbound` hops to the
-  reply path when they are known.
+  response that does not fit is a 413 error. Give the `route` to the reply
+  path when it is known, as found by `getPathOutbound`.
 
   {
     [is_regular]: <Only Send In An Onion Message Of The Regular Size Bool>
@@ -33,7 +33,14 @@ const largeOnionBytes = 32834;
       [introduction_node]: <Introduction Node Public Key Hex String>
       key: <Path Key Hex String>
     }
-    [outbound]: [<Relaying Node Public Key Hex String>]
+    [route]: {
+      hops: [{
+        encrypted_data: <Encrypted Data Hex String>
+        relay_key: <Blinded Relay Key Hex String>
+      }]
+      key: <Path Key Hex String>
+      outbound: [<Relaying Node Public Key Hex String>]
+    }
   }
 
   @returns via cbk or Promise
@@ -58,23 +65,32 @@ module.exports = (args, cbk) => {
         return cbk();
       },
 
-      // Determine the outbound hops to reach the reply path
-      getOutbound: ['validate', ({}, cbk) => {
-        // Exit early when the outbound hops are already known
-        if (!!args.outbound) {
-          return cbk(null, {outbound: args.outbound});
+      // Determine the route to the reply path: the hops and key to send over
+      getRoute: ['validate', ({}, cbk) => {
+        // Exit early when the route is already known
+        if (!!args.route) {
+          return cbk(null, args.route);
         }
 
-        return getPathOutbound({lnd: args.lnd, path: args.reply}, cbk);
+        return getPathOutbound({
+          lnd: args.lnd,
+          path: {
+            hops: args.reply.inbound,
+            introduction_edge: args.reply.introduction_edge,
+            introduction_node: args.reply.introduction_node,
+            key: args.reply.key,
+          },
+        },
+        cbk);
       }],
 
       // Check that the response fits in an onion message that can be sent
-      checkSize: ['getOutbound', ({getOutbound}, cbk) => {
+      checkSize: ['getRoute', ({getRoute}, cbk) => {
         try {
           const {onion} = onionForPath({
-            inbound: args.reply.inbound,
-            key: args.reply.key,
-            outbound: getOutbound.outbound,
+            inbound: getRoute.hops,
+            key: getRoute.key,
+            outbound: getRoute.outbound,
             records: [args.message],
           });
 
@@ -99,13 +115,13 @@ module.exports = (args, cbk) => {
       }],
 
       // Send the response message through the reply path
-      send: ['checkSize', 'getOutbound', ({getOutbound}, cbk) => {
+      send: ['checkSize', 'getRoute', ({getRoute}, cbk) => {
         return sendMessage({
-          inbound: args.reply.inbound,
-          key: args.reply.key,
+          inbound: getRoute.hops,
+          key: getRoute.key,
           lnd: args.lnd,
           message: args.message,
-          outbound: getOutbound.outbound,
+          outbound: getRoute.outbound,
         },
         cbk);
       }],

@@ -23,7 +23,11 @@ const sha256 = n => createHash('sha256').update(n).digest();
 // The node identity public key for a secret of 32 bytes of 0x01
 const identity = bufferAsHex(Buffer.from(pointMultiply(generator, secret)));
 
+const lengthsOf = lists => lists.map(([list]) => list.length).join(',');
+const nextTick = () => new Promise(resolve => setImmediate(resolve));
+const now = () => Date.now();
 const wait = () => new Promise(resolve => setTimeout(resolve, 50));
+const waitLimitMs = 1000 * 5;
 
 // Errors that the stream of messages can fail with
 const denied = {code: 7, details: 'permission denied'};
@@ -42,6 +46,28 @@ const typeAsKey = type => {
   bytes.writeBigUInt64LE(BigInt(type));
 
   return bytes.toString('latin1');
+};
+
+// Wait for the service to finish what the test expects of it: for its
+// callbacks and events to fill the lists to the lengths expected, turn by turn
+// of the event loop, and then for the turns that add anything more to end. A
+// service that never finishes is given up on after a limit, so that its test
+// fails instead of hanging.
+const untilFinished = async lists => {
+  const isFilling = () => lists.some(([list, length]) => list.length < length);
+  const limit = now() + waitLimitMs;
+
+  while (isFilling() && now() < limit) {
+    await nextTick();
+  }
+
+  let lengths;
+
+  do {
+    lengths = lengthsOf(lists);
+
+    await nextTick();
+  } while (lengthsOf(lists) !== lengths);
 };
 
 // Make a fake LND that delivers messages on each subscription to them, and
@@ -102,6 +128,13 @@ const makeLnd = ({failPeers, subscribes}) => {
         });
       }),
     },
+    wallet: {
+      // The node identity key is derived
+      deriveKey: ({key_family, key_index}, cbk) => cbk(null, {
+        key_loc: {key_family, key_index},
+        raw_key_bytes: hexAsBuffer(identity),
+      }),
+    },
   };
 
   return {lnd, sent, subscriptions};
@@ -137,8 +170,9 @@ const summary = sent => sent.map(n => ({
   size: n.onion.length,
 }));
 
-// Service messages of type 64 with a listener and give the service messages
-const serve = async args => {
+// Service messages of type 64 with a listener and give the service messages,
+// waiting for what the test expects of the service
+const serve = async (args, expected) => {
   const {lnd, sent, subscriptions} = makeLnd({failPeers: args.fail_peers});
   const got = [];
 
@@ -161,7 +195,10 @@ const serve = async args => {
     service.stop({});
   }
 
-  await wait();
+  await untilFinished([
+    [got, expected.got.length],
+    [sent, expected.sent.length],
+  ]);
 
   service.stop({});
 
@@ -170,8 +207,8 @@ const serve = async args => {
 
 // Service messages, fail the stream with events, and see if the stream is
 // subscribed to again after the delay, with messages on the new stream
-// reaching the listener
-const resubscribe = async args => {
+// reaching the listener, waiting for what the test expects of the service
+const resubscribe = async (args, expected) => {
   const {lnd, subscriptions} = makeLnd({subscribes: args.subscribes});
   const got = [];
 
@@ -197,6 +234,8 @@ const resubscribe = async args => {
     service.stop({});
   }
 
+  // The delay to subscribe again is a timer, which goes off before a longer
+  // wait does, whether or not the service is slowed down
   await wait();
 
   // Messages arrive on the newest stream
@@ -204,7 +243,7 @@ const resubscribe = async args => {
 
   (args.received || []).forEach(n => current.emit('data', makeReceived(n)));
 
-  await wait();
+  await untilFinished([[got, expected.got.length]]);
 
   const receivers = service.receivers();
 
@@ -213,8 +252,9 @@ const resubscribe = async args => {
   return {got, receivers, subscriptions: subscriptions.length};
 };
 
-// Service requests of type 0 and give the service messages
-const serveRequests = async ({is_stopping, received, records}) => {
+// Service requests of type 0 and give the service messages, waiting for what
+// the test expects of the service
+const serveRequests = async ({is_stopping, received, records}, expected) => {
   const {lnd, sent, subscriptions} = makeLnd({});
   const got = [];
 
@@ -235,7 +275,10 @@ const serveRequests = async ({is_stopping, received, records}) => {
 
   received.forEach(n => subscription.emit('data', makeReceived(n)));
 
-  await wait();
+  await untilFinished([
+    [got, expected.got.length],
+    [sent, expected.sent.length],
+  ]);
 
   service.stop({});
 
@@ -629,6 +672,8 @@ tests.forEach(({args, description, error, expected, method}) => {
       return await rejects(method(args), new Error(error), 'Got error');
     }
 
-    deepStrictEqual(await method(args), expected, 'Got expected result');
+    const got = await method(args, expected);
+
+    deepStrictEqual(got, expected, 'Got expected result');
   });
 });

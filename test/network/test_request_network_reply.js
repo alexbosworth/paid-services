@@ -18,6 +18,7 @@ const g = '79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798';
 const generator = Buffer.from(`02${g}`, 'hex');
 const hexAsBuffer = hex => Buffer.from(hex, 'hex');
 const nextTick = () => new Promise(resolve => setImmediate(resolve));
+const now = () => Date.now();
 const otherId = bufferAsHex(Buffer.alloc(32, 4));
 const peer = `03${g}`;
 const replyId = bufferAsHex(Buffer.alloc(32, 3));
@@ -25,6 +26,7 @@ const secret = Buffer.alloc(32, 1);
 const {sendMessage} = lnService;
 const sentWithReplyId = () => ({reply: replyId});
 const sha256 = n => createHash('sha256').update(n).digest();
+const waitLimitMs = 1000 * 5;
 
 // The node identity public key for a secret of 32 bytes of 0x01
 const identity = bufferAsHex(Buffer.from(pointMultiply(generator, secret)));
@@ -36,8 +38,6 @@ const relay = asKey(4);
 
 // A connected peer that has a channel with self
 const partner = asKey(5);
-
-const wait = () => new Promise(resolve => setTimeout(resolve, 50));
 
 // Reply path ids are random, so sent messages are given a known reply path id,
 // and the reply path of a sent message is kept to check its hops
@@ -181,14 +181,29 @@ const makeArgs = ({lnd, overrides}) => {
   return args;
 };
 
+// Wait for the request to be sent, which is when it listens for a reply, or
+// for it to finish before it is sent. A request that does neither is given
+// up on after a limit, so that its test fails instead of hanging.
+const untilSent = async ({requesting, sent}) => {
+  const limit = now() + waitLimitMs;
+
+  let isFinished = false;
+
+  requesting.then(() => isFinished = true, () => isFinished = true);
+
+  while (!sent.length && !isFinished && now() < limit) {
+    await nextTick();
+  }
+};
+
 // Request a reply, give the stream events, and get the result
 const request = async ({events, isUnsupported, overrides}) => {
-  const {lnd, subscription} = makeTestLnd({isUnsupported});
+  const {lnd, sent, subscription} = makeTestLnd({isUnsupported});
 
   // Failures are caught at once since they can come before the events
   const requesting = method(makeArgs({lnd, overrides})).catch(err => ({err}));
 
-  await wait();
+  await untilSent({requesting, sent});
 
   events.forEach(([event, data]) => subscription.emit(event, data));
 
@@ -197,8 +212,9 @@ const request = async ({events, isUnsupported, overrides}) => {
 
 // Request a reply over a path through hops, with the introduction node
 // reached through relays when it is not a peer, and get the reply path hops
+// and the peer that the request was sent to
 const replyHops = async ({hops, isChannelsOnly, maxHops, relays}) => {
-  const {lnd, subscription} = makeTestLnd({isChannelsOnly});
+  const {lnd, sent, subscription} = makeTestLnd({isChannelsOnly});
 
   fakes.routes = !relays ? [] : [routeThrough(relays)];
 
@@ -214,15 +230,16 @@ const replyHops = async ({hops, isChannelsOnly, maxHops, relays}) => {
     },
   }));
 
-  await wait();
+  await untilSent({requesting, sent});
 
   subscription.emit('data', makeReceived({id: replyId, type: '66'}));
 
   await requesting;
 
   const [reply] = lnd.replies;
+  const [request] = sent;
 
-  return {reply};
+  return {reply, to: bufferAsHex(request.peer)};
 };
 
 // Request a reply that never comes and check the default timeout
@@ -310,43 +327,55 @@ const tests = [
   {
     args: {hops: [peer, recipient]},
     description: 'The reply path starts at an introduction node that is a peer',
-    expected: {reply: [peer, identity]},
+    expected: {reply: [peer, identity], to: peer},
     method: replyHops,
   },
   {
     args: {hops: [other, recipient], relays: [peer, relay]},
     description: 'The reply path goes back through relays to the introduction',
-    expected: {reply: [other, relay, peer, identity]},
+    expected: {reply: [other, relay, peer, identity], to: peer},
     method: replyHops,
   },
   {
     args: {hops: [peer]},
     description: 'The reply path to a recipient that is a peer is only self',
-    expected: {reply: [identity]},
+    expected: {reply: [identity], to: peer},
     method: replyHops,
   },
   {
     args: {hops: [other], relays: [peer, relay]},
     description: 'The reply path to a relayed recipient starts at its relay',
-    expected: {reply: [relay, peer, identity]},
+    expected: {reply: [relay, peer, identity], to: peer},
     method: replyHops,
   },
   {
     args: {hops: [peer, recipient], isChannelsOnly: true, relays: [partner]},
     description: 'The reply path ends over a channel when self needs one',
-    expected: {reply: [peer, partner, identity]},
+    expected: {reply: [peer, partner, identity], to: partner},
     method: replyHops,
   },
   {
     args: {hops: [other, recipient], maxHops: 3, relays: [peer, relay]},
     description: 'A reply path over the maximum keeps the hops nearest self',
-    expected: {reply: [relay, peer, identity]},
+    expected: {reply: [relay, peer, identity], to: peer},
     method: replyHops,
   },
   {
     args: {hops: [other, recipient], maxHops: 4, relays: [peer, relay]},
     description: 'A reply path within the maximum is whole',
-    expected: {reply: [other, relay, peer, identity]},
+    expected: {reply: [other, relay, peer, identity], to: peer},
+    method: replyHops,
+  },
+  {
+    args: {hops: [identity, peer]},
+    description: 'A path that starts at self is sent to the next node',
+    expected: {reply: [identity], to: peer},
+    method: replyHops,
+  },
+  {
+    args: {hops: [identity, peer, recipient]},
+    description: 'A path that starts at self has its reply path from the next',
+    expected: {reply: [peer, identity], to: peer},
     method: replyHops,
   },
   {
