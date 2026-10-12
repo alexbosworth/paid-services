@@ -2,7 +2,6 @@ const asyncAuto = require('async/auto');
 const asyncReduce = require('async/reduce');
 const {createSignedInvoiceRequest} = require('invoices');
 const {getNetwork} = require('ln-sync');
-const {getPeers} = require('ln-service');
 const {getPublicKey} = require('ln-service');
 const {pointFromScalar} = require('tiny-secp256k1');
 const {returnResult} = require('asyncjs-util');
@@ -30,7 +29,11 @@ const typeSchnorr = 'schnorr';
   The request is sent over each path of the offer in turn, waiting `timeout`
   for each, until a path gives back an invoice, or the recipient replies
   with an invoice error, which is returned. An offer without paths has the
-  request sent to its issuer id.
+  request sent to its issuer id. The reply path of a request goes back along
+  its route, so that the recipient can reach it. The route to the start of a
+  path is found over the public graph and the channels of the payer, so a
+  payer that is only connected through a peer that is itself private is not
+  supported.
 
   The request is signed by the `payer_id`, a new key that LND derives in key
   family 808 at `payer_key_index`, only once the request is known to be one
@@ -99,9 +102,6 @@ module.exports = (args, cbk) => {
       // Get the network of the node to pay the offer on
       getNetwork: ['validate', ({}, cbk) => getNetwork({lnd: args.lnd}, cbk)],
 
-      // Get the connected peers to start the reply path at one of them
-      getPeers: ['validate', ({}, cbk) => getPeers({lnd: args.lnd}, cbk)],
-
       // Make the request with a placeholder payer id, to check that it can be
       // made before a payer key is derived for it
       checkRequest: ['getNetwork', ({getNetwork}, cbk) => {
@@ -119,7 +119,7 @@ module.exports = (args, cbk) => {
         }
       }],
 
-      // Find the introduction node of each offer path, to not reply from it
+      // Find the introduction node of each offer path to send the request to
       getPaths: ['checkRequest', ({checkRequest}, cbk) => {
         return resolvePathIntroductions({
           lnd: args.lnd,
@@ -191,19 +191,13 @@ module.exports = (args, cbk) => {
       }],
 
       // Send the request over each path in turn until the recipient answers
-      getReplies: [
-        'getPeers',
-        'offerPaths',
-        'request',
-        ({getPeers, offerPaths, request}, cbk) =>
-      {
+      getReplies: ['offerPaths', 'request', ({offerPaths, request}, cbk) => {
         return asyncReduce(offerPaths, [], (replies, path, cbk) => {
           return requestOfferInvoice({
             path,
             replies,
             request,
             lnd: args.lnd,
-            peers: getPeers.peers,
             timeout: args.timeout || defaultTimeoutMs,
           },
           cbk);

@@ -17,7 +17,8 @@ const peerRequestType = 32768;
 const typeNetworkRequest = '32769';
 
 /** Make a network request over onion messages, sent over a blinded path of
-  the destination, with the response returned over a reply path to self
+  the destination, with the response returned over a reply path back along
+  the route of the request
 
   The request fails when no response arrives within the `timeout`.
 

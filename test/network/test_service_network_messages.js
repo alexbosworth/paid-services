@@ -25,6 +25,16 @@ const identity = bufferAsHex(Buffer.from(pointMultiply(generator, secret)));
 
 const wait = () => new Promise(resolve => setTimeout(resolve, 50));
 
+// Errors that the stream of messages can fail with
+const denied = {code: 7, details: 'permission denied'};
+const unavailable = {code: 14, details: 'read ECONNRESET'};
+
+// The error reported when the stream fails with an unavailable LND
+const failed = [503, 'NetworkMessagesSubscriptionFailed', {err: unavailable}];
+const unimplemented = {code: 12, details: 'unknown service'};
+const unsupported = {details: 'unknown method SubscribeOnionMessages'};
+const unverified = {code: 2, details: 'verification failed: bad signature'};
+
 // RPC uint64 map keys are eight little-endian bytes
 const typeAsKey = type => {
   const bytes = Buffer.alloc(8);
@@ -34,15 +44,29 @@ const typeAsKey = type => {
   return bytes.toString('latin1');
 };
 
-// Make a fake LND that delivers a message and records sent messages
-const makeLnd = ({failPeers}) => {
+// Make a fake LND that delivers messages on each subscription to them, and
+// records sent messages, and that can stop giving subscriptions
+const makeLnd = ({failPeers, subscribes}) => {
   const sent = [];
-  const subscription = new EventEmitter();
+  const subscriptions = [];
 
   // Getting peers can fail a number of times before it works
   let failures = failPeers || Number();
 
-  subscription.cancel = () => {};
+  // Each subscription to messages is a new stream, while there are more
+  const subscribe = () => {
+    if (subscriptions.length === subscribes) {
+      throw new Error('ChannelClosed');
+    }
+
+    const subscription = new EventEmitter();
+
+    subscription.cancel = () => {};
+
+    subscriptions.push(subscription);
+
+    return subscription;
+  };
 
   const lnd = {
     default: {
@@ -68,7 +92,7 @@ const makeLnd = ({failPeers}) => {
 
         return cbk();
       },
-      subscribeOnionMessages: () => subscription,
+      subscribeOnionMessages: subscribe,
     },
     signer: {
       // Shared keys are derived after a moment, like over the network
@@ -80,7 +104,7 @@ const makeLnd = ({failPeers}) => {
     },
   };
 
-  return {lnd, sent, subscription};
+  return {lnd, sent, subscriptions};
 };
 
 // Make an RPC onion message received on a path to self
@@ -115,10 +139,12 @@ const summary = sent => sent.map(n => ({
 
 // Service messages of type 64 with a listener and give the service messages
 const serve = async args => {
-  const {lnd, sent, subscription} = makeLnd({failPeers: args.fail_peers});
+  const {lnd, sent, subscriptions} = makeLnd({failPeers: args.fail_peers});
   const got = [];
 
-  const service = method({ids: args.ids, lnd});
+  const service = method({lnd, delay: args.delay, ids: args.ids});
+
+  const [subscription] = subscriptions;
 
   service.end(() => got.push('ended'));
   service.error(err => got.push({err}));
@@ -137,25 +163,64 @@ const serve = async args => {
 
   await wait();
 
-  // The stream of messages can close
-  if (!!args.is_ending) {
-    subscription.emit('end');
-    subscription.emit('data', makeReceived(args.received[0]));
-
-    await wait();
-  }
-
   service.stop({});
 
   return {got, sent: summary(sent)};
 };
 
+// Service messages, fail the stream with events, and see if the stream is
+// subscribed to again after the delay, with messages on the new stream
+// reaching the listener
+const resubscribe = async args => {
+  const {lnd, subscriptions} = makeLnd({subscribes: args.subscribes});
+  const got = [];
+
+  const service = method({lnd, delay: 1});
+
+  const [subscription] = subscriptions;
+
+  service.end(() => got.push('ended'));
+  service.message({type: '64'}, msg => got.push(msg.value));
+
+  // The error listener can stop the service when it is told of the failure
+  service.error(err => {
+    got.push({err});
+
+    return !args.is_stopping_on_error ? undefined : service.stop({});
+  });
+
+  // The stream fails, and can send more than one event when it does
+  args.events.forEach(([event, data]) => subscription.emit(event, data));
+
+  // The service can be stopped while waiting to subscribe again
+  if (!!args.is_stopping) {
+    service.stop({});
+  }
+
+  await wait();
+
+  // Messages arrive on the newest stream
+  const [current] = subscriptions.slice(-1);
+
+  (args.received || []).forEach(n => current.emit('data', makeReceived(n)));
+
+  await wait();
+
+  const receivers = service.receivers();
+
+  service.stop({});
+
+  return {got, receivers, subscriptions: subscriptions.length};
+};
+
 // Service requests of type 0 and give the service messages
 const serveRequests = async ({is_stopping, received, records}) => {
-  const {lnd, sent, subscription} = makeLnd({});
+  const {lnd, sent, subscriptions} = makeLnd({});
   const got = [];
 
   const service = serviceNetworkRequests({lnd});
+
+  const [subscription] = subscriptions;
 
   service.error(err => got.push({err}));
 
@@ -268,12 +333,116 @@ const tests = [
   },
   {
     args: {
-      is_ending: true,
-      listen: (msg, {}, push) => push(msg.value),
+      events: [['error', unavailable]],
       received: [{type: '64', value: '00'}],
     },
-    description: 'The service ends when the stream of messages closes',
-    expected: {got: ['00', 'ended'], sent: []},
+    description: 'A stream that fails is subscribed to again after the delay',
+    expected: {got: [{err: failed}, '00'], receivers: 1, subscriptions: 2},
+    method: resubscribe,
+  },
+  {
+    args: {events: [['end']], received: [{type: '64', value: '00'}]},
+    description: 'A stream that ends is subscribed to again after the delay',
+    expected: {
+      got: [{err: [503, 'NetworkMessagesSubscriptionEnded']}, '00'],
+      receivers: 1,
+      subscriptions: 2,
+    },
+    method: resubscribe,
+  },
+  {
+    args: {events: [['error', unavailable], ['end']]},
+    description: 'A stream that fails and ends is subscribed to again once',
+    expected: {got: [{err: failed}], receivers: 1, subscriptions: 2},
+    method: resubscribe,
+  },
+  {
+    args: {events: [['error', unsupported]]},
+    description: 'The service ends when LND does not have onion messages',
+    expected: {
+      got: [{err: [501, 'SubscribeOnionMessagesMethodUnsupported']}, 'ended'],
+      receivers: 0,
+      subscriptions: 1,
+    },
+    method: resubscribe,
+  },
+  {
+    args: {events: [['error', denied]]},
+    description: 'The service ends when LND denies the subscription',
+    expected: {
+      got: [
+        {err: [403, 'PermissionDeniedToSubscribeToMessages', {err: denied}]},
+        'ended',
+      ],
+      receivers: 0,
+      subscriptions: 1,
+    },
+    method: resubscribe,
+  },
+  {
+    args: {events: [['error', unverified]]},
+    description: 'The service ends when LND denies the macaroon',
+    expected: {
+      got: [
+        {
+          err: [403, 'PermissionDeniedToSubscribeToMessages', {
+            err: unverified,
+          }],
+        },
+        'ended',
+      ],
+      receivers: 0,
+      subscriptions: 1,
+    },
+    method: resubscribe,
+  },
+  {
+    args: {events: [['error', unimplemented]]},
+    description: 'The service ends when LND rejects the subscription',
+    expected: {
+      got: [
+        {err: [503, 'SubscriptionToMessagesRejected', {err: unimplemented}]},
+        'ended',
+      ],
+      receivers: 0,
+      subscriptions: 1,
+    },
+    method: resubscribe,
+  },
+  {
+    args: {events: [['error', unavailable]], is_stopping: true},
+    description: 'A service stopped while waiting does not subscribe again',
+    expected: {got: [{err: failed}], receivers: 0, subscriptions: 1},
+    method: resubscribe,
+  },
+  {
+    args: {events: [['error', unavailable]], is_stopping_on_error: true},
+    description: 'A service stopped by its error listener does not subscribe',
+    expected: {got: [{err: failed}], receivers: 0, subscriptions: 1},
+    method: resubscribe,
+  },
+  {
+    args: {events: [['error', unavailable]], subscribes: 1},
+    description: 'The service ends when it cannot subscribe again',
+    expected: {
+      got: [
+        {err: failed},
+        {
+          err: [503, 'FailedToSubscribeToNetworkMessages', {
+            err: new Error('ChannelClosed'),
+          }],
+        },
+        'ended',
+      ],
+      receivers: 0,
+      subscriptions: 1,
+    },
+    method: resubscribe,
+  },
+  {
+    args: {delay: 0, listen: () => {}, received: []},
+    description: 'A delay is a number of milliseconds',
+    error: 'ExpectedDelayMillisecondsToServiceNetworkMessages',
     method: serve,
   },
   {

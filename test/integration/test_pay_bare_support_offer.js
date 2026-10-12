@@ -98,7 +98,6 @@ test(`Pay a bare support offer as a BOLT 12 offer`, async () => {
 
       const {reply} = await requestNetworkReply({
         timeout,
-        introduction: relay.id,
         lnd: client.lnd,
         message: {type: typeInvoiceRequest, value: request.encoded},
         path: offer.paths[0],

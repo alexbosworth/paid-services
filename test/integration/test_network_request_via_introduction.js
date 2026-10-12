@@ -29,8 +29,7 @@ test(`Network request via introduction peer`, async () => {
   const listeners = [];
 
   try {
-    // Confirm the channels enough for them to be announced, since the reply
-    // goes back to the client over a route through the graph
+    // Confirm the channels enough for them to be announced
     await client.generate({count: confirmations});
 
     const listener = serviceNetworkRequests({lnd: server.lnd});

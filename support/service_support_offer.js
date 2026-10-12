@@ -74,6 +74,8 @@ const typeRequestAmount = '82';
   checked to be a support offer of a supported version, and its signing key
   is checked to be the offer issuer id. When a check fails, or the related
   offers cannot be made into menus, an error is emitted and the service ends.
+  When the checks pass, the `start` listener is given the offer, so that a
+  service resumed from its record can show the offer again.
 
   Requests that did not arrive on an offer path are ignored. Invalid requests
   on an offer path are sent an invoice error. A request that is sent again is
@@ -115,6 +117,11 @@ const typeRequestAmount = '82';
   stops the handling of requests that are being handled, so nothing more is
   sent.
 
+  The service gets through a disconnection from LND, like LND restarting:
+  the error is emitted, onion messages are subscribed to again after a
+  delay, and invoices paid in the meantime are still reported. The service
+  ends when LND rejects a subscription, or does not have onion messages.
+
   {
     lnd: <Authenticated LND API Object>
     record: <Support Service Record Hex String>
@@ -140,9 +147,16 @@ const typeRequestAmount = '82';
     invoice: <Add an Invoice Sent Listener Function>
     invoice_error: <Add an Invoice Error Sent Listener Function>
     menu: <Add a Menu Sent Listener Function>
+    start: <Add a Service Started Listener Function>
     stop: <Stop Listening Function> ({}) => {};
     supporter: <Add a Supporter Paid Listener Function>
   }
+
+    start:
+    @returns via cbk
+    {
+      offer: <BOLT 12 Support Offer String>
+    }
 
     supporter:
     @returns via cbk
@@ -269,6 +283,7 @@ module.exports = args => {
     invoice: () => {},
     invoice_error: () => {},
     menu: () => {},
+    start: () => {},
   };
   const waiting = [];
 
@@ -284,6 +299,11 @@ module.exports = args => {
   // Tell a listener about an event apart from the code that found it, so
   // that a listener that throws cannot stop the service or crash it
   const emit = (event, details) => process.nextTick(() => {
+    // Exit early when the service stopped before it could say it started
+    if (event === 'start' && isStopped) {
+      return;
+    }
+
     try {
       return service[event](details);
     } catch (err) {
@@ -512,14 +532,26 @@ module.exports = args => {
   (err, res) => {
     isChecked = true;
 
-    if (!!err) {
-      failed(err);
-    } else {
-      state = res.state;
+    // Exit early when the service stopped or failed while the record was
+    // checked, so that it does not start
+    if (isStopped) {
+      return;
     }
 
-    // Requests that arrived while the record was checked are handled now
-    return waiting.splice(0).forEach(handle => handle());
+    if (!!err) {
+      return failed(err);
+    }
+
+    state = res.state;
+
+    // The service has started, and the offer can be shown again
+    emit('start', {offer: state.offer});
+
+    // Requests that arrived while the record was checked are handled now,
+    // after the start listener is told
+    return process.nextTick(() => {
+      return waiting.splice(0).forEach(handle => handle());
+    });
   }));
 
   invoicesSub.on('error', err => failed(err));
@@ -1020,6 +1052,7 @@ module.exports = args => {
     invoice: cbk => service.invoice = cbk,
     invoice_error: cbk => service.invoice_error = cbk,
     menu: cbk => service.menu = cbk,
+    start: cbk => service.start = cbk,
     stop: ({}) => {
       isStopped = true;
 

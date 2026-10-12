@@ -3,7 +3,6 @@ const asyncReflect = require('async/reflect');
 const {returnResult} = require('asyncjs-util');
 
 const checkOfferInvoiceReply = require('./check_offer_invoice_reply');
-const replyIntroduction = require('./../network/reply_introduction');
 const {requestNetworkReply} = require('./../network');
 const {typeInvoice} = require('./constants');
 const {typeInvoiceError} = require('./constants');
@@ -20,6 +19,8 @@ const isAnswered = replies => replies.some(n => !!n.error || !!n.invoice);
   A path that gives no reply, or a reply that is not a good invoice, is added
   as a failure, so that the request can be sent over the next path.
 
+  The reply path goes back along the route of the request.
+
   {
     lnd: <Authenticated LND API Object>
     path: {
@@ -30,12 +31,6 @@ const isAnswered = replies => replies.some(n => !!n.error || !!n.invoice);
       introduction_node: <Introduction Node Public Key Hex String>
       key: <First Hop Path Key Public Key Hex String>
     }
-    peers: [{
-      features: [{
-        bit: <BOLT 09 Feature Bit Number>
-      }]
-      public_key: <Peer Public Key Hex String>
-    }]
     replies: [<Reply Object>]
     request: {
       encoded: <Signed Invoice Request TLV Stream Hex String>
@@ -77,10 +72,6 @@ module.exports = (args, cbk) => {
           return cbk([400, 'ExpectedOfferPathToRequestOfferInvoice']);
         }
 
-        if (!isArray(args.peers)) {
-          return cbk([400, 'ExpectedPeersToRequestOfferInvoice']);
-        }
-
         if (!isArray(args.replies)) {
           return cbk([400, 'ExpectedRepliesToRequestOfferInvoice']);
         }
@@ -103,13 +94,7 @@ module.exports = (args, cbk) => {
           return cbk();
         }
 
-        const {introduction} = replyIntroduction({
-          path: args.path,
-          peers: args.peers,
-        });
-
         return requestNetworkReply({
-          introduction,
           lnd: args.lnd,
           message: {type: typeInvoiceRequest, value: args.request.encoded},
           path: args.path,

@@ -7,9 +7,12 @@ const {test} = require('node:test');
 const {blindedPathFromHops} = require('bolt04');
 const lnService = require('ln-service');
 const {makeLnd} = require('mock-lnd');
+const {pointFromScalar} = require('tiny-secp256k1');
 const {pointMultiply} = require('tiny-secp256k1');
 
 const bufferAsHex = buffer => buffer.toString('hex');
+const asKey = n => Buffer.from(pointFromScalar(Buffer.alloc(32, n)))
+  .toString('hex');
 const defaultTimeoutMs = 1000 * 30;
 const g = '79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798';
 const generator = Buffer.from(`02${g}`, 'hex');
@@ -26,10 +29,33 @@ const sha256 = n => createHash('sha256').update(n).digest();
 // The node identity public key for a secret of 32 bytes of 0x01
 const identity = bufferAsHex(Buffer.from(pointMultiply(generator, secret)));
 
+// Nodes that are not connected peers, reached over a route through relays
+const other = asKey(2);
+const recipient = asKey(3);
+const relay = asKey(4);
+
+// A connected peer that has a channel with self
+const partner = asKey(5);
+
 const wait = () => new Promise(resolve => setTimeout(resolve, 50));
 
-// Reply path ids are random, so sent messages are given a known reply path id
-lnService.sendMessage = args => sendMessage(args).then(sentWithReplyId);
+// Reply path ids are random, so sent messages are given a known reply path id,
+// and the reply path of a sent message is kept to check its hops
+lnService.sendMessage = args => {
+  args.lnd.replies.push(args.reply);
+
+  return sendMessage(args).then(sentWithReplyId);
+};
+
+// Routes to nodes that are not peers are faked, so that nothing is looked up,
+// and every node that is looked up relays onion messages
+const fakes = {routes: []};
+
+lnService.getNode = ({}, cbk) => cbk(null, {features: [{bit: 39}]});
+
+lnService.getRouteToDestination = ({}, cbk) => {
+  return cbk(null, {route: fakes.routes.shift() || null});
+};
 
 const method = require('./../../network/request_network_reply');
 
@@ -42,22 +68,34 @@ const typeAsKey = type => {
   return bytes.toString('latin1');
 };
 
-// Make a fake LND with a connected peer and a stream of messages
-const makeTestLnd = ({isUnsupported}) => {
+// Make a fake LND with connected peers, a channel with the partner peer, and
+// a stream of messages, which can take messages only over channels
+const makeTestLnd = ({isChannelsOnly, isUnsupported}) => {
   const lnd = makeLnd({});
   const sent = [];
   const subscription = new EventEmitter();
 
   subscription.cancel = () => {};
 
-  const {getInfo} = lnd.default;
+  const {getInfo, listChannels} = lnd.default;
+
+  // A node that only takes messages over channels signals feature bit 66 or 67
+  const features = !isChannelsOnly ? {} : {
+    '66': {is_known: true, is_required: false, name: 'only-channels'},
+  };
 
   lnd.default.getInfo = (args, cbk) => getInfo(args, (err, res) => {
-    return cbk(err, {...res, identity_pubkey: identity});
+    return cbk(err, {...res, features, identity_pubkey: identity});
+  });
+
+  lnd.default.listChannels = (args, cbk) => listChannels(args, (err, res) => {
+    const [channel] = res.channels;
+
+    return cbk(err, {channels: [{...channel, remote_pubkey: partner}]});
   });
 
   lnd.default.listPeers = ({}, cbk) => cbk(null, {
-    peers: [{
+    peers: [peer, partner].map(key => ({
       address: '127.0.0.1:9735',
       bytes_recv: '0',
       bytes_sent: '0',
@@ -67,11 +105,11 @@ const makeTestLnd = ({isUnsupported}) => {
       inbound: false,
       last_flap_ns: '0',
       ping_time: '0',
-      pub_key: peer,
+      pub_key: key,
       sat_recv: '0',
       sat_sent: '0',
       sync_type: 'ACTIVE_SYNC',
-    }],
+    })),
   });
 
   lnd.default.sendOnionMessage = (args, cbk) => {
@@ -91,8 +129,19 @@ const makeTestLnd = ({isUnsupported}) => {
     }),
   };
 
+  // The reply paths of the messages that are sent
+  lnd.replies = [];
+
   return {lnd, sent, subscription};
 };
+
+// A route found from a node back to self, that a message to the node goes
+// back along through the relays, which are given in order from self
+const routeThrough = relays => ({
+  hops: [].concat(relays).reverse().concat(identity).map(key => {
+    return {public_key: key};
+  }),
+});
 
 // Make an RPC onion message received over a blinded path to self
 const makeReceived = ({id, type}) => {
@@ -144,6 +193,36 @@ const request = async ({events, isUnsupported, overrides}) => {
   events.forEach(([event, data]) => subscription.emit(event, data));
 
   return await requesting;
+};
+
+// Request a reply over a path through hops, with the introduction node
+// reached through relays when it is not a peer, and get the reply path hops
+const replyHops = async ({hops, isChannelsOnly, maxHops, relays}) => {
+  const {lnd, subscription} = makeTestLnd({isChannelsOnly});
+
+  fakes.routes = !relays ? [] : [routeThrough(relays)];
+
+  const [introduction] = hops;
+
+  const path = blindedPathFromHops({hops});
+
+  const requesting = method(makeArgs({
+    lnd,
+    overrides: {
+      max_reply_hops: maxHops,
+      path: {hops: path.path, introduction_node: introduction, key: path.key},
+    },
+  }));
+
+  await wait();
+
+  subscription.emit('data', makeReceived({id: replyId, type: '66'}));
+
+  await requesting;
+
+  const [reply] = lnd.replies;
+
+  return {reply};
 };
 
 // Request a reply that never comes and check the default timeout
@@ -229,19 +308,58 @@ const tests = [
     method: request,
   },
   {
-    args: {
-      events: [['data', makeReceived({id: replyId, type: '66'})]],
-      overrides: {introduction: peer.toUpperCase()},
-    },
-    description: 'A reply introduction key in uppercase is accepted',
-    expected: {reply: {type: '66', value: '0102'}},
-    method: request,
+    args: {hops: [peer, recipient]},
+    description: 'The reply path starts at an introduction node that is a peer',
+    expected: {reply: [peer, identity]},
+    method: replyHops,
+  },
+  {
+    args: {hops: [other, recipient], relays: [peer, relay]},
+    description: 'The reply path goes back through relays to the introduction',
+    expected: {reply: [other, relay, peer, identity]},
+    method: replyHops,
+  },
+  {
+    args: {hops: [peer]},
+    description: 'The reply path to a recipient that is a peer is only self',
+    expected: {reply: [identity]},
+    method: replyHops,
+  },
+  {
+    args: {hops: [other], relays: [peer, relay]},
+    description: 'The reply path to a relayed recipient starts at its relay',
+    expected: {reply: [relay, peer, identity]},
+    method: replyHops,
+  },
+  {
+    args: {hops: [peer, recipient], isChannelsOnly: true, relays: [partner]},
+    description: 'The reply path ends over a channel when self needs one',
+    expected: {reply: [peer, partner, identity]},
+    method: replyHops,
+  },
+  {
+    args: {hops: [other, recipient], maxHops: 3, relays: [peer, relay]},
+    description: 'A reply path over the maximum keeps the hops nearest self',
+    expected: {reply: [relay, peer, identity]},
+    method: replyHops,
+  },
+  {
+    args: {hops: [other, recipient], maxHops: 4, relays: [peer, relay]},
+    description: 'A reply path within the maximum is whole',
+    expected: {reply: [other, relay, peer, identity]},
+    method: replyHops,
   },
   {
     args: {},
     description: 'A request without a timeout times out after 30 seconds',
     expected: {early: undefined, result: {err: [0, 'NetworkRequestTimeout']}},
     method: requestUntilTimeout,
+  },
+  {
+    args: {events: [], overrides: {max_reply_hops: 0}},
+    description: 'A maximum of reply hops is a positive number',
+    expected: {err: [400, 'ExpectedMaximumReplyHopsToRequestNetworkReply']},
+    method: request,
   },
   {
     args: {events: [], overrides: {timeout: 0}},
@@ -289,12 +407,6 @@ const tests = [
     },
     description: 'A path introduction edge is a string',
     expected: {err: [400, 'ExpectedIntroductionEdgeToRequestNetworkReply']},
-    method: request,
-  },
-  {
-    args: {events: [], overrides: {introduction: hexAsBuffer(peer)}},
-    description: 'A reply path introduction is a hex public key',
-    expected: {err: [400, 'ExpectedReplyIntroductionToRequestNetworkReply']},
     method: request,
   },
 ];

@@ -125,7 +125,6 @@ const makeArgs = ({replies, reply}) => ({
   path,
   request,
   lnd: makeLnd(reply),
-  peers: [],
   replies: replies || [],
   timeout: 1,
 });
@@ -140,11 +139,6 @@ const tests = [
     args: {...makeArgs({}), path: undefined},
     description: 'An offer path is expected',
     error: [400, 'ExpectedOfferPathToRequestOfferInvoice'],
-  },
-  {
-    args: {...makeArgs({}), peers: undefined},
-    description: 'Peers are expected',
-    error: [400, 'ExpectedPeersToRequestOfferInvoice'],
   },
   {
     args: {...makeArgs({}), replies: undefined},

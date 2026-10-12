@@ -18,6 +18,10 @@ const typeNetworkRequest = '32769';
   response does not fit, the error is reported to the `error` listener and a
   `[413, 'ResponseTooLarge']` failure is sent in its place.
 
+  When the stream of messages fails, the `error` listener is told and the
+  stream is subscribed to again, as `serviceNetworkMessages` does, so the
+  `end` listener is only called when subscribing again cannot help.
+
   {
     [ids]: [<Accepted Path Identifier Hex String>]
     lnd: <Authenticated LND API Object>

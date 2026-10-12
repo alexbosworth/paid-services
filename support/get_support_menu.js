@@ -1,6 +1,5 @@
 const asyncAuto = require('async/auto');
 const {getNetwork} = require('ln-sync');
-const {getPeers} = require('ln-service');
 const {parseInvoiceError} = require('invoices');
 const {parseOffer} = require('invoices');
 const {returnResult} = require('asyncjs-util');
@@ -10,10 +9,10 @@ const decodeSupportMenu = require('./decode_support_menu');
 const {defaultMenuTimeoutMs} = require('./constants');
 const isReplyTooLarge = require('./is_reply_too_large');
 const isSupportOffer = require('./is_support_offer');
+const {maxReplyHops} = require('./constants');
 const menuOffers = require('./menu_offers');
 const offerBitcoinNetwork = require('./offer_bitcoin_network');
 const offerSuggestedAmounts = require('./offer_suggested_amounts');
-const replyIntroduction = require('./../network/reply_introduction');
 const {requestNetworkReply} = require('./../network');
 const {resolvePathIntroductions} = require('./../network');
 const {typeInvoice} = require('./constants');
@@ -34,8 +33,9 @@ const isTimeout = n => n === undefined || (isSafeInteger(n) && n > 0);
   into pages. The first page is page zero, and each page says how many pages
   there are. The request is a signed invoice request with the menu request
   record, sent over the first path of the offer with a payer id that is only
-  used once, and the reply path starts at a connected peer that relays onion
-  messages when there is one. A reply without a page means the menu is not
+  used once, and the reply path goes back along the route of the request,
+  keeping the hops nearest the payer when it has more than the eight hops
+  that a recipient answers. A reply without a page means the menu is not
   supported, and an invoice sent back is not paid.
 
   A page is only used when it is signed by the support offer issuer id, has
@@ -160,9 +160,6 @@ module.exports = (args, cbk) => {
       // Get the network of the node to check offers are for it
       getNetwork: ['details', ({}, cbk) => getNetwork({lnd: args.lnd}, cbk)],
 
-      // Get the connected peers to start the reply path at one of them
-      getPeers: ['details', ({}, cbk) => getPeers({lnd: args.lnd}, cbk)],
-
       // Check the offer is for the network of the node
       checkNetwork: ['details', 'getNetwork', ({getNetwork}, cbk) => {
         const {network} = offerBitcoinNetwork({offer: args.offer});
@@ -174,7 +171,7 @@ module.exports = (args, cbk) => {
         return cbk();
       }],
 
-      // Find the introduction node of the first path, to not reply from it
+      // Find the introduction node of the first path to send the request to
       getPath: ['details', ({details}, cbk) => {
         const [path] = details.paths;
 
@@ -196,15 +193,6 @@ module.exports = (args, cbk) => {
         });
       }],
 
-      // Select a peer that relays onion messages to start the reply path
-      introduction: ['getPath', 'getPeers', ({getPath, getPeers}, cbk) => {
-        const {peers} = getPeers;
-
-        const {introduction} = replyIntroduction({path: getPath, peers});
-
-        return cbk(null, introduction);
-      }],
-
       // Make a signed invoice request that asks for the page
       message: ['checkNetwork', ({}, cbk) => {
         try {
@@ -221,16 +209,11 @@ module.exports = (args, cbk) => {
       }],
 
       // Send the request and wait for the reply
-      getReply: [
-        'getPath',
-        'introduction',
-        'message',
-        ({getPath, introduction, message}, cbk) =>
-      {
+      getReply: ['getPath', 'message', ({getPath, message}, cbk) => {
         return requestNetworkReply({
-          introduction,
           message,
           lnd: args.lnd,
+          max_reply_hops: maxReplyHops,
           path: getPath,
           timeout: args.timeout || defaultMenuTimeoutMs,
           types: [typeInvoice, typeInvoiceError],

@@ -1,6 +1,7 @@
 const {createHash} = require('node:crypto');
 const {deepStrictEqual, rejects} = require('node:assert/strict');
 const EventEmitter = require('node:events');
+const {mock} = require('node:test');
 const {test} = require('node:test');
 
 const {blindedPathFromHops} = require('bolt04');
@@ -19,7 +20,7 @@ const {addServiceLabel} = require('./../../service_records');
 const createMenuRequest = require('./../../support/create_menu_request');
 const encodeRecord = require('./../../support/encode_support_record');
 const keyForSecret = require('./../../service_records/record_key_for_secret');
-const method = require('./../../support/service_support_offer');
+const network = require('./../../network');
 const recordPoint = require('./../../service_records/record_point');
 const supportNoteFor = require('./../../support/support_note_for_invoice');
 
@@ -29,6 +30,14 @@ const hexAsBuffer = hex => Buffer.from(hex, 'hex');
 const pathId = Buffer.alloc(32, 1).toString('hex');
 const secret = Buffer.alloc(32, 1);
 const sha256 = n => createHash('sha256').update(n).digest();
+const {serviceNetworkMessages} = network;
+
+// The stream of messages is subscribed to again quickly after it fails
+mock.method(network, 'serviceNetworkMessages', args => {
+  return serviceNetworkMessages({...args, delay: 1});
+});
+
+const method = require('./../../support/service_support_offer');
 const wait = () => new Promise(resolve => setTimeout(resolve, 200));
 
 const issuer = asKey(5);
@@ -224,11 +233,21 @@ const makeRpcInvoice = ({expiry, index, memo, value_msat}) => {
 const makeLnd = ({is_paying, key, on_invoice, signs}) => {
   const counts = {invoices: 0, record_keys: 0, replies: [], signatures: 0};
   const created = new Map();
-  const subscription = new EventEmitter();
+  const subscriptions = [];
   const updates = new EventEmitter();
 
-  subscription.cancel = () => {};
   updates.cancel = () => {};
+
+  // Each subscription to messages is a new stream
+  const subscribe = () => {
+    const subscription = new EventEmitter();
+
+    subscription.cancel = () => {};
+
+    subscriptions.push(subscription);
+
+    return subscription;
+  };
 
   const lnd = {
     default: {
@@ -288,7 +307,7 @@ const makeLnd = ({is_paying, key, on_invoice, signs}) => {
         return cbk(null, created.get(Buffer.from(r_hash).toString('hex')));
       },
       subscribeInvoices: () => updates,
-      subscribeOnionMessages: () => subscription,
+      subscribeOnionMessages: subscribe,
     },
     invoices: {},
     wallet: {
@@ -330,7 +349,7 @@ const makeLnd = ({is_paying, key, on_invoice, signs}) => {
     },
   };
 
-  return {counts, created, lnd, subscription, updates};
+  return {counts, created, lnd, subscriptions, updates};
 };
 
 // The record key is derived from the shared secret of the node key and the
@@ -359,7 +378,10 @@ const support = {record: makeRecord({})};
 
 // Arguments of the test harness that are not arguments of the service
 const harnessOptions = [
+  'is_losing_invoices',
   'is_paying',
+  'is_stopping_at_start',
+  'is_stopping_on_check',
   'is_stopping_on_invoice',
   'key',
   'signs',
@@ -370,7 +392,7 @@ const harnessOptions = [
 // Start the service and give it messages at times, then summarize what it did
 const serve = async args => {
   // The service can be stopped while an invoice is being made for a request
-  const {counts, created, lnd, subscription, updates} = makeLnd({
+  const {counts, created, lnd, subscriptions, updates} = makeLnd({
     is_paying: args.is_paying,
     key: args.key,
     on_invoice: () => !!args.is_stopping_on_invoice && service.stop({}),
@@ -388,6 +410,7 @@ const serve = async args => {
   const menus = [];
   const {now} = Date;
   const sent = [];
+  const started = [];
   const supporters = [];
 
   const service = method({...support, lnd, ...options});
@@ -408,14 +431,38 @@ const serve = async args => {
   listen('menu', menu => menus.push(menu));
   listen('supporter', n => supporters.push([n.id, n.mtokens, n.payer_id]));
 
-  // Each step moves the clock hours ahead and then gives messages, and pays
-  // invoices that were made, by the order they were made in
-  for (const {hours, paid, received} of args.steps || [{}]) {
-    Date.now = () => now() + 1000 * 60 * 60 * (hours || 0);
+  // The start listener is told the offer, before any invoice is sent
+  listen('start', n => started.push([n.offer, sent.length]));
 
-    (received || []).forEach(n => subscription.emit('data', n));
+  // The service can be stopped before its record is checked
+  if (!!args.is_stopping_at_start) {
+    service.stop({});
+  }
 
-    (paid || []).forEach(index => {
+  // The service can be stopped once its record is checked, before it is
+  // told that it started
+  if (!!args.is_stopping_on_check) {
+    process.nextTick(() => service.stop({}));
+  }
+
+  // LND can deny the invoices subscription before the record is checked
+  if (!!args.is_losing_invoices) {
+    updates.emit('error', {code: 7, details: 'permission denied'});
+  }
+
+  // Each step moves the clock hours ahead, can fail the stream of messages,
+  // as when the connection to LND drops, then pays invoices that were made,
+  // by the order they were made in, and gives messages on the newest stream
+  for (const step of args.steps || [{}]) {
+    Date.now = () => now() + 1000 * 60 * 60 * (step.hours || 0);
+
+    const [subscription] = subscriptions.slice(-1);
+
+    if (!!step.is_failing) {
+      subscription.emit('error', {code: 14, details: 'read ECONNRESET'});
+    }
+
+    (step.paid || []).forEach(index => {
       const [invoice] = Array.from(created.values())
         .filter(n => n.add_index === String(index));
 
@@ -428,6 +475,10 @@ const serve = async args => {
         state: 'SETTLED',
       });
     });
+
+    const [current] = subscriptions.slice(-1);
+
+    (step.received || []).forEach(n => current.emit('data', n));
 
     await wait();
   }
@@ -468,6 +519,7 @@ const serve = async args => {
       };
     }),
     signatures: counts.signatures,
+    started,
   };
 };
 
@@ -482,6 +534,7 @@ const idle = {
   replies: [],
   sent: [],
   signatures: 1,
+  started: [[offer, 0]],
   supporters: [],
 };
 
@@ -491,6 +544,7 @@ const ended = message => ({
   errors: [[400, message]],
   is_ended: true,
   signatures: 0,
+  started: [],
 });
 
 // A listener that throws is an error
@@ -617,6 +671,59 @@ const otherSupport = makeOffer({
 });
 
 const tests = [
+  {
+    args: {},
+    description: 'The start listener is told the offer of the checked record',
+    expected: idle,
+  },
+  {
+    args: {is_paying: true, steps: requested},
+    description: 'The start listener is told before a request is answered',
+    expected: {
+      ...idle,
+      invoices: 1,
+      replies: [1366],
+      sent: [sentInvoice],
+      signatures: 2,
+    },
+  },
+  {
+    args: {record: makeRecord({key: Buffer.alloc(32, 3).toString('hex')})},
+    description: 'The start listener is not told of a record that fails',
+    expected: ended('ExpectedServiceRecordMadeByThisNode'),
+  },
+  {
+    args: {is_stopping_at_start: true, steps: requested},
+    description: 'A service stopped while its record is checked does not start',
+    expected: {...idle, started: []},
+  },
+  {
+    args: {is_stopping_on_check: true, steps: requested},
+    description: 'A service stopped as its record is checked does not start',
+    expected: {...idle, started: []},
+  },
+  {
+    args: {is_losing_invoices: true, steps: requested},
+    description: 'A service that fails during its record check does not start',
+    expected: {
+      ...idle,
+      errors: [[403, 'PermissionDeniedToSubscribeToInvoices']],
+      is_ended: true,
+      started: [],
+    },
+  },
+  {
+    args: {is_paying: true, steps: requested, throwing: ['start']},
+    description: 'A start listener that throws does not end the service',
+    expected: {
+      ...idle,
+      errors: [listenerFailed],
+      invoices: 1,
+      replies: [1366],
+      sent: [sentInvoice],
+      signatures: 2,
+    },
+  },
   {
     args: {
       steps: [{received: [makeReceived(request), makeReceived(request)]}],
@@ -1326,6 +1433,44 @@ const tests = [
       sent: [sentInvoice, {...sentInvoice, id: invoiceId(2)}],
       signatures: 3,
       supporters: [[invoiceId(1), '1000', asKey(2)]],
+    },
+  },
+  {
+    args: {
+      is_paying: true,
+      steps: [
+        ...requested,
+        {is_failing: true, paid: [1]},
+        {received: [makeReceived(makeRequest({payer: 3}))]},
+      ],
+    },
+    description: 'The service gets through a disconnection from LND',
+    expected: {
+      ...idle,
+      errors: [[503, 'NetworkMessagesSubscriptionFailed']],
+      invoices: 2,
+      replies: [1366, 1366],
+      sent: [
+        sentInvoice,
+        {...sentInvoice, id: invoiceId(2), payer_id: asKey(3)},
+      ],
+      signatures: 3,
+      supporters: [[invoiceId(1), '1000', asKey(2)]],
+    },
+  },
+  {
+    args: {
+      is_paying: true,
+      steps: [...requested, {is_failing: true}, ...requested],
+    },
+    description: 'A request sent again after a disconnection gets its invoice',
+    expected: {
+      ...idle,
+      errors: [[503, 'NetworkMessagesSubscriptionFailed']],
+      invoices: 1,
+      replies: [1366, 1366],
+      sent: [sentInvoice, {...sentInvoice, is_repeat: true}],
+      signatures: 2,
     },
   },
   {

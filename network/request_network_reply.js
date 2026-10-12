@@ -9,6 +9,7 @@ const getPathOutbound = require('./get_path_outbound');
 
 const defaultTimeoutMs = 1000 * 30;
 const {isArray} = Array;
+const isHops = n => isSafeInteger(n) && n > 0;
 const isPublicKey = n => typeof n === 'string' && /^[0-9A-F]{66}$/i.test(n);
 const {isSafeInteger} = Number;
 const isTimeout = n => isSafeInteger(n) && n > 0;
@@ -16,13 +17,19 @@ const isTimeout = n => isSafeInteger(n) && n > 0;
 /** Send an onion message over a blinded path and wait for its reply
 
   The reply is the first message of one of the reply `types` that arrives on
-  the reply path of the message, which starts at self or at a connected
-  `introduction` peer. The request fails when no reply arrives within the
-  `timeout`.
+  the reply path of the message. The request fails when no reply arrives
+  within the `timeout`.
+
+  The reply path goes back along the route of the message, through the nodes
+  that relayed it, ending at self, so that the recipient can reach it. When
+  self only takes messages from peers with a channel, the message goes out
+  over a channel, so that the reply comes back over one. A reply path of more
+  than `max_reply_hops` keeps the hops nearest self, and the recipient routes
+  to its start.
 
   {
-    [introduction]: <Reply Path Introduction Peer Public Key Hex String>
     lnd: <Authenticated LND API Object>
+    [max_reply_hops]: <Maximum Reply Path Hops Count Number>
     message: {
       type: <Message Payload Record Type Number String>
       value: <Message Payload Hex String>
@@ -90,8 +97,8 @@ module.exports = (args, cbk) => {
           }
         }
 
-        if (!!args.introduction && !isPublicKey(args.introduction)) {
-          return cbk([400, 'ExpectedReplyIntroductionToRequestNetworkReply']);
+        if (args.max_reply_hops !== undefined && !isHops(args.max_reply_hops)) {
+          return cbk([400, 'ExpectedMaximumReplyHopsToRequestNetworkReply']);
         }
 
         if (args.timeout !== undefined && !isTimeout(args.timeout)) {
@@ -112,7 +119,38 @@ module.exports = (args, cbk) => {
 
       // Determine the outbound hops to reach the path introduction node
       getOutbound: ['validate', ({}, cbk) => {
-        return getPathOutbound({lnd: args.lnd, path: args.path}, cbk);
+        return getPathOutbound({
+          is_expecting_reply: true,
+          lnd: args.lnd,
+          path: args.path,
+        },
+        cbk);
+      }],
+
+      // The reply path goes back the way the message went, ending at self
+      replyPath: [
+        'getIdentity',
+        'getOutbound',
+        ({getIdentity, getOutbound}, cbk) =>
+      {
+        const {outbound} = getOutbound;
+
+        // The outbound hops end at the introduction node of the path, which
+        // is the recipient itself when the path has a single hop
+        const isRecipient = args.path.hops.length === 1;
+
+        const relays = !isRecipient ? outbound : outbound.slice(0, -1);
+
+        const hops = [].concat(relays).reverse().concat(getIdentity.public_key);
+
+        // Exit early when the reply path has no more hops than allowed
+        if (!args.max_reply_hops || hops.length <= args.max_reply_hops) {
+          return cbk(null, {hops});
+        }
+
+        // The hops nearest self are kept, which the recipient cannot find on
+        // its own, and it routes to the start of the reply path
+        return cbk(null, {hops: hops.slice(-args.max_reply_hops)});
       }],
 
       // Listen to incoming onion messages
@@ -131,10 +169,10 @@ module.exports = (args, cbk) => {
 
       // Send the message and wait for the reply
       request: [
-        'getIdentity',
         'getOutbound',
+        'replyPath',
         'subscribe',
-        ({getIdentity, getOutbound, subscribe}, cbk) =>
+        ({getOutbound, replyPath, subscribe}, cbk) =>
       {
         let isFinished = false;
         let timer;
@@ -218,17 +256,14 @@ module.exports = (args, cbk) => {
           });
         });
 
-        // Keys are used in lowercase, as LND gives them
-        const introduction = (args.introduction || String()).toLowerCase();
-
-        // Send the message with a reply path back to self
+        // Send the message with a reply path back the way it goes
         const sending = sendMessage({
           inbound: args.path.hops,
           key: args.path.key,
           lnd: args.lnd,
           message: args.message,
           outbound: getOutbound.outbound,
-          reply: [introduction, getIdentity.public_key].filter(n => !!n),
+          reply: replyPath.hops,
         });
 
         return sending.catch(err => finished(err));

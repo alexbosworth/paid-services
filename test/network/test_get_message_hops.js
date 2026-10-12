@@ -13,6 +13,7 @@ const peer = `03${g}`;
 // The identity of the node, which is also the generator point
 const identity = `02${g}`;
 const other = asKey(2);
+const partner = asKey(4);
 const relay = asKey(3);
 
 // Nodes that relay onion messages signal feature bit 38 or 39
@@ -41,37 +42,54 @@ const method = require('./../../network/get_message_hops');
 // A route found from the destination back to self goes through hops
 const routeThrough = hops => ({hops: hops.map(key => ({public_key: key}))});
 
-// Make a fake LND with a connected peer, which can require channels
-const makeTestLnd = ({is_channels_only} = {}) => {
+// Make a fake LND with a connected peer, which can require channels, with
+// more connected peers, with channels with partners, and which can itself
+// require channels
+const makeTestLnd = (args = {}) => {
   const lnd = makeLnd({});
 
-  const {getInfo} = lnd.default;
+  const {getInfo, listChannels} = lnd.default;
 
-  lnd.default.getInfo = (args, cbk) => getInfo(args, (err, res) => {
-    return cbk(err, {...res, identity_pubkey: identity});
-  });
-
-  // Peers that only take messages over channels signal feature bit 66 or 67
-  const features = !is_channels_only ? {} : {
+  // Nodes that only take messages over channels signal feature bit 66 or 67
+  const onlyChannels = {
     '67': {is_known: true, is_required: false, name: 'only-channels'},
   };
 
+  lnd.default.getInfo = (a, cbk) => getInfo(a, (err, res) => {
+    return cbk(err, {
+      ...res,
+      features: !args.is_self_channels_only ? {} : onlyChannels,
+      identity_pubkey: identity,
+    });
+  });
+
+  // The channels are with the partners
+  lnd.default.listChannels = (a, cbk) => listChannels(a, (err, res) => {
+    const [channel] = res.channels;
+
+    return cbk(err, {
+      channels: (args.partners || []).map(key => {
+        return {...channel, remote_pubkey: key};
+      }),
+    });
+  });
+
   lnd.default.listPeers = ({}, cbk) => cbk(null, {
-    peers: [{
-      features,
+    peers: [peer].concat(args.peers || []).map(key => ({
       address: '127.0.0.1:9735',
       bytes_recv: '0',
       bytes_sent: '0',
       errors: [],
+      features: key === peer && !!args.is_channels_only ? onlyChannels : {},
       flap_count: 0,
       inbound: false,
       last_flap_ns: '0',
       ping_time: '0',
-      pub_key: peer,
+      pub_key: key,
       sat_recv: '0',
       sat_sent: '0',
       sync_type: 'ACTIVE_SYNC',
-    }],
+    })),
   });
 
   return lnd;
@@ -158,6 +176,40 @@ const tests = [
     expected: {hops: [peer], lookups: 1},
     nodes: {},
     routes: [routeThrough([identity])],
+  },
+  {
+    args: {
+      destination: peer,
+      is_expecting_reply: true,
+      lnd: makeTestLnd({is_self_channels_only: true, partners: [peer]}),
+    },
+    description: 'A reply that needs a channel comes back from a peer with one',
+    expected: {hops: [peer], lookups: 0},
+  },
+  {
+    args: {
+      destination: peer,
+      is_expecting_reply: true,
+      lnd: makeTestLnd({
+        is_self_channels_only: true,
+        partners: [partner],
+        peers: [partner],
+      }),
+    },
+    description: 'A reply that needs a channel is routed back over a channel',
+    expected: {hops: [partner, peer], lookups: 1},
+    nodes: {[partner]: relaying},
+    routes: [routeThrough([partner, identity])],
+  },
+  {
+    args: {destination: peer, is_expecting_reply: true, lnd: makeTestLnd({})},
+    description: 'A reply comes back without a channel when self takes any',
+    expected: {hops: [peer], lookups: 0},
+  },
+  {
+    args: {destination: peer, lnd: makeTestLnd({is_self_channels_only: true})},
+    description: 'A peer without a channel is sent to when no reply comes back',
+    expected: {hops: [peer], lookups: 0},
   },
 ];
 

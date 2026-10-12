@@ -1,0 +1,16 @@
+{
+  "accessDeniedMessages": [
+    "^cannot determine data format of binary-encoded macaroon",
+    "^empty macaroon data",
+    "^expected 1 macaroon",
+    "^invalid ID$",
+    "^permission denied$",
+    "^unknown macaroon version",
+    "^unmarshal v[12]",
+    "^verification failed"
+  ],
+  "codeInvalidArgument": 3,
+  "codePermissionDenied": 7,
+  "codeUnauthenticated": 16,
+  "codeUnimplemented": 12
+}

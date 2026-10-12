@@ -13,6 +13,7 @@ const edgeChannel = edge => edge.split('x').slice(0, -1).join('x');
   along a payment route through nodes that relay onion messages
 
   {
+    [is_expecting_reply]: <Reply Comes Back Along the Same Nodes Bool>
     lnd: <Authenticated LND API Object>
     path: {
       [introduction_edge]: <Introduction Node Edge Format Channel Id String>
@@ -25,16 +26,16 @@ const edgeChannel = edge => edge.split('x').slice(0, -1).join('x');
     outbound: [<Relaying Node Public Key Hex String>]
   }
 */
-module.exports = ({lnd, path}, cbk) => {
+module.exports = (args, cbk) => {
   return new Promise((resolve, reject) => {
     return asyncAuto({
       // Check arguments
       validate: cbk => {
-        if (!lnd) {
+        if (!args.lnd) {
           return cbk([400, 'ExpectedLndToGetPathOutbound']);
         }
 
-        if (!path) {
+        if (!args.path) {
           return cbk([400, 'ExpectedBlindedPathToGetPathOutbound']);
         }
 
@@ -44,21 +45,21 @@ module.exports = ({lnd, path}, cbk) => {
       // Get the channel of the introduction edge
       getChannel: ['validate', ({}, cbk) => {
         // Exit early when the introduction is a node and not an edge
-        if (!path.introduction_edge) {
+        if (!args.path.introduction_edge) {
           return cbk();
         }
 
-        const id = edgeChannel(path.introduction_edge);
+        const id = edgeChannel(args.path.introduction_edge);
 
-        return getChannel({id, lnd}, cbk);
+        return getChannel({id, lnd: args.lnd}, cbk);
       }],
 
       // Determine the introduction node of the path
       introduction: ['getChannel', ({getChannel}, cbk) => {
         try {
           const {introduction} = pathIntroduction({
-            path,
             channel: getChannel,
+            path: args.path,
           });
 
           return cbk(null, introduction);
@@ -69,7 +70,12 @@ module.exports = ({lnd, path}, cbk) => {
 
       // Get the hops to relay the message to the introduction node
       getHops: ['introduction', ({introduction}, cbk) => {
-        return getMessageHops({lnd, destination: introduction}, cbk);
+        return getMessageHops({
+          destination: introduction,
+          is_expecting_reply: args.is_expecting_reply,
+          lnd: args.lnd,
+        },
+        cbk);
       }],
 
       // The outbound hops end at the introduction node

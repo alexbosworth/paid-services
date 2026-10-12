@@ -186,7 +186,6 @@ const makeTestLnd = ([toFirst, toSecond], channel) => {
   lnd.default.getChanInfo = ({}, cbk) => {
     return cbk(!channel ? notFound : null, channel);
   };
-  lnd.default.listPeers = ({}, cbk) => cbk(null, {peers: []});
   lnd.replies = {[first.key]: toFirst, [second.key]: toSecond};
   lnd.requested = [];
   lnd.sent = [];

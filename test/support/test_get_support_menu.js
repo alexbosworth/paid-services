@@ -22,7 +22,6 @@ const isSupportOffer = require('./../../support/is_support_offer');
 const menuOffers = require('./../../support/menu_offers');
 const network = require('./../../network');
 const preimage = require('./../../support/menu_signature_preimage');
-const replyIntroduction = require('./../../network/reply_introduction');
 
 const asKey = n => Buffer.from(pointFromScalar(Buffer.alloc(32, n)))
   .toString('hex');
@@ -34,10 +33,14 @@ const secret = Buffer.alloc(32, 4).toString('hex');
 const version = 1;
 
 // Reply to a menu request with the reply the fake LND has, keeping the request
-const fakeReply = ({introduction, lnd, message, path}, cbk) => {
-  lnd.requests.push({introduction, message, path});
+const fakeReply = (args, cbk) => {
+  args.lnd.requests.push({
+    max_reply_hops: args.max_reply_hops,
+    message: args.message,
+    path: args.path,
+  });
 
-  return cbk(null, {reply: lnd.reply});
+  return cbk(null, {reply: args.lnd.reply});
 };
 
 // Replies are faked, so that no onion messages are sent
@@ -167,18 +170,7 @@ const shown = (offer, details) => ({
   ...details,
 });
 
-// Peers of the node, one that does not relay onion messages
-const relay = asKey(5);
-const start = asKey(6);
-
-const peers = [
-  {features: [{bit: 1}], public_key: asKey(7)},
-  {features: [{bit: 39}], public_key: start},
-  {features: [{bit: 39}], public_key: relay},
-];
-
-// Make a fake LND on regtest, with a peer that relays onion messages, that
-// has a reply to the menu request
+// Make a fake LND on regtest that has a reply to the menu request
 const makeTestLnd = ({is_mainnet, reply}) => {
   const lnd = makeLnd({});
 
@@ -189,24 +181,6 @@ const makeTestLnd = ({is_mainnet, reply}) => {
 
   lnd.default.getInfo = (args, cbk) => getInfo(args, (err, res) => {
     return cbk(err, {...res, chains: !is_mainnet ? chains : res.chains});
-  });
-
-  lnd.default.listPeers = ({}, cbk) => cbk(null, {
-    peers: [asKey(7), relay].map((key, i) => ({
-      address: '127.0.0.1:9735',
-      bytes_recv: '0',
-      bytes_sent: '0',
-      errors: [],
-      features: !i ? {} : {'39': {is_known: true, is_required: false}},
-      flap_count: 0,
-      inbound: false,
-      last_flap_ns: '0',
-      ping_time: '0',
-      pub_key: key,
-      sat_recv: '0',
-      sat_sent: '0',
-      sync_type: 'ACTIVE_SYNC',
-    })),
   });
 
   lnd.reply = reply;
@@ -266,8 +240,8 @@ const getMenu = async ({is_mainnet, menu_id, page, reply}) => {
   const [request] = lnd.requests;
 
   return {
-    introduction: request.introduction,
     is_unexpired: Date.parse(got.expires_at) > Date.now(),
+    max_reply_hops: request.max_reply_hops,
     menu_id: got.menu_id,
     offers: got.offers.map(defined),
     page: got.page,
@@ -277,10 +251,10 @@ const getMenu = async ({is_mainnet, menu_id, page, reply}) => {
   };
 };
 
-// The menu as a payer gets it
+// The menu as a payer gets it, with a request that has a reply path limit
 const gotMenu = {
-  introduction: relay,
   is_unexpired: true,
+  max_reply_hops: 8,
   menu_id: menuId,
   offers: [
     shown(episode, {
@@ -554,18 +528,6 @@ const tests = [
     description: 'Each menu request has its own payer id and metadata',
     expected: {is_same_metadata: false, is_same_payer_id: false},
     method: askTwice,
-  },
-  {
-    args: {peers, path: {introduction_node: start}},
-    description: 'A reply path starts at a peer that relays onion messages',
-    expected: {introduction: relay},
-    method: replyIntroduction,
-  },
-  {
-    args: {path: {introduction_node: start}, peers: peers.slice(0, 2)},
-    description: 'A reply path has no start when no peer can relay it',
-    expected: {},
-    method: replyIntroduction,
   },
   {
     args: {entries: [{offer: episode}, {offer: guest}], offer: supportOffer},

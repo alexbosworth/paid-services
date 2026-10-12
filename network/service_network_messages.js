@@ -4,11 +4,17 @@ const getPathId = require('./get_path_id');
 const getPathOutbound = require('./get_path_outbound');
 const regularReplyBytes = require('./regular_reply_bytes');
 const returnNetworkResponse = require('./return_network_response');
+const subscriptionRejectionError = require('./subscription_rejection_error');
 
+const defaultDelayMs = 1000 * 30;
+const endedError = [503, 'NetworkMessagesSubscriptionEnded'];
 const failedReplyBytes = err => [400, 'FailedToGetRegularReplyBytes', {err}];
 const {isArray} = Array;
+const isDelay = n => isSafeInteger(n) && n > 0;
 const isHex = n => typeof n === 'string' && /^([0-9a-f]{2})+$/i.test(n);
 const isLargeOnion = onion => !!onion && onion.length / 2 === largeOnionBytes;
+const {isSafeInteger} = Number;
+const isUnsupported = err => isArray(err) && err[0] === 501;
 const largeOnionBytes = 32834;
 const stoppedError = [503, 'ServiceStoppedBeforeReplyWasSent'];
 
@@ -24,12 +30,16 @@ const stoppedError = [503, 'ServiceStoppedBeforeReplyWasSent'];
   message of the regular size. `reply_bytes` gives the most bytes of such a
   reply that fit, or -1 when no reply fits.
 
-  The `end` listener is called when the stream of messages stops, after the
-  `error` listener when it fails. After the service stops, a reply that was
+  When the stream of messages fails or ends, the `error` listener is told and
+  the stream is subscribed to again after `delay`, keeping the message
+  listeners. The `end` listener is called, after the `error` listener, only
+  when subscribing again cannot help: LND without onion messages, or a
+  subscription that LND rejects. After the service stops, a reply that was
   being prepared is not sent, its callback is given an error, and nothing is
   reported to the error listener.
 
   {
+    [delay]: <Subscribe Again After Delay Milliseconds Number> // Default: 30000
     [ids]: [<Accepted Path Identifier Hex String>]
     lnd: <Authenticated LND API Object>
   }
@@ -81,7 +91,11 @@ const stoppedError = [503, 'ServiceStoppedBeforeReplyWasSent'];
         bytes: <Most Reply Payload Bytes For Regular Size, -1 For None Number>
       }
 */
-module.exports = ({ids, lnd}) => {
+module.exports = ({delay, ids, lnd}) => {
+  if (delay !== undefined && !isDelay(delay)) {
+    throw new Error('ExpectedDelayMillisecondsToServiceNetworkMessages');
+  }
+
   if (!!ids && !isArray(ids)) {
     throw new Error('ExpectedArrayOfPathIdsToServiceNetworkMessages');
   }
@@ -95,11 +109,12 @@ module.exports = ({ids, lnd}) => {
 
   const listeners = {};
   const service = {end: () => {}, error: () => {}};
-  const sub = subscribeToMessages({lnd});
 
   let isStopped = false;
+  let sub;
+  let timer;
 
-  // Stop listening, and tell the caller, when the messages stream stops
+  // Stop listening, and tell the caller, when subscribing again cannot help
   const ended = err => {
     // Exit early when the service was already stopped
     if (isStopped) {
@@ -111,18 +126,42 @@ module.exports = ({ids, lnd}) => {
     // Removing the listeners cancels the subscription
     sub.removeAllListeners();
 
-    if (!!err) {
-      service.error(err);
-    }
+    service.error(err);
 
     return service.end();
   };
 
-  // The stream can close normally, or fail
-  sub.on('end', () => ended());
-  sub.on('error', err => ended(err));
+  // Subscribe again after the stream fails, keeping the message listeners
+  const failed = err => {
+    // Exit early when the service was already stopped
+    if (isStopped) {
+      return;
+    }
 
-  sub.on('message_received', received => {
+    // Removing the listeners cancels the subscription, and a stream that
+    // sends an end after its error is not heard, so it is subscribed to
+    // again once
+    sub.removeAllListeners();
+
+    // The wait to subscribe again starts before the error listener is told,
+    // so that a listener that stops the service calls it off
+    timer = setTimeout(() => {
+      timer = undefined;
+
+      // Subscribing can throw, when there is nothing to subscribe with
+      try {
+        return subscribe();
+      } catch (err) {
+        return ended([503, 'FailedToSubscribeToNetworkMessages', {err}]);
+      }
+    },
+    delay || defaultDelayMs);
+
+    return service.error(err);
+  };
+
+  // Handle a message that arrived on the stream
+  const onMessage = received => {
     const {message} = received;
 
     // Exit early when there is no message payload
@@ -262,7 +301,35 @@ module.exports = ({ids, lnd}) => {
         reply_bytes: !reply ? undefined : replyBytes,
       });
     });
-  });
+  };
+
+  // Subscribe to the stream of messages
+  const subscribe = () => {
+    sub = subscribeToMessages({lnd});
+
+    // The stream can close normally, which is subscribed to again
+    sub.on('end', () => failed(endedError));
+
+    sub.on('error', err => {
+      // LND without onion messages has no stream to subscribe to again
+      if (isUnsupported(err)) {
+        return ended(err);
+      }
+
+      const {error} = subscriptionRejectionError({err});
+
+      // A rejected subscription would be rejected again
+      if (!!error) {
+        return ended(error);
+      }
+
+      return failed([503, 'NetworkMessagesSubscriptionFailed', {err}]);
+    });
+
+    sub.on('message_received', onMessage);
+  };
+
+  subscribe();
 
   return {
     end: cbk => service.end = cbk,
@@ -271,6 +338,9 @@ module.exports = ({ids, lnd}) => {
     receivers: () => sub.listenerCount('message_received'),
     stop: ({}) => {
       isStopped = true;
+
+      // Subscribing again is called off when it is being waited for
+      clearTimeout(timer);
 
       return sub.removeAllListeners();
     },
