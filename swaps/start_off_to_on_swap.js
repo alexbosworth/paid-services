@@ -7,15 +7,18 @@ const {getIdentity} = require('ln-service');
 const {getNetwork} = require('ln-sync');
 const {getPublicKey} = require('ln-service');
 const {networks} = require('bitcoinjs-lib');
+const {pointFromScalar} = require('tiny-secp256k1');
 const {returnResult} = require('asyncjs-util');
-const tinysecp = require('tiny-secp256k1');
 
 const encodeOffToOnRequest = require('./encode_off_to_on_request');
+const makePrivateKey = require('./make_private_key');
 
 const bufferAsHex = buffer => buffer.toString('hex');
 const family = 805;
 const hexAsBuffer = hex => Buffer.from(hex, 'hex');
+const isCompressed = true;
 const makeSecret = () => randomBytes(32);
+const publicKeyFor = key => Buffer.from(pointFromScalar(key, isCompressed));
 const sha256 = preimage => createHash('sha256').update(preimage).digest('hex');
 
 /** Initialize the claim details of a swap
@@ -35,9 +38,6 @@ const sha256 = preimage => createHash('sha256').update(preimage).digest('hex');
 module.exports = (args, cbk) => {
   return new Promise((resolve, reject) => {
     return asyncAuto({
-      // Import the ECPair library
-      ecp: async () => (await import('ecpair')).ECPairFactory(tinysecp),
-
       // Check arguments
       validate: cbk => {
         if (!args.lnd) {
@@ -89,8 +89,9 @@ module.exports = (args, cbk) => {
       }],
 
       // Generate the claim coop key
-      generateCoopKey: ['ecp', 'network', ({ecp, network}, cbk) => {
-        const {privateKey, publicKey} = ecp.makeRandom({network});
+      generateCoopKey: ['network', ({}, cbk) => {
+        const privateKey = hexAsBuffer(makePrivateKey({}).private_key);
+        const publicKey = publicKeyFor(privateKey);
 
         return cbk(null, {
           hash: sha256(publicKey),
@@ -99,13 +100,14 @@ module.exports = (args, cbk) => {
       }],
 
       // Generate the claim solo key
-      generateSoloKey: ['ecp', 'network', ({ecp, network}, cbk) => {
+      generateSoloKey: ['network', ({}, cbk) => {
         // Exit early when the solo key is derived from the internal seed
         if (!args.is_external_solo_key) {
           return cbk(null, {});
         }
 
-        const {publicKey, privateKey} = ecp.makeRandom({network});
+        const privateKey = hexAsBuffer(makePrivateKey({}).private_key);
+        const publicKey = publicKeyFor(privateKey);
 
         return cbk(null, {
           pub: bufferAsHex(publicKey),

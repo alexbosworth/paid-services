@@ -32,6 +32,7 @@ const {parsePaymentRequest} = require('ln-service');
 const {pay} = require('ln-service');
 const {payViaPaymentDetails} = require('ln-service');
 const {pointAdd} = require('tiny-secp256k1');
+const {pointFromScalar} = require('tiny-secp256k1');
 const {privateAdd} = require('tiny-secp256k1');
 const {releaseSwapOutSecret} = require('goldengate');
 const {returnResult} = require('asyncjs-util');
@@ -43,7 +44,6 @@ const {subscribeToSpend} = require('goldengate');
 const {swapScriptBranches} = require('goldengate');
 const {taprootClaimTransaction} = require('goldengate');
 const {taprootCoopTransaction} = require('goldengate');
-const tinysecp = require('tiny-secp256k1');
 const {Transaction} = require('bitcoinjs-lib');
 const {v1OutputScript} = require('p2tr');
 
@@ -72,6 +72,7 @@ const fuzzTimelock = 1;
 const getLoopCoopSignedTransaction = asyncTimeout(getCoopSignedTx, 1000 * 30);
 const hexAsBuffer = hex => Buffer.from(hex, 'hex');
 const {isArray} = Array;
+const isCompressed = true;
 const maxClaimMultiple = (r, t) => Math.min(1000, ((1000 + t) / 150) / r);
 const maxCoopMultiple = (r, t) => Math.min(1000, ((1000 + t) / 100) / r);
 const messageRejected = 'PaymentRejectedByDestination';
@@ -82,6 +83,7 @@ const pollInterval = {btcregtest: 100};
 const ppmRate = (fee, total) => fee * 1e6 / total;
 const preimageByteLength = 32;
 const pubKeyAsInternalKey = key => Buffer.from(key).slice(1).toString('hex');
+const publicKeyFor = key => Buffer.from(pointFromScalar(key, isCompressed));
 const pushSecret = asyncTimeout(releaseSwapOutSecret, 1000 * 30);
 const sha256 = preimage => createHash('sha256').update(preimage).digest('hex');
 const sighash = Transaction.SIGHASH_DEFAULT;
@@ -116,9 +118,6 @@ const witnessVersionTaproot = 1;
 module.exports = (args, cbk) => {
   return new Promise((resolve, reject) => {
     return asyncAuto({
-      // Import the ECPair library
-      ecp: async () => (await import('ecpair')).ECPairFactory(tinysecp),
-
       // Check arguments
       validate: cbk => {
         if (!args.emitter) {
@@ -340,12 +339,12 @@ module.exports = (args, cbk) => {
       }],
 
       // Get the claim public key
-      getClaimKey: ['ecp', 'requestDetails', ({ecp, requestDetails}, cbk) => {
+      getClaimKey: ['requestDetails', ({requestDetails}, cbk) => {
         // Exit early when a private key is defined
         if (!!requestDetails.solo_private_key) {
           const privateKey = hexAsBuffer(requestDetails.solo_private_key);
 
-          const {publicKey} = ecp.fromPrivateKey(privateKey);
+          const publicKey = publicKeyFor(privateKey);
 
           return cbk(null, {public_key: bufferAsHex(publicKey)});
         }
@@ -453,14 +452,12 @@ module.exports = (args, cbk) => {
 
       // Derive the swap script branches
       branches: [
-        'ecp',
         'getClaimKey',
         'requestDetails',
         'responseDetails',
-        ({ecp, getClaimKey, requestDetails, responseDetails}, cbk) =>
+        ({getClaimKey, requestDetails, responseDetails}, cbk) =>
       {
         const swapScript = swapScriptBranches({
-          ecp,
           claim_public_key: getClaimKey.public_key,
           hash: sha256(hexAsBuffer(requestDetails.secret)),
           refund_public_key: responseDetails.refund_public_key,
@@ -477,12 +474,11 @@ module.exports = (args, cbk) => {
 
       // Derive the output script
       joined: [
-        'ecp',
         'branches',
         'getClaimKey',
         'requestDetails',
         'responseDetails',
-        ({ecp, branches, getClaimKey, requestDetails, responseDetails}, cbk) =>
+        ({branches, getClaimKey, requestDetails, responseDetails}, cbk) =>
       {
         // Exit early when using MuSig2 with Lightning Loop
         if (!!args.is_loop_service) {
@@ -502,7 +498,7 @@ module.exports = (args, cbk) => {
         const privateKey = requestDetails.coop_private_key;
 
         const jointPublicKey = pointAdd(
-          ecp.fromPrivateKey(hexAsBuffer(privateKey)).publicKey,
+          publicKeyFor(hexAsBuffer(privateKey)),
           hexAsBuffer(responseDetails.coop_public_key)
         );
 
@@ -551,7 +547,6 @@ module.exports = (args, cbk) => {
       payToDeposit: [
         'checkSwapId',
         'deadline',
-        'ecp',
         'getDepositPayment',
         'getNetwork',
         'requestDetails',
@@ -560,7 +555,6 @@ module.exports = (args, cbk) => {
         'swap',
         ({
           deadline,
-          ecp,
           getNetwork,
           getDepositPayment,
           requestDetails,
@@ -651,7 +645,7 @@ module.exports = (args, cbk) => {
               max_fee: args.max_fee_deposit,
               messages: [{
                 type: typePayMetadata,
-                value: bufferAsHex(ecp.fromPrivateKey(privateKey).publicKey),
+                value: bufferAsHex(publicKeyFor(privateKey)),
               }],
               mtokens: responseDetails.deposit_mtokens,
               payment: responseDetails.deposit_payment,
@@ -762,7 +756,6 @@ module.exports = (args, cbk) => {
         'checkOutput',
         'createAddress',
         'deadline',
-        'ecp',
         'findOutput',
         'getFeeRate',
         'getNetwork',
@@ -771,7 +764,6 @@ module.exports = (args, cbk) => {
         ({
           createAddress,
           deadline,
-          ecp,
           findOutput,
           getFeeRate,
           getNetwork,
@@ -801,7 +793,6 @@ module.exports = (args, cbk) => {
 
         const claims = feeRates.map(({rate, height}) => {
           const {transaction} = taprootClaimTransaction({
-            ecp,
             block_height: height - fuzzTimelock,
             claim_script: swap.claim_script,
             external_key: swap.external_key,
@@ -895,14 +886,12 @@ module.exports = (args, cbk) => {
 
       // Push the preimage to allow for a cooperative swap
       pushPreimage: [
-        'ecp',
         'findOutput',
         'loopService',
         'requestDetails',
         'responseDetails',
         'signClaims',
         asyncReflect(({
-          ecp,
           loopService,
           requestDetails,
           responseDetails,
@@ -941,7 +930,7 @@ module.exports = (args, cbk) => {
         const privateKey = requestDetails.coop_private_key;
         const to = parsePaymentRequest({request: responseDetails.request});
 
-        const pubKey = ecp.fromPrivateKey(hexAsBuffer(privateKey)).publicKey;
+        const pubKey = publicKeyFor(hexAsBuffer(privateKey));
 
         const id = sha256(pubKey);
 
@@ -1024,7 +1013,6 @@ module.exports = (args, cbk) => {
         'branches',
         'createAddress',
         'deadline',
-        'ecp',
         'findCoopKey',
         'findOutput',
         'getClaimKey',
@@ -1039,7 +1027,6 @@ module.exports = (args, cbk) => {
           branches,
           createAddress,
           deadline,
-          ecp,
           findCoopKey,
           findOutput,
           getClaimKey,
@@ -1139,24 +1126,23 @@ module.exports = (args, cbk) => {
 
         const privateKeys = privateKeysHex.map(hexAsBuffer);
 
-        const coopKey = ecp.fromPrivateKey(from(privateAdd(...privateKeys)));
+        const coopKey = publicKeyFor(from(privateAdd(...privateKeys)));
 
         const coopPrivateKey = hexAsBuffer(requestDetails.coop_private_key);
 
         const jointPublicKey = pointAdd(
-          ecp.fromPrivateKey(coopPrivateKey).publicKey,
+          publicKeyFor(coopPrivateKey),
           hexAsBuffer(responseDetails.coop_public_key)
         );
 
         // The public key from the private keys should be the combined pubkeys
-        if (!coopKey.publicKey.equals(jointPublicKey)) {
+        if (!coopKey.equals(from(jointPublicKey))) {
           return cbk([503, 'ReceivedIncorrectPrivateCoopKey']);
         }
 
         // Derive sweep transactions at different fee rates
         const coop = feeRates.map(({height, rate}) => {
           const {transaction} = taprootCoopTransaction({
-            ecp,
             fee_tokens_per_vbyte: rate,
             network: getNetwork.network,
             output_script: swap.output_script,

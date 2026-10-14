@@ -14,6 +14,7 @@ const {spawnLightningCluster} = require('ln-docker-daemons');
 const {createGroupChannel} = require('./../../');
 const {joinGroupChannel} = require('./../../');
 
+const blockInterval = 1000;
 const capacity = 1e5;
 const count = 101;
 const feeRate = 1;
@@ -83,7 +84,14 @@ test(`Setup joint channel group non-interactively`, async () => {
 
       // Make blocks to activate the channel
       generate: async () => {
+        // Wait for the group funding transaction to be broadcast first
         await asyncRetry({interval, times}, async () => {
+          if (!createLog.find(n => !!n.transaction_id)) {
+            throw new Error('ExpectedGroupTransactionBroadcast');
+          }
+        });
+
+        await asyncRetry({interval: blockInterval, times}, async () => {
           await generate({});
 
           const {channels} = await getChannels({lnd, is_active: true});
@@ -96,19 +104,23 @@ test(`Setup joint channel group non-interactively`, async () => {
 
       // Join the group
       join: async () => {
-        return await asyncRetry({interval, times}, async () => {
-          const code = createLog.find(n => !!n.group_invite_code);
+        // Wait for the group invite code to be logged
+        const code = await asyncRetry({interval, times}, async () => {
+          const line = createLog.find(n => !!n.group_invite_code);
 
-          if (!code) {
+          if (!line) {
             throw new Error('ExpectedGroupChannelJoinCode');
           }
 
-          return await joinGroupChannel({
-            code: code.group_invite_code,
-            lnd: target.lnd,
-            logger: {info: () => {}},
-            max_rate: feeRate,
-          });
+          return line.group_invite_code;
+        });
+
+        // Only join once, since joining is not safe to retry part way through
+        return await joinGroupChannel({
+          code,
+          lnd: target.lnd,
+          logger: {info: () => {}},
+          max_rate: feeRate,
         });
       },
     });

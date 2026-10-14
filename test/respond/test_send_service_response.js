@@ -1,18 +1,15 @@
 const {deepStrictEqual, rejects} = require('node:assert/strict');
-const {before, test} = require('node:test');
+const {test} = require('node:test');
 
 const {makeLnd} = require('mock-lnd');
 const {makePayViaRoutesResponse} = require('mock-lnd');
 const {makePaymentRequest} = require('mock-lnd');
-const tinysecp = require('tiny-secp256k1');
+const {sign} = require('tiny-secp256k1');
 
 const method = require('./../../respond/send_service_response');
 
-let ecp;
-
-before(async () => {
-  ecp = (await import('ecpair')).ECPairFactory(tinysecp);
-});
+// mock-lnd makes payment requests with an ECPair-shaped signing factory
+const ecp = {fromPrivateKey: key => ({sign: hash => sign(hash, key)})};
 
 const makeArgs = overrides => {
   let requests = 0;

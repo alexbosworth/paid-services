@@ -1,26 +1,21 @@
 const {deepStrictEqual, rejects} = require('node:assert/strict');
-const {before, test} = require('node:test');
+const {test} = require('node:test');
 
 const {encodeTlvStream} = require('bolt01');
 const {makeInvoice} = require('mock-lnd');
 const {makeLnd} = require('mock-lnd');
 const {makePaymentRequest} = require('mock-lnd');
-const tinysecp = require('tiny-secp256k1');
+const {sign} = require('tiny-secp256k1');
 
 const messagesForRequest = require('./../../client/messages_for_request');
 const method = require('./../../server/process_paywall');
 
+// mock-lnd makes payment requests with an ECPair-shaped signing factory
+const ecp = {fromPrivateKey: key => ({sign: hash => sign(hash, key)})};
 const encode = records => encodeTlvStream({records: [records]}).encoded;
 const id1 = Buffer.alloc(32).toString('hex');
 const id2 = Buffer.alloc(32, 1).toString('hex');
-
-let request;
-
-before(async () => {
-  const ecp = (await import('ecpair')).ECPairFactory(tinysecp);
-
-  ({request} = makePaymentRequest({ecp}));
-});
+const {request} = makePaymentRequest({ecp});
 
 const makeArgs = overrides => {
   const args = {

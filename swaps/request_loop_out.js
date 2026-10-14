@@ -17,7 +17,6 @@ const {parsePaymentRequest} = require('ln-service');
 const {pay} = require('ln-service');
 const {returnResult} = require('asyncjs-util');
 const {swapScriptBranches} = require('goldengate');
-const tinysecp = require('tiny-secp256k1');
 
 const decodeLoopResponse = require('./decode_loop_response');
 const decodeOffToOnRecovery = require('./decode_off_to_on_recovery');
@@ -47,9 +46,6 @@ const timeoutHeight = current => 400 + current - 3;
 module.exports = ({before, lnd, recovery}, cbk) => {
   return new Promise((resolve, reject) => {
     return asyncAuto({
-      // Import ECPair library
-      ecp: async () => (await import('ecpair')).ECPairFactory(tinysecp),
-
       // Check arguments
       validate: cbk => {
         if (!lnd) {
@@ -197,15 +193,13 @@ module.exports = ({before, lnd, recovery}, cbk) => {
       // Derive swap script branches
       script: [
         'create',
-        'ecp',
         'getKey',
         'requestDetails',
         'startHeight',
-        ({create, ecp, getKey, requestDetails, startHeight}, cbk) =>
+        ({create, getKey, requestDetails, startHeight}, cbk) =>
       {
         try {
           const swap = swapScriptBranches({
-            ecp,
             claim_public_key: getKey.public_key,
             hash: requestDetails.hash,
             refund_public_key: create.service_public_key,

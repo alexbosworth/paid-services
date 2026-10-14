@@ -22,6 +22,7 @@ const {getNetwork} = require('ln-sync');
 const {getPublicKey} = require('ln-service');
 const {hashForTree} = require('p2tr');
 const {pointAdd} = require('tiny-secp256k1');
+const {pointFromScalar} = require('tiny-secp256k1');
 const {returnResult} = require('asyncjs-util');
 const {sendToChainOutputScripts} = require('ln-service');
 const {settleHodlInvoice} = require('ln-service');
@@ -32,7 +33,6 @@ const {subscribeToInvoice} = require('ln-service');
 const {subscribeToSpend} = require('goldengate');
 const {swapScriptBranches} = require('goldengate');
 const {taprootRefundTransaction} = require('goldengate');
-const tinysecp = require('tiny-secp256k1');
 const {Transaction} = require('bitcoinjs-lib');
 const {v1OutputScript} = require('p2tr');
 
@@ -54,12 +54,14 @@ const hexAsBase64 = hex => Buffer.from(hex, 'hex').toString('base64');
 const hexAsBuffer = hex => Buffer.from(hex, 'hex');
 const historicBlocksRange = 144 * 30;
 const isAnnex = element => element[0] === 0x50;
+const isCompressed = true;
 const maxRefundMultiple = (r, t) => Math.min(100, ((1000 + t) / 150) / r);
 const {min} = Math;
 const minBlocks = 50;
 const pollInterval = {btcregtest: 100};
 const pubKeyAsInternalKey = key => Buffer.from(key).slice(1).toString('hex');
 const pubKeyAsSecret = hexPublicKey => hexPublicKey.slice(2);
+const publicKeyFor = key => Buffer.from(pointFromScalar(key, isCompressed));
 const removeAnnex = stack => stack.slice(0, -1);
 const sha256 = preimage => createHash('sha256').update(preimage).digest('hex');
 const sighash = Transaction.SIGHASH_DEFAULT;
@@ -86,9 +88,6 @@ const witnessLengthTimeoutSweep = 3;
 module.exports = (args, cbk) => {
   return new Promise((resolve, reject) => {
     return asyncAuto({
-      // Import the ECPair library
-      ecp: async () => (await import('ecpair')).ECPairFactory(tinysecp),
-
       // Check arguments
       validate: cbk => {
         if (!args.emitter) {
@@ -190,16 +189,12 @@ module.exports = (args, cbk) => {
       }],
 
       // Get the refund key
-      getRefundKey: [
-        'ecp',
-        'recoveryDetails',
-        ({ecp, recoveryDetails}, cbk) =>
-      {
+      getRefundKey: ['recoveryDetails', ({recoveryDetails}, cbk) => {
         // Exit early when a unilateral private key is defined
         if (!!recoveryDetails.solo_private_key) {
           const privateKey = hexAsBuffer(recoveryDetails.solo_private_key);
 
-          const {publicKey} = ecp.fromPrivateKey(privateKey);
+          const publicKey = publicKeyFor(privateKey);
 
           return cbk(null, {public_key: bufferAsHex(publicKey)});
         }
@@ -296,21 +291,19 @@ module.exports = (args, cbk) => {
 
       // Derive swap details
       swap: [
-        'ecp',
         'getRefundKey',
         'recoveryDetails',
         'waitForDepositHold',
-        ({ecp, getRefundKey, recoveryDetails, waitForDepositHold}, cbk) =>
+        ({getRefundKey, recoveryDetails, waitForDepositHold}, cbk) =>
       {
         const privateKey = recoveryDetails.refund_coop_private_key;
 
         const jointPublicKey = pointAdd(
-          ecp.fromPrivateKey(hexAsBuffer(privateKey)).publicKey,
+          publicKeyFor(hexAsBuffer(privateKey)),
           hexAsBuffer(waitForDepositHold.claim_coop_public_key)
         );
 
         const swapScript = swapScriptBranches({
-          ecp,
           claim_public_key: recoveryDetails.claim_solo_public_key,
           hash: recoveryDetails.hash,
           refund_public_key: getRefundKey.public_key,
@@ -335,7 +328,6 @@ module.exports = (args, cbk) => {
 
       // Generate the refund transactions against the inbound HTLC deadline
       refunds: [
-        'ecp',
         'getChainFee',
         'getNetwork',
         'getRefundKey',
@@ -345,7 +337,6 @@ module.exports = (args, cbk) => {
         'swap',
         'waitForFundHold',
         ({
-          ecp,
           getChainFee,
           getNetwork,
           getRefundKey,
@@ -378,7 +369,6 @@ module.exports = (args, cbk) => {
           }
 
           return taprootRefundTransaction({
-            ecp,
             block_height: height,
             external_key: swap.external_key,
             fee_tokens_per_vbyte: rate,

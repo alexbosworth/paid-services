@@ -1,27 +1,21 @@
 const {deepStrictEqual, rejects} = require('node:assert/strict');
-const {before, test} = require('node:test');
+const {test} = require('node:test');
 
 const {makeInvoice} = require('mock-lnd');
 const {makeLnd} = require('mock-lnd');
 const {makePayViaRoutesResponse} = require('mock-lnd');
 const {makePaymentRequest} = require('mock-lnd');
-const tinysecp = require('tiny-secp256k1');
+const {sign} = require('tiny-secp256k1');
 
 const messagesForRequest = require('./../../client/messages_for_request');
 const method = require('./../../server/process_request');
 
+// mock-lnd makes payment requests with an ECPair-shaped signing factory
+const ecp = {fromPrivateKey: key => ({sign: hash => sign(hash, key)})};
 const id1 = Buffer.alloc(32).toString('hex');
+const {request} = makePaymentRequest({ecp});
 
-let ecp;
-let messages;
-let request;
-
-before(async () => {
-  ecp = (await import('ecpair')).ECPairFactory(tinysecp);
-
-  ({request} = makePaymentRequest({ecp}));
-  ({messages} = messagesForRequest({reply: request, service: '2'}));
-});
+const {messages} = messagesForRequest({reply: request, service: '2'});
 
 const makeArgs = overrides => {
   let requests = 0;
@@ -148,8 +142,6 @@ const tests = [
 tests.forEach(({args, description, error, expected}) => {
   test(description, async () => {
     const testArgs = args();
-
-    testArgs.ecp = ecp;
 
     if (!!error) {
       await rejects(

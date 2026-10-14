@@ -7,20 +7,24 @@ const {getHeight} = require('ln-service');
 const {getIdentity} = require('ln-service');
 const {getNetwork} = require('ln-sync');
 const {getPublicKey} = require('ln-service');
-const {parsePaymentRequest} = require('ln-service');
 const {networks} = require('bitcoinjs-lib');
+const {parsePaymentRequest} = require('ln-service');
+const {pointFromScalar} = require('tiny-secp256k1');
 const {returnResult} = require('asyncjs-util');
-const tinysecp = require('tiny-secp256k1');
 
 const decodeOffToOnRequest = require('./decode_off_to_on_request');
 const encodeOffToOnResponse = require('./encode_off_to_on_response');
+const makePrivateKey = require('./make_private_key');
 
 const bufferAsHex = buffer => buffer.toString('hex');
 const defaultSwapExpiryMs = 1000 * 60 * 30;
 const family = 805;
+const hexAsBuffer = hex => Buffer.from(hex, 'hex');
+const isCompressed = true;
 const maxSwapDelta = 144 * 30;
 const minSwapDelta = 80;
 const {now} = Date;
+const publicKeyFor = key => Buffer.from(pointFromScalar(key, isCompressed));
 const refundDelta = 144;
 const sha256 = preimage => createHash('sha256').update(preimage).digest('hex');
 
@@ -45,9 +49,6 @@ const sha256 = preimage => createHash('sha256').update(preimage).digest('hex');
 module.exports = (args, cbk) => {
   return new Promise((resolve, reject) => {
     return asyncAuto({
-      // Import the ECPair library
-      ecp: async () => (await import('ecpair')).ECPairFactory(tinysecp),
-
       // Check arguments
       validate: cbk => {
         if (!args.delta) {
@@ -118,8 +119,9 @@ module.exports = (args, cbk) => {
       }],
 
       // Generate the refund coop key
-      generateCoopKey: ['ecp', 'network', ({ecp, network}, cbk) => {
-        const {privateKey, publicKey} = ecp.makeRandom({network});
+      generateCoopKey: ['network', ({}, cbk) => {
+        const privateKey = hexAsBuffer(makePrivateKey({}).private_key);
+        const publicKey = publicKeyFor(privateKey);
 
         return cbk(null, {
           hash: sha256(privateKey),
@@ -129,12 +131,13 @@ module.exports = (args, cbk) => {
       }],
 
       // Generate the refund solo key
-      generateSoloKey: ['ecp', 'network', ({ecp, network}, cbk) => {
+      generateSoloKey: ['network', ({}, cbk) => {
         if (!args.is_external_solo_key) {
           return cbk(null, {});
         }
 
-        const {privateKey, publicKey} = ecp.makeRandom({network});
+        const privateKey = hexAsBuffer(makePrivateKey({}).private_key);
+        const publicKey = publicKeyFor(privateKey);
 
         return cbk(null, {
           private: bufferAsHex(privateKey),
