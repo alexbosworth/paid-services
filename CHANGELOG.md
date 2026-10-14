@@ -1,6 +1,6 @@
 # Versions
 
-## Version 10.3.1
+## Version 10.3.2
 
 - `getOfferInvoice`: Add support for offer paths that start at the payer
 - `serviceSupportOffer`: Add support for reply paths that start at the node
