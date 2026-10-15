@@ -1,4 +1,3 @@
-const {address} = require('bitcoinjs-lib');
 const asyncAuto = require('async/auto');
 const asyncMap = require('async/map');
 const {findKey} = require('ln-sync');
@@ -7,13 +6,13 @@ const {getAllInvoices} = require('ln-sync');
 const {getInvoice} = require('ln-service');
 const {getNetwork} = require('ln-sync');
 const {getNodeAlias} = require('ln-sync');
-const {networks} = require('bitcoinjs-lib');
+const {outputScriptForAddress} = require('@alexbosworth/blockchain');
 const {returnResult} = require('asyncjs-util');
 
 const decodeOffToOnRequest = require('./decode_off_to_on_request');
 const decodeOffToOnRestart = require('./decode_off_to_on_restart');
 const {decodeTrade} = require('./../trades');
-const outputScriptForAddress = require('./output_script_for_address');
+const {minConfirmations} = require('./constants');
 const recoverResponseToSwapOut = require('./recover_response_to_swap_out');
 const requestSwapOut = require('./request_swap_out');
 const respondToSwapOutRequest = require('./respond_to_swap_out_request');
@@ -24,14 +23,12 @@ const actionRestartRequest = 'restart-request';
 const allowedNetwork = 'btctestnet';
 const bip86Path = `m/86'/0'/0'`;
 const flatten = arr => [].concat(...arr);
-const minConfirmations = {btc: 2, btcregtest: 3, btctestnet: 1};
 const niceId = id => id.substring(0, 8);
 const niceName = node => `${node.alias} ${node.id.substring(0, 8)}`.trim();
 const pushesReceivedAfter = () => new Date(Date.now() - 1000 * 60 * 60 * 24);
 const recoverRespondAction = 'recover-response';
 const requestAction = 'request';
 const respondAction = 'respond';
-const {toOutputScript} = address;
 const tokensAsBigUnit = tokens => (tokens / 1e8).toFixed(8);
 const typeKeySendTrade = '805805';
 
@@ -314,7 +311,7 @@ module.exports = (args, cbk) => {
               try {
                 return !!outputScriptForAddress({
                   address: input,
-                  network: getNetwork.bitcoinjs,
+                  network: getNetwork.network,
                 });
               } catch (err) {
                 return 'Unsupported on-chain address format';

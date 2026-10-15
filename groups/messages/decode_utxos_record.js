@@ -1,9 +1,8 @@
+const {componentsOfTransaction} = require('@alexbosworth/blockchain');
 const {decodeBigSize} = require('bolt01');
 const {decodeTlvStream} = require('bolt01');
-const {Transaction} = require('bitcoinjs-lib');
 
 const findRecord = (records, type) => records.find(n => n.type === type);
-const {fromHex} = Transaction;
 
 const expectedTxIdHexLength = 64;
 const isP2tr = n => n.startsWith('5120') && n.length === 68;
@@ -61,7 +60,7 @@ module.exports = ({encoded}) => {
 
     if (!!nonWitnessUtxo) {
       try {
-        fromHex(nonWitnessUtxo.value);
+        componentsOfTransaction({transaction: nonWitnessUtxo.value});
       } catch (err) {
         throw new Error('ExpectedValidTransactionInPendingWitnessUtxo');
       }

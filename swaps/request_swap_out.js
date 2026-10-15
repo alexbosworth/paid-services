@@ -20,6 +20,7 @@ const decodeOffToOnRequest = require('./decode_off_to_on_request');
 const decodeOffToOnResponse = require('./decode_off_to_on_response');
 const encodeOffToOnRestart = require('./encode_off_to_on_restart');
 const {encodeTrade} = require('./../trades');
+const {invoiceNetworks} = require('./constants');
 const makeRequest = require('./start_off_to_on_swap');
 const {pushTypes} = require('./swap_field_types');
 const requestLoopOut = require('./request_loop_out');
@@ -251,7 +252,10 @@ module.exports = (args, cbk) => {
 
           // Check the swap response is valid
           try {
-            decodeOffToOnResponse({response, network: getNetwork.bitcoinjs});
+            decodeOffToOnResponse({
+              response,
+              network: invoiceNetworks[getNetwork.network],
+            });
           } catch (err) {
             return res.failure([400, err.message]);
           }
@@ -373,7 +377,10 @@ module.exports = (args, cbk) => {
             }
 
             try {
-              decodeOffToOnResponse({response, network: getNetwork.bitcoinjs});
+              decodeOffToOnResponse({
+                response,
+                network: invoiceNetworks[getNetwork.network],
+              });
             } catch (err) {
               return 'Failed parse this response, check input?';
             }
@@ -395,7 +402,7 @@ module.exports = (args, cbk) => {
         // Exit early when the request is to Lightning Loop
         if (!!args.is_loop_service) {
           const details = decodeLoopResponse({
-            network: getNetwork.bitcoinjs,
+            network: invoiceNetworks[getNetwork.network],
             response: getResponse,
           });
 
@@ -414,7 +421,7 @@ module.exports = (args, cbk) => {
         }
 
         const response = decodeOffToOnResponse({
-          network: getNetwork.bitcoinjs,
+          network: invoiceNetworks[getNetwork.network],
           response: getResponse,
         });
 

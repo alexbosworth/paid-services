@@ -10,6 +10,7 @@ const asyncTimeout = require('async/timeout');
 const {beginGroupSigningSession} = require('ln-service');
 const {broadcastChainTransaction} = require('ln-service');
 const {cancelSwapOut} = require('goldengate');
+const {componentsOfTransaction} = require('@alexbosworth/blockchain');
 const {confirmationFee} = require('goldengate');
 const {controlBlock} = require('p2tr');
 const {createChainAddress} = require('ln-service');
@@ -25,9 +26,9 @@ const {getNetwork} = require('ln-sync');
 const {getPayment} = require('ln-service');
 const {getPublicKey} = require('ln-service');
 const {hashForTree} = require('p2tr');
+const {idForTransaction} = require('@alexbosworth/blockchain');
 const {lightningLabsSwapAuth} = require('goldengate');
 const {lightningLabsSwapService} = require('goldengate');
-const {networks} = require('bitcoinjs-lib');
 const {parsePaymentRequest} = require('ln-service');
 const {pay} = require('ln-service');
 const {payViaPaymentDetails} = require('ln-service');
@@ -36,25 +37,28 @@ const {pointFromScalar} = require('tiny-secp256k1');
 const {privateAdd} = require('tiny-secp256k1');
 const {releaseSwapOutSecret} = require('goldengate');
 const {returnResult} = require('asyncjs-util');
-const {script} = require('bitcoinjs-lib');
+const {scriptAsScriptElements} = require('@alexbosworth/blockchain');
 const {signTransaction} = require('ln-service');
+const {sizeOfTransaction} = require('@alexbosworth/blockchain');
 const {subscribeToBlocks} = require('ln-service');
 const {subscribeToPastPayment} = require('ln-service');
 const {subscribeToSpend} = require('goldengate');
 const {swapScriptBranches} = require('goldengate');
 const {taprootClaimTransaction} = require('goldengate');
 const {taprootCoopTransaction} = require('goldengate');
-const {Transaction} = require('bitcoinjs-lib');
+const {transactionFromComponents} = require('@alexbosworth/blockchain');
 const {v1OutputScript} = require('p2tr');
 
+const {bech32Prefixes} = require('./../config');
 const decodeLoopResponse = require('./decode_loop_response');
 const decodeOffToOnRecovery = require('./decode_off_to_on_recovery');
 const decodeOffToOnResponse = require('./decode_off_to_on_response');
+const {invoiceNetworks} = require('./constants');
 const {typePayMetadata} = require('./swap_field_types');
 
 const bufferAsHex = buffer => buffer.toString('hex');
 const {ceil} = Math;
-const decompileOutputScript = hex => script.decompile(Buffer.from(hex, 'hex'));
+const decompileScript = script => scriptAsScriptElements({script}).elements;
 const defaultConfsCount = 1;
 const defaultDepositSettleTimeoutMs = 1000 * 60 * 10;
 const defaultMaxFeeMultiplier = 1000;
@@ -66,7 +70,6 @@ const family = 805;
 const {floor} = Math;
 const format = 'p2tr';
 const {from} = Buffer;
-const {fromHex} = Transaction;
 const fuzzBlocks = 100;
 const fuzzTimelock = 1;
 const getLoopCoopSignedTransaction = asyncTimeout(getCoopSignedTx, 1000 * 30);
@@ -86,7 +89,7 @@ const pubKeyAsInternalKey = key => Buffer.from(key).slice(1).toString('hex');
 const publicKeyFor = key => Buffer.from(pointFromScalar(key, isCompressed));
 const pushSecret = asyncTimeout(releaseSwapOutSecret, 1000 * 30);
 const sha256 = preimage => createHash('sha256').update(preimage).digest('hex');
-const sighash = Transaction.SIGHASH_DEFAULT;
+const sighashDefault = 0;
 const slowConfs = 144 * 7;
 const sumOf = arr => arr.reduce((sum, n) => sum + n, 0);
 const sweepInputIndex = 0;
@@ -220,7 +223,7 @@ module.exports = (args, cbk) => {
         if (!!args.is_loop_service) {
           try {
             const details = decodeLoopResponse({
-              network: getNetwork.bitcoinjs,
+              network: invoiceNetworks[getNetwork.network],
               response: args.response,
             });
 
@@ -243,7 +246,7 @@ module.exports = (args, cbk) => {
         try {
           // Decode the response
           const decoded = decodeOffToOnResponse({
-            network: getNetwork.bitcoinjs,
+            network: invoiceNetworks[getNetwork.network],
             response: args.response,
           });
 
@@ -680,9 +683,9 @@ module.exports = (args, cbk) => {
         'swap',
         ({deadline, getNetwork, requestDetails, startHeight, swap}, cbk) =>
       {
-        const [, key] = decompileOutputScript(swap.output_script);
+        const [, key] = decompileScript(swap.output_script);
         const outputScript = swap.output_script;
-        const prefix = networks[getNetwork.bitcoinjs].bech32;
+        const prefix = bech32Prefixes[getNetwork.network];
 
         const {address} = encodeBech32Address({
           prefix,
@@ -840,11 +843,11 @@ module.exports = (args, cbk) => {
           return signTransaction({
             transaction,
             inputs: [{
-              sighash,
               key_family: family,
               key_index: requestDetails.key_index,
               output_script: swap.output_script,
               output_tokens: requestDetails.tokens,
+              sighash: sighashDefault,
               vin: sweepInputIndex,
               witness_script: swap.claim_script,
             }],
@@ -871,14 +874,23 @@ module.exports = (args, cbk) => {
               block,
             ];
 
-            const tx = fromHex(transaction);
+            const tx = componentsOfTransaction({transaction});
 
             // Add the signature to the sweep
-            tx.ins.forEach((input, vin) => {
-              return tx.setWitness(vin, witness.map(hexAsBuffer));
+            const signed = transactionFromComponents({
+              inputs: tx.inputs.map(input => ({
+                witness,
+                id: input.id,
+                script: input.script,
+                sequence: input.sequence,
+                vout: input.vout,
+              })),
+              locktime: tx.locktime,
+              outputs: tx.outputs,
+              version: tx.version,
             });
 
-            return cbk(null, {height, transaction: tx.toHex()});
+            return cbk(null, {height, transaction: signed.transaction});
           });
         },
         cbk);
@@ -1229,15 +1241,15 @@ module.exports = (args, cbk) => {
 
           const [{transaction}] = broadcast.reverse();
 
-          const tx = fromHex(transaction);
+          const {outputs} = componentsOfTransaction({transaction});
 
-          const fee = requestDetails.tokens - sumOf(tx.outs.map(n => n.value));
+          const fee = requestDetails.tokens - sumOf(outputs.map(n => n.tokens));
 
           args.emitter.emit('update', {
             blocks_until_potential_funds_forfeit: swap.timeout - block.height,
-            broadcasting_fee_rate: fee / tx.virtualSize(),
+            broadcasting_fee_rate: fee / sizeOfTransaction({transaction}).vsize,
             broadcasting_tx_to_resolve_swap: transaction,
-            broadcasting_tx_id: tx.getId(),
+            broadcasting_tx_id: idForTransaction({transaction}).id,
           });
 
           return broadcastChainTransaction({
@@ -1251,11 +1263,13 @@ module.exports = (args, cbk) => {
 
         // Look for the sweep to confirm
         subSpend.on('confirmation', ({transaction}) => {
-          const tx = fromHex(transaction);
+          const {outputs} = componentsOfTransaction({transaction});
 
-          const fee = requestDetails.tokens - sumOf(tx.outs.map(n => n.value));
+          const fee = requestDetails.tokens - sumOf(outputs.map(n => n.tokens));
 
-          return done(null, {fee: fee, rate: fee / tx.virtualSize()});
+          const {vsize} = sizeOfTransaction({transaction});
+
+          return done(null, {fee: fee, rate: fee / vsize});
         });
 
         subSpend.on('error', err => done(err));

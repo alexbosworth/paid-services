@@ -6,7 +6,7 @@ const {combinePsbts} = require('psbt');
 const {decodePsbt} = require('psbt');
 const {extractTransaction} = require('psbt');
 const {finalizePsbt} = require('psbt');
-const {Transaction} = require('bitcoinjs-lib');
+const {idForTransaction} = require('@alexbosworth/blockchain');
 
 const {confirmIncomingChannel} = require('./funding');
 const {coordinateGroup} = require('./assemble');
@@ -15,7 +15,6 @@ const {proposeGroupChannel} = require('./funding');
 const {signAndFundGroupChannel} = require('./funding');
 const transactionFeeRate = require('./transaction_fee_rate');
 
-const {fromHex} = Transaction;
 const interval = 500;
 const minGroupCount = 2;
 const times = 2 * 60 * 10;
@@ -176,7 +175,7 @@ module.exports = ({capacity, count, identity, lnd, members, rate}) => {
           capacity,
           lnd,
           from: coordinator.partners(identity).inbound,
-          id: fromHex(basePsbt.unsigned_transaction).getId(),
+          id: idForTransaction({transaction: basePsbt.unsigned_transaction}).id,
           to: coordinator.partners(identity).outbound || undefined,
         });
       });

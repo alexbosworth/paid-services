@@ -2,10 +2,10 @@ const asyncAuto = require('async/auto');
 const asyncReflect = require('async/reflect');
 const asyncRetry = require('async/retry');
 const {cancelPendingChannel} = require('ln-service');
+const {componentsOfTransaction} = require('@alexbosworth/blockchain');
 const {connectPeer} = require('ln-sync');
 const {decodePsbt} = require('psbt');
 const {returnResult} = require('asyncjs-util');
-const {Transaction} = require('bitcoinjs-lib');
 
 const {decodeUnsignedFunding} = require('./../messages');
 const {encodePendingProposal} = require('./../messages');
@@ -14,12 +14,9 @@ const {makePeerRequest} = require('./../../p2p');
 const {serviceTypeRegisterPendingOpen} = require('./../../service_types');
 const {signAndFundGroupChannel} = require('./../funding');
 
-const bufferAsHex = buffer => buffer.toString('hex');
 const defaultIntervalMs = 500;
 const defaultPollTimes = 2 * 60 * 30;
 const defaultRequestTimeoutMs = 1000 * 60;
-const {fromHex} = Transaction;
-const hexAsBuffer = hex => Buffer.from(hex, 'hex');
 const {isArray} = Array;
 const missingGroupPartners = 'NoGroupPartnersFound';
 
@@ -183,30 +180,29 @@ module.exports = (args, cbk) => {
           return cbk([503, 'ExpectedAllGroupInputsSpendingWitnessUtxos']);
         }
 
-        const tx = fromHex(psbt.unsigned_transaction);
+        const tx = componentsOfTransaction({
+          transaction: psbt.unsigned_transaction,
+        });
 
         const estimated = estimateFeeRate({
           inputs: psbt.inputs,
-          outputs: tx.outs.map(n => ({tokens: n.value})),
+          outputs: tx.outputs.map(n => ({tokens: n.tokens})),
           unsigned: psbt.unsigned_transaction,
         });
 
         // The utxos should be represented in the PSBT
         const missing = args.utxos.find(utxo => {
-          const hash = hexAsBuffer(utxo.transaction_id).reverse();
+          const id = utxo.transaction_id;
           const vout = utxo.transaction_vout;
 
-          return !tx.ins.find(n => n.hash.equals(hash) && n.index === vout);
+          return !tx.inputs.find(n => n.id === id && n.vout === vout);
         });
 
         if (!!missing) {
           return cbk([503, 'ExpectedAllInputsRepresentedInGroupChannelPsbt']);
         }
 
-        const outputs = tx.outs.map(({script, value}) => ({
-          script: bufferAsHex(script),
-          tokens: value,
-        }));
+        const {outputs} = tx;
 
         const change = outputs.find(n => n.script === args.change);
         const funding = outputs.find(n => n.script === args.funding);

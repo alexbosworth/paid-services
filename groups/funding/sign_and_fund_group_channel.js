@@ -3,11 +3,10 @@ const asyncRetry = require('async/retry');
 const {decodePsbt} = require('psbt');
 const {fundPendingChannels} = require('ln-service');
 const {getPendingChannels} = require('ln-service');
+const {idForTransaction} = require('@alexbosworth/blockchain');
 const {returnResult} = require('asyncjs-util');
 const {signAndFundPsbt} = require('ln-sync');
-const {Transaction} = require('bitcoinjs-lib');
 
-const {fromHex} = Transaction;
 const interval = 10;
 const {isArray} = Array;
 const times = 500;
@@ -88,7 +87,9 @@ module.exports = ({id, lnd, psbt, utxos}, cbk) => {
           return cbk();
         }
 
-        const tx = fromHex(decodePsbt({psbt}).unsigned_transaction);
+        const unsigned = decodePsbt({psbt}).unsigned_transaction;
+
+        const txId = idForTransaction({transaction: unsigned}).id;
 
         // Wait for the outgoing pending channel to be present
         return asyncRetry({interval, times}, cbk => {
@@ -99,7 +100,7 @@ module.exports = ({id, lnd, psbt, utxos}, cbk) => {
 
             const ids = res.pending_channels.map(n => n.transaction_id);
 
-            if (!ids.includes(tx.getId())) {
+            if (!ids.includes(txId)) {
               return cbk([503, 'FailedToFindPendingChannelForGroupOpen']);
             }
 

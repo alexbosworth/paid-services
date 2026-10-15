@@ -1,10 +1,12 @@
-const {Transaction} = require('bitcoinjs-lib');
+const {componentsOfTransaction} = require('@alexbosworth/blockchain');
+const {sizeOfTransaction} = require('@alexbosworth/blockchain');
+const {transactionFromComponents} = require('@alexbosworth/blockchain');
 
-const {fromHex} = Transaction;
+const bufferAsHex = buffer => buffer.toString('hex');
 const isUtxoP2wpkh = utxo => utxo.witness_utxo.script_pub.startsWith('0014');
 const sumTokens = arr => arr.reduce((sum, n) => sum + n.tokens, 0);
-const dummyP2wpkh = [Buffer.alloc(33), Buffer.alloc(72)];
-const dummyP2tr = [Buffer.alloc(64)];
+const dummyP2wpkh = [Buffer.alloc(33), Buffer.alloc(72)].map(bufferAsHex);
+const dummyP2tr = [Buffer.alloc(64)].map(bufferAsHex);
 
 /** Assuming large ECDSA signatures, determine a chain fee rate for a PSBT
 
@@ -28,11 +30,21 @@ const dummyP2tr = [Buffer.alloc(64)];
 */
 module.exports = ({inputs, outputs, unsigned}) => {
   const fee = sumTokens(inputs.map(n => n.witness_utxo)) - sumTokens(outputs);
-  const tx = fromHex(unsigned);
+  const tx = componentsOfTransaction({transaction: unsigned});
 
-  inputs.forEach((input, index) => {
-    return tx.setWitness(index, isUtxoP2wpkh(input) ? dummyP2wpkh : dummyP2tr);
+  // Add dummy witnesses to the inputs to estimate the final signed size
+  const {transaction} = transactionFromComponents({
+    inputs: tx.inputs.map((input, index) => ({
+      id: input.id,
+      script: input.script,
+      sequence: input.sequence,
+      vout: input.vout,
+      witness: isUtxoP2wpkh(inputs[index]) ? dummyP2wpkh : dummyP2tr,
+    })),
+    locktime: tx.locktime,
+    outputs: tx.outputs,
+    version: tx.version,
   });
 
-  return {rate: fee / tx.virtualSize()};
+  return {rate: fee / sizeOfTransaction({transaction}).vsize};
 };

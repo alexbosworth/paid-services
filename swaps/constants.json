@@ -1,0 +1,16 @@
+{
+  "invoiceNetworks": {
+    "btc": "bitcoin",
+    "btcregtest": "regtest",
+    "btcsignet": "signet",
+    "btctestnet": "testnet",
+    "btctestnet4": "testnet"
+  },
+  "minConfirmations": {
+    "btc": 2,
+    "btcregtest": 3,
+    "btcsignet": 1,
+    "btctestnet": 1,
+    "btctestnet4": 1
+  }
+}

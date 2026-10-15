@@ -5,6 +5,7 @@ const asyncMap = require('async/map');
 const asyncReflect = require('async/reflect');
 const {broadcastChainTransaction} = require('ln-service');
 const {cancelHodlInvoice} = require('ln-service');
+const {componentsOfTransaction} = require('@alexbosworth/blockchain');
 const {confirmationFee} = require('goldengate');
 const {controlBlock} = require('p2tr');
 const {createChainAddress} = require('ln-service');
@@ -21,6 +22,7 @@ const {getInvoice} = require('ln-service');
 const {getNetwork} = require('ln-sync');
 const {getPublicKey} = require('ln-service');
 const {hashForTree} = require('p2tr');
+const {idForTransaction} = require('@alexbosworth/blockchain');
 const {pointAdd} = require('tiny-secp256k1');
 const {pointFromScalar} = require('tiny-secp256k1');
 const {returnResult} = require('asyncjs-util');
@@ -33,7 +35,7 @@ const {subscribeToInvoice} = require('ln-service');
 const {subscribeToSpend} = require('goldengate');
 const {swapScriptBranches} = require('goldengate');
 const {taprootRefundTransaction} = require('goldengate');
-const {Transaction} = require('bitcoinjs-lib');
+const {transactionFromComponents} = require('@alexbosworth/blockchain');
 const {v1OutputScript} = require('p2tr');
 
 const decodeOnToOffRecovery = require('./decode_on_to_off_recovery');
@@ -48,13 +50,13 @@ const flatten = arr => [].concat(...arr);
 const {floor} = Math;
 const format = 'p2tr';
 const {from} = Buffer;
-const {fromHex} = Transaction;
 const fuzzBlocks = 100;
 const hexAsBase64 = hex => Buffer.from(hex, 'hex').toString('base64');
 const hexAsBuffer = hex => Buffer.from(hex, 'hex');
 const historicBlocksRange = 144 * 30;
-const isAnnex = element => element[0] === 0x50;
+const isAnnex = element => element.startsWith('50');
 const isCompressed = true;
+const locktimeOf = tx => componentsOfTransaction({transaction: tx}).locktime;
 const maxRefundMultiple = (r, t) => Math.min(100, ((1000 + t) / 150) / r);
 const {min} = Math;
 const minBlocks = 50;
@@ -64,7 +66,7 @@ const pubKeyAsSecret = hexPublicKey => hexPublicKey.slice(2);
 const publicKeyFor = key => Buffer.from(pointFromScalar(key, isCompressed));
 const removeAnnex = stack => stack.slice(0, -1);
 const sha256 = preimage => createHash('sha256').update(preimage).digest('hex');
-const sighash = Transaction.SIGHASH_DEFAULT;
+const sighashDefault = 0;
 const slowTarget = 144 * 7;
 const sweepInputIndex = 0;
 const times = n => Array(n).fill(null).map((_, i) => i);
@@ -404,11 +406,11 @@ module.exports = (args, cbk) => {
           return signTransaction({
             transaction,
             inputs: [{
-              sighash,
               key_family: family,
               key_index: recoveryDetails.key_index,
               output_script: swap.output_script,
               output_tokens: recoveryDetails.tokens,
+              sighash: sighashDefault,
               vin: sweepInputIndex,
               witness_script: swap.refund_script,
             }],
@@ -430,14 +432,23 @@ module.exports = (args, cbk) => {
 
             const witness = [signature, swap.refund_script, block];
 
-            const tx = fromHex(transaction);
+            const tx = componentsOfTransaction({transaction});
 
             // Add the signature to the sweep
-            tx.ins.forEach((input, vin) => {
-              return tx.setWitness(vin, witness.map(hexAsBuffer));
+            const signed = transactionFromComponents({
+              inputs: tx.inputs.map(input => ({
+                witness,
+                id: input.id,
+                script: input.script,
+                sequence: input.sequence,
+                vout: input.vout,
+              })),
+              locktime: tx.locktime,
+              outputs: tx.outputs,
+              version: tx.version,
             });
 
-            return cbk(null, tx.toHex());
+            return cbk(null, signed.transaction);
           });
         },
         cbk);
@@ -525,12 +536,18 @@ module.exports = (args, cbk) => {
         ({getTransactions, swap}, cbk) =>
       {
         const tx = getTransactions.transactions.find(({transaction}) => {
-          return !!transaction && !!fromHex(transaction).outs.find(output => {
-            if (output.value !== swap.tokens) {
+          if (!transaction) {
+            return false;
+          }
+
+          const {outputs} = componentsOfTransaction({transaction});
+
+          return !!outputs.find(output => {
+            if (output.tokens !== swap.tokens) {
               return false;
             }
 
-            return bufferAsHex(output.script) === swap.output_script;
+            return output.script === swap.output_script;
           });
         });
 
@@ -567,11 +584,12 @@ module.exports = (args, cbk) => {
 
       // Output funding the swap on chain
       outpoint: ['signFunding', 'swap', ({signFunding, swap}, cbk) => {
-        const tx = fromHex(signFunding.transaction);
-        const script = hexAsBuffer(swap.output_script);
+        const {transaction} = signFunding;
 
-        const id = tx.getId();
-        const vout = tx.outs.findIndex(n => n.script.equals(script));
+        const {outputs} = componentsOfTransaction({transaction});
+
+        const {id} = idForTransaction({transaction});
+        const vout = outputs.findIndex(n => n.script === swap.output_script);
 
         args.emitter.emit('update', {
           funding_transaction: signFunding.transaction,
@@ -592,7 +610,7 @@ module.exports = (args, cbk) => {
 
         args.emitter.emit('update', {
           refund_transaction: refund,
-          refund_valid_at: fromHex(refund).locktime,
+          refund_valid_at: locktimeOf(refund),
         });
 
         // Exit early when the transaction was already published
@@ -682,12 +700,10 @@ module.exports = (args, cbk) => {
 
         // Look for the preimage to be used on-chain in a sweep
         subSpend.on('confirmation', ({transaction}) => {
-          const spend = fromHex(transaction).ins.find(input => {
-            if (!input.hash.equals(hexAsBuffer(outpoint.id).reverse())) {
-              return false;
-            }
+          const {inputs} = componentsOfTransaction({transaction});
 
-            return input.index === outpoint.vout;
+          const spend = inputs.find(input => {
+            return input.id === outpoint.id && input.vout === outpoint.vout;
           });
 
           const [lastElement, nextToLast] = spend.witness.slice().reverse();
@@ -722,7 +738,7 @@ module.exports = (args, cbk) => {
 
           const [secret] = stack;
 
-          return done(null, {secret: bufferAsHex(secret)});
+          return done(null, {secret});
         });
 
         subSpend.on('error', err => done(err));
@@ -739,7 +755,7 @@ module.exports = (args, cbk) => {
           // Find the latest valid refund transaction
           const [transaction] = signRefunds
             .filter(transaction => {
-              return fromHex(transaction).locktime <= block.height;
+              return locktimeOf(transaction) <= block.height;
             })
             .reverse();
 

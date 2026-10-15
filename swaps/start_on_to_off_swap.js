@@ -7,13 +7,13 @@ const {getHeight} = require('ln-service');
 const {getIdentity} = require('ln-service');
 const {getNetwork} = require('ln-sync');
 const {getPublicKey} = require('ln-service');
-const {networks} = require('bitcoinjs-lib');
 const {parsePaymentRequest} = require('ln-service');
 const {pointFromScalar} = require('tiny-secp256k1');
 const {returnResult} = require('asyncjs-util');
 
 const decodeOffToOnRequest = require('./decode_off_to_on_request');
 const encodeOffToOnResponse = require('./encode_off_to_on_response');
+const {invoiceNetworks} = require('./constants');
 const makePrivateKey = require('./make_private_key');
 
 const bufferAsHex = buffer => buffer.toString('hex');
@@ -107,15 +107,13 @@ module.exports = (args, cbk) => {
         });
       }],
 
-      // Bitcoinjs network name
+      // Check that the network is supported
       network: ['getNetwork', ({getNetwork}, cbk) => {
-        const network = networks[getNetwork.bitcoinjs];
-
-        if (!network) {
+        if (!invoiceNetworks[getNetwork.network]) {
           return cbk([400, 'UnsupportedNetworkForOnToOffSwap']);
         }
 
-        return cbk(null, network);
+        return cbk(null, getNetwork.network);
       }],
 
       // Generate the refund coop key

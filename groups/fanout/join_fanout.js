@@ -2,14 +2,13 @@ const EventEmitter = require('events');
 
 const asyncAuto = require('async/auto');
 const {decodePsbt} = require('psbt');
-const {Transaction} = require('bitcoinjs-lib');
+const {idForTransaction} = require('@alexbosworth/blockchain');
 
 const getFanoutFunding = require('./get_fanout_funding');
 const {registerGroupConnected} = require('./../p2p');
 const {registerFanoutProposal} = require('./../p2p');
 const {registerFanoutSigned} = require('./../p2p');
 
-const {fromHex} = Transaction;
 const {isArray} = Array;
 const isNumber = n => !isNaN(n);
 
@@ -128,9 +127,9 @@ module.exports = (args, cbk) => {
     transaction: ['register', ({register}, cbk) => {
       const psbt = decodePsbt({psbt: register.psbt});
 
-      const tx = fromHex(psbt.unsigned_transaction);
+      const {id} = idForTransaction({transaction: psbt.unsigned_transaction});
 
-      return cbk(null, {id: tx.getId(), raw: psbt.unsigned_transaction});
+      return cbk(null, {id, raw: psbt.unsigned_transaction});
     }],
 
     // Publish the partial funding signatures to coordinator

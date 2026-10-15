@@ -3,9 +3,10 @@ const EventEmitter = require('events');
 const asyncAuto = require('async/auto');
 const asyncReflect = require('async/reflect');
 const asyncRetry = require('async/retry');
+const {componentsOfTransaction} = require('@alexbosworth/blockchain');
 const {decodePsbt} = require('psbt');
 const {deletePendingChannel} = require('ln-service');
-const {Transaction} = require('bitcoinjs-lib');
+const {idForTransaction} = require('@alexbosworth/blockchain');
 
 const {confirmIncomingChannel} = require('./funding');
 const {findGroupPartners} = require('./p2p');
@@ -15,8 +16,6 @@ const {registerGroupConnected} = require('./p2p');
 const {registerPendingOpen} = require('./p2p');
 const {registerSignedOpen} = require('./p2p');
 
-const {fromHex} = Transaction;
-const hexAsBuffer = hex => Buffer.from(hex, 'hex');
 const interval = 1000;
 const times = 60 * 10;
 
@@ -148,15 +147,16 @@ module.exports = ({capacity, coordinator, count, id, lnd, rate}, cbk) => {
       'register',
       ({propose, register}, cbk) =>
     {
-      const funding = hexAsBuffer(propose.funding);
       const psbt = decodePsbt({psbt: register.psbt});
 
-      const tx = fromHex(psbt.unsigned_transaction);
+      const transaction = psbt.unsigned_transaction;
+
+      const {outputs} = componentsOfTransaction({transaction});
 
       return cbk(null, {
-        id: tx.getId(),
-        raw: psbt.unsigned_transaction,
-        vout: tx.outs.findIndex(n => n.script.equals(funding)),
+        id: idForTransaction({transaction}).id,
+        raw: transaction,
+        vout: outputs.findIndex(n => n.script === propose.funding),
       });
     }],
 

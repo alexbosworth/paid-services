@@ -1,14 +1,16 @@
 const asyncAuto = require('async/auto');
 const asyncEach = require('async/each');
 const {connectPeer} = require('ln-sync');
+const {encodeBech32Address} = require('@alexbosworth/blockchain');
 const {fundPsbtDisallowingInputs} = require('ln-sync');
 const {getNetwork} = require('ln-sync');
 const {getUtxos} = require('ln-service');
 const {openChannels} = require('ln-service');
-const {networks} = require('bitcoinjs-lib');
-const {payments} = require('bitcoinjs-lib');
+const {p2msScript} = require('@alexbosworth/blockchain');
 const {returnResult} = require('asyncjs-util');
 const {unlockUtxo} = require('ln-service');
+
+const {bech32Prefixes} = require('./../../config');
 
 const dummyKeys = () => ([Buffer.alloc(33, 2), Buffer.alloc(33, 3)]);
 const fuzzSize = 1;
@@ -17,6 +19,7 @@ const isEven = n => !(n % 2);
 const minGroupCount = 2;
 const nestedSegWitAddressFormat = 'np2wpkh';
 const nestedSegWitPath = "m/49'/";
+const witnessVersionSegWit = 0;
 
 /** Fund and propose a group channel to a peer
 
@@ -101,13 +104,15 @@ module.exports = ({capacity, count, lnd, rate, to}, cbk) => {
 
         // Exit early when there is a shared proposal due to a pair group
         if (!to) {
-          const {address} = payments.p2wsh({
-            network: networks[getNetwork.bitcoinjs],
-            redeem: payments.p2ms({
-              m: dummyKeys().length,
-              network: networks[getNetwork.bitcoinjs],
-              pubkeys: dummyKeys(),
-            }),
+          const {hash} = p2msScript({
+            keys: dummyKeys(),
+            required: dummyKeys().length,
+          });
+
+          const {address} = encodeBech32Address({
+            prefix: bech32Prefixes[getNetwork.network],
+            program: hash,
+            version: witnessVersionSegWit,
           });
 
           // Pretend we are opening a channel when there is no outbound target

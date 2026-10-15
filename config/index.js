@@ -1,3 +1,4 @@
+const bech32Prefixes = require('./bech32_prefixes');
 const invoiceNetwork = require('./invoice_network');
 const isActivityEnabled = require('./is_activity_enabled');
 const isConnectEnabled = require('./is_connect_enabled');
@@ -8,6 +9,7 @@ const isSmsConfigured = require('./is_sms_configured');
 const validateServerConfig = require('./validate_server_config');
 
 module.exports = {
+  bech32Prefixes,
   invoiceNetwork,
   isActivityEnabled,
   isConnectEnabled,

@@ -1,6 +1,6 @@
-const {Transaction} = require('bitcoinjs-lib');
+const {componentsOfTransaction} = require('@alexbosworth/blockchain');
+const {sizeOfTransaction} = require('@alexbosworth/blockchain');
 
-const {fromHex} = Transaction;
 const sumOf = arr => arr.reduce((sum, n) => sum + n, 0);
 
 /** Given a transaction and inputs metadata, derive transaction chain fee rate
@@ -21,9 +21,9 @@ const sumOf = arr => arr.reduce((sum, n) => sum + n, 0);
 */
 module.exports = ({inputs, transaction}) => {
   const inputsValue = sumOf(inputs.map(n => n.witness_utxo.tokens));
-  const tx = fromHex(transaction);
+  const {outputs} = componentsOfTransaction({transaction});
 
-  const fee = inputsValue - sumOf(tx.outs.map(n => n.value));
+  const fee = inputsValue - sumOf(outputs.map(n => n.tokens));
 
-  return {rate: fee / tx.virtualSize()};
+  return {rate: fee / sizeOfTransaction({transaction}).vsize};
 };
