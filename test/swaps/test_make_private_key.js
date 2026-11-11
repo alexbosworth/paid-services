@@ -1,19 +1,43 @@
-const {strictEqual} = require('node:assert/strict');
+const {deepStrictEqual} = require('node:assert/strict');
 const {test} = require('node:test');
 
 const {isPrivate} = require('tiny-secp256k1');
 
-const method = require('./../../swaps/make_private_key');
+const makePrivateKey = require('./../../swaps/make_private_key');
 
 const hexAsBuffer = hex => Buffer.from(hex, 'hex');
 
-test('A private key is made', () => {
-  const {private_key} = method({});
+// Make a private key, and say how long it is and if it is in range
+const makeKey = args => {
+  const key = makePrivateKey(args).private_key;
 
-  strictEqual(private_key.length, 64, 'Got a 32 byte private key');
-  strictEqual(isPrivate(hexAsBuffer(private_key)), true, 'Key is in range');
-});
+  return {is_in_range: isPrivate(hexAsBuffer(key)), length: key.length};
+};
 
-test('Private keys are random', () => {
-  strictEqual(method({}).private_key !== method({}).private_key, true);
+// Make two private keys, and say if they are different
+const makeKeys = args => {
+  const [a, b] = [args, args].map(n => makePrivateKey(n).private_key);
+
+  return {is_different: a !== b};
+};
+
+const tests = [
+  {
+    args: {},
+    description: 'A private key is made',
+    expected: {is_in_range: true, length: 64},
+    method: makeKey,
+  },
+  {
+    args: {},
+    description: 'Private keys are random',
+    expected: {is_different: true},
+    method: makeKeys,
+  },
+];
+
+tests.forEach(({args, description, expected, method}) => {
+  test(description, () => {
+    deepStrictEqual(method(args), expected, 'Got expected result');
+  });
 });

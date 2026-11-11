@@ -8,8 +8,8 @@ const {typeInvoice} = require('./constants');
 const {typeInvoiceError} = require('./constants');
 const {typeInvoiceRequest} = require('./constants');
 
-const {isArray} = Array;
 const isAnswered = replies => replies.some(n => !!n.error || !!n.invoice);
+const {isArray} = Array;
 
 /** Send an invoice request over an offer path and add the reply to replies
 

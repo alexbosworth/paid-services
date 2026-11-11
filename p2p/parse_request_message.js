@@ -4,9 +4,9 @@ const {decodeTlvStream} = require('bolt01');
 const parseResponseCode = require('./parse_response_code');
 
 const defaultRecords = {value: ''};
+const findRequestIdRecord = records => records.find(n => n.type === '1');
 const findRequestRecords = records => records.find(n => n.type === '5');
 const findResponseCodeRecord = records => records.find(n => n.type === '2');
-const findRequestIdRecord = records => records.find(n => n.type === '1');
 const findTypeRecord = records => records.find(n => n.type === '3');
 const findVersionRecord = records => records.find(n => n.type === '0');
 const idHexLength = 32 * 2;

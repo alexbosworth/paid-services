@@ -4,10 +4,12 @@ const {test} = require('node:test');
 const method = require('./../../support/related_menu_levels');
 
 // Nest a number of related menus, the deepest with no related offers
-const nest = levels => Array(levels).fill(null).reduce(related => {
-  return [{related, offer: 'offer'}];
-},
-[]);
+const nest = levels => {
+  return Array(levels).fill(null).reduce(related => {
+    return [{related, offer: 'offer'}];
+  },
+  []);
+};
 
 const tests = [
   {

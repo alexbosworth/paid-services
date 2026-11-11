@@ -9,9 +9,9 @@ const networkFromNetworkRecord = require('./network_from_network_record');
 
 const findDetailsRecord = records => records.find(n => n.type === '3');
 const findNetwork = records => records.find(n => n.type === '1');
-const findVer = records => records.find(n => n.type === '0') || {value: '00'};
 const findRequestRecord = records => records.find(n => n.type === '2');
 const findSwapRecord = records => records.find(n => n.type === '6');
+const findVer = records => records.find(n => n.type === '0') || {value: '00'};
 const isTrade = trade => trade.toLowerCase().startsWith('626f73ff');
 const isValidVersion = version => BigInt(version) <= BigInt(2);
 const tradeData = trade => trade.slice('626f73ff'.length);

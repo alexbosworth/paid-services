@@ -1,4 +1,5 @@
 const asyncAuto = require('async/auto');
+const asyncify = require('async/asyncify');
 const {getInvoice} = require('ln-service');
 const {parsePaymentRequest} = require('ln-service');
 const {returnResult} = require('asyncjs-util');
@@ -62,18 +63,18 @@ module.exports = ({env, fetch, id, lnd, network, payer}, cbk) => {
       getInvoice: ['validate', ({}, cbk) => getInvoice({lnd, id}, cbk)],
 
       // Map the invoice to a standard paid service request
-      paidRequest: ['getInvoice', ({getInvoice}, cbk) => {
+      paidRequest: ['getInvoice', asyncify(({getInvoice}) => {
         try {
-          return cbk(null, invoiceAsRequest({
+          return invoiceAsRequest({
             network,
             is_confirmed: getInvoice.is_confirmed,
             is_push: getInvoice.is_push,
             payments: getInvoice.payments,
-          }));
+          });
         } catch (err) {
-          return cbk([500, 'UnexpectedErrMappingInvoiceToPaidRequest', {err}]);
+          throw [500, 'UnexpectedErrMappingInvoiceToPaidRequest', {err}];
         }
-      }],
+      })],
 
       // Get the service response to the paid service request
       getResponse: ['paidRequest', ({paidRequest}, cbk) => {
@@ -89,7 +90,6 @@ module.exports = ({env, fetch, id, lnd, network, payer}, cbk) => {
           fetch,
           id,
           lnd,
-          network,
           to: respondTo.destination,
           arguments: paidRequest.service.arguments,
           type: paidRequest.service.type,

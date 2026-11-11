@@ -1,13 +1,9 @@
 const EventEmitter = require('events');
 
-const asyncForever = require('async/forever');
 const {subscribeToInvoices} = require('ln-service');
 
 const paidServiceEvent = require('./paid_service_event');
-const {settleRelayPayments} = require('./../jobs');
 const {validateServerConfig} = require('./../config');
-
-const pollIntervalMs = 1000 * 60 * 60;
 
 /** Service paid service requests
 
@@ -46,25 +42,11 @@ const pollIntervalMs = 1000 * 60 * 60;
 */
 module.exports = ({env, fetch, lnd, network, payer}) => {
   const emitter = new EventEmitter();
-  let isEnded = false;
   const sub = subscribeToInvoices({lnd});
 
   validateServerConfig({env});
 
-  // Handle held relay payments
-  asyncForever(cbk => {
-    if (isEnded) {
-      return cbk([503, 'ServiceEnded']);
-    }
-
-    return settleRelayPayments({lnd}, () => setTimeout(cbk, pollIntervalMs));
-  }, error => {
-    return emitter.emit('failure', {error})
-  });
-
   sub.on('error', err => {
-    isEnded = true;
-
     sub.removeAllListeners();
 
     // Exit early when there are no error listeners

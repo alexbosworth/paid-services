@@ -15,11 +15,11 @@ const startOnToOffSwap = require('./start_on_to_off_swap');
 
 const bufferAsHex = buffer => buffer.toString('hex');
 const {ceil} = Math;
-const defaultConfirmationTarget = 6;
-const {floor} = Math;
 const defaultCltvDelta = 400;
+const defaultConfirmationTarget = 6;
 const defaultFeeRate = 2500;
 const estimatedVirtualSize = 300;
+const {floor} = Math;
 const hexAsBuffer = hex => Buffer.from(hex, 'hex');
 const isNumber = n => !isNaN(n) && !isNaN(parseFloat(n));
 const maxTarget = 144;

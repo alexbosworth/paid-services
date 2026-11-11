@@ -2,11 +2,10 @@ const {componentsOfTransaction} = require('@alexbosworth/blockchain');
 const {sizeOfTransaction} = require('@alexbosworth/blockchain');
 const {transactionFromComponents} = require('@alexbosworth/blockchain');
 
-const bufferAsHex = buffer => buffer.toString('hex');
+const dummyP2tr = [Buffer.alloc(64).toString('hex')];
+const dummyP2wpkh = [33, 72].map(n => Buffer.alloc(n).toString('hex'));
 const isUtxoP2wpkh = utxo => utxo.witness_utxo.script_pub.startsWith('0014');
 const sumTokens = arr => arr.reduce((sum, n) => sum + n.tokens, 0);
-const dummyP2wpkh = [Buffer.alloc(33), Buffer.alloc(72)].map(bufferAsHex);
-const dummyP2tr = [Buffer.alloc(64)].map(bufferAsHex);
 
 /** Assuming large ECDSA signatures, determine a chain fee rate for a PSBT
 

@@ -5,7 +5,10 @@ const {encodeTlvStream} = require('bolt01');
 
 const method = require('./../../client/messages_as_response');
 
+const coffeeRecords = '0001c2017a0b25fe64410d00004080c1014181c20240004080c1014181c20240004080c1014181c202404081a0a189031bab81031b7b33332b2818020f3a258e6e9a0538d9a2752e46fc497c40d46d576815ec0191ea36aebae2a43257c583e7569b83de747f0ae5908e2e5138be92a99df1bc08351991caae10af5d4380400205fe0ee6b280';
+const coffeeRequest = 'lnbc2500u1pvjluezpp5qqqsyqcyq5rqwzqfqqqsyqcyq5rqwzqfqqqsyqcyq5rqwzqfqypqdq5xysxxatsyp3k7enxv4jsxqzpuaztrnwngzn3kdzw5hydlzf03qdgm2hdq27cqv3agm2awhz5se903vruatfhq77w3ls4evs3ch9zw97j25emudupq63nyw24cg27h2rspfj9srp';
 const encode = records => encodeTlvStream({records}).encoded;
+const nodeKey = '030303030303030303030303030303030303030303030303030303030303030303';
 
 const tests = [
   {
@@ -71,7 +74,7 @@ const tests = [
     },
     description: 'Valid nodes response',
     expected: {
-      nodes: ['030303030303030303030303030303030303030303030303030303030303030303'],
+      nodes: [nodeKey],
     },
   },
   {
@@ -121,7 +124,7 @@ const tests = [
           type: '0',
           value: encode([{
             type: '2',
-            value: '0001c2017a0b25fe64410d00004080c1014181c20240004080c1014181c20240004080c1014181c202404081a0a189031bab81031b7b33332b2818020f3a258e6e9a0538d9a2752e46fc497c40d46d576815ec0191ea36aebae2a43257c583e7569b83de747f0ae5908e2e5138be92a99df1bc08351991caae10af5d4380400205fe0ee6b280',
+            value: coffeeRecords,
           }]),
         }]),
       }],
@@ -129,7 +132,7 @@ const tests = [
     },
     description: 'An encoded request is returned',
     expected: {
-      paywall: 'lnbc2500u1pvjluezpp5qqqsyqcyq5rqwzqfqqqsyqcyq5rqwzqfqqqsyqcyq5rqwzqfqypqdq5xysxxatsyp3k7enxv4jsxqzpuaztrnwngzn3kdzw5hydlzf03qdgm2hdq27cqv3agm2awhz5se903vruatfhq77w3ls4evs3ch9zw97j25emudupq63nyw24cg27h2rspfj9srp',
+      paywall: coffeeRequest,
     },
   },
 ];

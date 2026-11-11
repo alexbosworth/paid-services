@@ -5,46 +5,24 @@ const {makeLnd} = require('mock-lnd');
 
 const method = require('./../../network/create_network_path');
 
-const bufferAsHex = buffer => buffer.toString('hex');
-const g = '79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798';
-const id = bufferAsHex(Buffer.alloc(32, 1));
-const peer = `03${g}`;
-const identity = `02${g}`;
+const id = '01'.repeat(32);
+const identity = '0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798';
+const {keys} = Object;
+const one = '00'.repeat(31) + '01';
+const peer = '0379be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798';
 
-const makeTestLnd = ({peers}) => {
-  const lnd = makeLnd({});
+// A fake LND of the node with the secret of 1, connected to peers. Its
+// identity is the generator point, the key of the secret 1.
+const makeTestLnd = ({peers}) => makeLnd({
+  peers: peers.map(key => ({public_key: key})),
+  secret: one,
+});
 
-  const {getInfo} = lnd.default;
-
-  lnd.default.getInfo = (args, cbk) => getInfo(args, (err, res) => {
-    return cbk(err, {...res, identity_pubkey: identity});
-  });
-
-  lnd.default.listPeers = ({}, cbk) => cbk(null, {
-    peers: peers.map(key => ({
-      address: '127.0.0.1:9735',
-      bytes_recv: '0',
-      bytes_sent: '0',
-      errors: [],
-      features: {},
-      flap_count: 0,
-      inbound: false,
-      last_flap_ns: '0',
-      ping_time: '0',
-      pub_key: key,
-      sat_recv: '0',
-      sat_sent: '0',
-      sync_type: 'ACTIVE_SYNC',
-    })),
-  });
-
-  return lnd;
-};
-
+// Make arguments for the method, replacing defaults with overrides
 const makeArgs = overrides => {
   const args = {lnd: makeTestLnd({peers: [peer]})};
 
-  Object.keys(overrides).forEach(k => args[k] = overrides[k]);
+  keys(overrides).forEach(k => args[k] = overrides[k]);
 
   return args;
 };

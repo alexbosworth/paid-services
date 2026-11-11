@@ -1,6 +1,7 @@
 const {randomBytes} = require('node:crypto');
 
 const asyncAuto = require('async/auto');
+const asyncify = require('async/asyncify');
 const {createOffer} = require('invoices');
 const {getNetwork} = require('ln-sync');
 const {getPublicKey} = require('ln-service');
@@ -22,15 +23,14 @@ const {serviceIdBytes} = require('./constants');
 const {serviceTypes} = require('./../service_records');
 const {typeOfferSuggestedAmounts} = require('./constants');
 
-const {isArray} = Array;
-const {isSafeInteger} = Number;
 const bufferAsHex = buffer => Buffer.from(buffer).toString('hex');
+const {isArray} = Array;
 const isHex = n => typeof n === 'string' && /^([0-9a-f]{2})+$/i.test(n);
-const isLimit = n => n === undefined || (isSafeInteger(n) && n > 0);
-const isPathId = n => isHex(n) && n.length / 2 >= minPathIdBytes;
+const isLimit = n => n === undefined || (Number.isSafeInteger(n) && n > 0);
+const isLongPathId = n => n.length / 2 >= minPathIdBytes;
 const isPublicKey = n => typeof n === 'string' && /^[0-9A-F]{66}$/i.test(n);
-const isSequence = n => n === undefined || (isSafeInteger(n) && n >= 0);
-const isServiceId = n => isHex(n) && n.length / 2 === serviceIdBytes;
+const isSequence = n => n === undefined || (Number.isSafeInteger(n) && n >= 0);
+const serviceIdLength = serviceIdBytes * 2;
 
 /** Create a support offer for supporters to pay, to be serviced with
   `serviceSupportOffer`
@@ -112,7 +112,11 @@ module.exports = (args, cbk) => {
           return cbk([400, 'ExpectedLndToCreateSupportOffer']);
         }
 
-        if (args.service_id !== undefined && !isServiceId(args.service_id)) {
+        if (args.service_id !== undefined && !isHex(args.service_id)) {
+          return cbk([400, 'ExpectedServiceIdToCreateSupportOffer']);
+        }
+
+        if (!!args.service_id && args.service_id.length !== serviceIdLength) {
           return cbk([400, 'ExpectedServiceIdToCreateSupportOffer']);
         }
 
@@ -182,7 +186,7 @@ module.exports = (args, cbk) => {
         }
 
         // Path ids are at least 16 random bytes, so they cannot be guessed
-        if (!args.paths.every(n => isPathId(n.id))) {
+        if (!args.paths.every(n => isLongPathId(n.id))) {
           return cbk([400, 'ExpectedPathIdOfAtLeast16BytesForGivenPath']);
         }
 
@@ -239,21 +243,21 @@ module.exports = (args, cbk) => {
       }],
 
       // Read the record of the offer to share an issuer id with
-      issuerRecord: ['getIssuerRecordKey', ({getIssuerRecordKey}, cbk) => {
+      issuerRecord: ['getIssuerRecordKey', asyncify(({getIssuerRecordKey}) => {
         // Exit early when the offer gets its own issuer id
         if (!args.issuer_record) {
-          return cbk();
+          return;
         }
 
         try {
-          return cbk(null, decodeSupportRecord({
+          return decodeSupportRecord({
             key: getIssuerRecordKey.key,
             record: args.issuer_record,
-          }));
+          });
         } catch (err) {
-          return cbk([400, 'ExpectedValidIssuerRecordForSupportOffer']);
+          throw [400, 'ExpectedValidIssuerRecordForSupportOffer'];
         }
-      }],
+      })],
 
       // Get the key for the offer to sign invoices with
       getKey: ['issuerRecord', ({issuerRecord}, cbk) => {
@@ -272,10 +276,10 @@ module.exports = (args, cbk) => {
             return cbk(err);
           }
 
-          const {issuer_id} = parseOffer({offer: issuerRecord.offer});
+          const issuerId = parseOffer({offer: issuerRecord.offer}).issuer_id;
 
           // The key of the issuer record is its offer issuer id
-          if (res.public_key !== issuer_id) {
+          if (res.public_key !== issuerId) {
             return cbk([400, 'ExpectedIssuerRecordKeyForItsOfferIssuerId']);
           }
 
@@ -303,11 +307,11 @@ module.exports = (args, cbk) => {
         'getKey',
         'getNetwork',
         'getRecordKey',
-        ({createPath, getKey, getNetwork, getRecordKey}, cbk) =>
+        asyncify(({createPath, getKey, getNetwork, getRecordKey}) =>
       {
         // Offer networks are named the same as bitcoinjs networks
         if (!getNetwork.bitcoinjs) {
-          return cbk([400, 'ExpectedBitcoinNetworkToCreateSupportOffer']);
+          throw [400, 'ExpectedBitcoinNetworkToCreateSupportOffer'];
         }
 
         // Given paths have their path id beside the path
@@ -373,11 +377,11 @@ module.exports = (args, cbk) => {
             record_key_index: getRecordKey.index,
           });
 
-          return cbk(null, {offer, record, service_id: id.toLowerCase()});
+          return {offer, record, service_id: id.toLowerCase()};
         } catch (err) {
-          return cbk([400, 'FailedToCreateSupportOffer', {err}]);
+          throw [400, 'FailedToCreateSupportOffer', {err}];
         }
-      }],
+      })],
     },
     returnResult({reject, resolve, of: 'create'}, cbk));
   });

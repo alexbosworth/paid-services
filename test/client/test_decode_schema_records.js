@@ -3,6 +3,9 @@ const {test} = require('node:test');
 
 const method = require('./../../client/decode_schema_records');
 
+const inboxDescription = '44656c697665722061206d65737361676520746f206e6f646520696e626f78';
+const inboxFields = '0022001b4d65737361676520746f2064656c6976657220746f20696e626f780103fd0118012b00265265706c7920656d61696c2061646472657373206f72206e6f6465207075626c6963206b6579010190';
+
 const tests = [
   {
     args: {},
@@ -25,7 +28,7 @@ const tests = [
         {type: '1', value: '04'},
         {
           type: '2',
-          value: '44656c697665722061206d65737361676520746f206e6f646520696e626f78',
+          value: inboxDescription,
         },
         {
           type: '3',
@@ -42,11 +45,11 @@ const tests = [
         {type: '1', value: '04'},
         {
           type: '2',
-          value: '44656c697665722061206d65737361676520746f206e6f646520696e626f78',
+          value: inboxDescription,
         },
         {
           type: '3',
-          value: '0022001b4d65737361676520746f2064656c6976657220746f20696e626f780103fd0118012b00265265706c7920656d61696c2061646472657373206f72206e6f6465207075626c6963206b6579010190',
+          value: inboxFields,
         },
       ],
     },
@@ -75,7 +78,7 @@ const tests = [
       records: [
         {
           type: '2',
-          value: '44656c697665722061206d65737361676520746f206e6f646520696e626f78',
+          value: inboxDescription,
         },
       ],
     },

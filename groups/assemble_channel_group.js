@@ -175,7 +175,9 @@ module.exports = ({capacity, count, identity, lnd, members, rate}) => {
           capacity,
           lnd,
           from: coordinator.partners(identity).inbound,
-          id: idForTransaction({transaction: basePsbt.unsigned_transaction}).id,
+          id: idForTransaction({
+            transaction: basePsbt.unsigned_transaction,
+          }).id,
           to: coordinator.partners(identity).outbound || undefined,
         });
       });

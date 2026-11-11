@@ -2,49 +2,55 @@ const {createHash} = require('node:crypto');
 const {deepStrictEqual, rejects} = require('node:assert/strict');
 const {test} = require('node:test');
 
-const {blindedPathFromHops} = require('bolt04');
 const {createOffer} = require('invoices');
 const {createSignedInvoiceRequest} = require('invoices');
 const {createUnsignedInvoiceRequest} = require('invoices');
 const {decodeTlvStream} = require('bolt01');
 const {encodeTlvStream} = require('bolt01');
+const {makeLnd} = require('mock-lnd');
 const {parseOffer} = require('invoices');
 const {pointFromScalar} = require('tiny-secp256k1');
-const {pointMultiply} = require('tiny-secp256k1');
 const {signSchnorr} = require('tiny-secp256k1');
 
 const {addServiceLabel} = require('./../../service_records');
+const {derivedKeyFamily} = require('./../../support/constants');
+const {getRecordKey} = require('./../../service_records');
 const encodePayerOffer = require('./../../support/encode_payer_offer');
 const encodeRecord = require('./../../support/encode_support_record');
-const keyForSecret = require('./../../service_records/record_key_for_secret');
+const {paths} = require('./fixtures/payer_offer');
 const payerOfferFor = require('./../../support/payer_offer_for_request');
 const preimage = require('./../../support/payer_offer_signature_preimage');
-const recordPoint = require('./../../service_records/record_point');
 const signPayerOffer = require('./../../support/sign_payer_offer');
+const {support} = require('./fixtures/payer_offer');
 const verify = require('./../../support/verify_offer_reference');
 
-const asKey = n => Buffer.from(pointFromScalar(Buffer.alloc(32, n)))
-  .toString('hex');
+const afterSignature = {type: '241', value: '00'};
+const bitcoinChain = '6fe28c0ab6f1b372c1a6a246ae63f74f931e8365e15a089c68d6190000000000';
+const expiredOffer = 'lno1pgrk27rsd9ex2eqwq3nhfpvqzcssyn2tdngnvypje2da9t4emyq25n29m84dszkfggehf3z35uj56pmx';
+const expiryField = {type: '8', value: 'f4865700'};
 const hexAsBuffer = hex => Buffer.from(hex, 'hex');
 const inFuture = '2100-01-01T00:00:00.000Z';
 const inPast = '2025-01-01T00:00:00.000Z';
-const issuer = asKey(2);
-const payerId = asKey(4);
+const issuer = '024d4b6cd1361032ca9bd2aeb9d900aa4d45d9ead80ac9423374c451a7254d0766';
+const issuerField = {type: '4', value: '024d4b6cd1361032ca9bd2aeb9d900aa4d45d9ead80ac9423374c451a7254d0766'};
+const issuerKeyIndex = 3;
+const nameField = {type: '2', value: '05616c6963650b6578616d706c652e636f6d'};
+const offerField = {type: '0', value: '0a0f737570706f7274206d65206261636b1621024d4b6cd1361032ca9bd2aeb9d900aa4d45d9ead80ac9423374c451a7254d0766'};
+const pastExpiryField = {type: '8', value: '67748580'};
+const payerId = '03462779ad4aad39514614751a71085f2f10e1c7a593e4e030efb5b8721ce55b0b';
+const payerOffer = 'lno1pg8hxatswphhyapqd4jjqcnpvd43vggzf49ke5fkzqev4x7j46uajq92f4zan6kcpty5yvm5c3g6wf2dqanq';
+const sequenceField = {type: '10', value: '02'};
 const serviceId = '0e'.repeat(16);
+const serviceIdField = {type: '6', value: '0e'.repeat(16)};
 const sha256 = n => createHash('sha256').update(n).digest();
+const shortSignatureField = {type: '240', value: '00'.repeat(63)};
+const unsignedOffer = '00340a0f737570706f7274206d65206261636b1621024d4b6cd1361032ca9bd2aeb9d900aa4d45d9ead80ac9423374c451a7254d0766';
+const zeroSignatureField = {type: '240', value: '00'.repeat(64)};
 
-// The chain hash of bitcoin as offers name it, the genesis block hash reversed
-const bitcoinChain = Buffer.from(
-  '000000000019d6689c085ae165831e934ff763ae46a2a6c172b3f1b60a8ce26f',
-  'hex'
-)
-.reverse()
-.toString('hex');
-
-const node = asKey(9);
-const blinded = blindedPathFromHops({hops: [node]});
-const {key} = blinded;
-const paths = [{key, hops: blinded.path, introduction_node: node}];
+// Get the public key of a secret of 32 bytes of a number
+const asKey = n => {
+  return Buffer.from(pointFromScalar(Buffer.alloc(32, n))).toString('hex');
+};
 
 // Label an offer as a support offer with a service id
 const label = (offer, sequence) => addServiceLabel({
@@ -56,52 +62,11 @@ const label = (offer, sequence) => addServiceLabel({
 })
 .offer;
 
-// The support offer that is paid, made by the key of secret 1
-const support = addServiceLabel({
-  id: '0d'.repeat(16),
-  offer: createOffer({paths, description: 'support', issuer_id: asKey(1)})
-    .offer,
-  type: '1',
-  version: 1,
-})
-.offer;
-
-// The offer of the payer, made by the key of secret 2
-const payerOffer = createOffer({
-  description: 'support me back',
-  issuer_id: issuer,
-}).offer;
-
 // A support offer of the payer, made by the key of secret 2, in versions
 const payerSupport = sequence => label(
   createOffer({paths, description: 'me', issuer_id: issuer}).offer,
   sequence
 );
-
-// Payer offer records
-const expiryField = {type: '8', value: 'f4865700'};
-const issuerField = {type: '4', value: issuer};
-const nameField = {type: '2', value: '05616c6963650b6578616d706c652e636f6d'};
-const offerField = {type: '0', value: parseOffer({offer: payerOffer}).encoded};
-const pastExpiryField = {type: '8', value: '67748580'};
-const sequenceField = {type: '10', value: '02'};
-const serviceIdField = {type: '6', value: serviceId};
-const shortSignatureField = {type: '240', value: '00'.repeat(63)};
-const zeroSignatureField = {type: '240', value: '00'.repeat(64)};
-
-// An odd record with a type after the signature
-const afterSignature = {type: '241', value: '00'};
-
-// A whole payer offer without its signature
-const unsignedOffer = encodeTlvStream({records: [offerField]}).encoded;
-
-// An offer of the payer that has expired
-const expiredOffer = createOffer({
-  description: 'expired',
-  expires_at: inPast,
-  issuer_id: issuer,
-})
-.offer;
 
 // The payer offer field of an offer
 const offerFieldOf = offer => ({
@@ -196,59 +161,35 @@ const taggedHash = (tag, hex) => {
     .toString('hex');
 };
 
-// The record of an offer of the payer, sealed with the key of node secret 7
-const recordFor = offer => encodeRecord({
-  key: keyForSecret({
-    secret: sha256(pointMultiply(
-      hexAsBuffer(recordPoint().public_key),
-      Buffer.alloc(32, 7),
-      true
-    ))
-    .toString('hex'),
-  })
-  .key,
+// The record of an offer of the payer, sealed with the record key of the node
+const recordFor = async ({lnd, offer}) => encodeRecord({
   offer,
-  key_index: 3,
+  key: (await getRecordKey({lnd, index: 0})).key,
+  key_index: issuerKeyIndex,
   path_ids: ['0a'.repeat(32)],
   record_key_index: 0,
 })
 .record;
 
 // Make a fake LND of node secret 7 with an issuer key of a secret
-const makeLnd = issuerSecret => ({
-  signer: {
-    deriveSharedKey: ({ephemeral_pubkey}, cbk) => cbk(null, {
-      shared_key: sha256(pointMultiply(
-        ephemeral_pubkey,
-        Buffer.alloc(32, 7),
-        true
-      )),
-    }),
-    signMessage: ({msg, tag}, cbk) => {
-      const tagHash = sha256(tag);
-
-      const hash = sha256(Buffer.concat([tagHash, tagHash, msg]));
-
-      return cbk(null, {
-        signature: Buffer.from(signSchnorr(hash, issuerSecret)),
-      });
-    },
-  },
-  wallet: {
-    deriveKey: ({key_family, key_index}, cbk) => cbk(null, {
-      key_loc: {key_family, key_index},
-      raw_key_bytes: Buffer.from(pointFromScalar(issuerSecret)),
-    }),
-  },
+const makeTestLnd = issuerSecret => makeLnd({
+  keys: [{
+    family: derivedKeyFamily,
+    index: issuerKeyIndex,
+    secret: issuerSecret.toString('hex'),
+  }],
+  secret: Buffer.alloc(32, 7).toString('hex'),
 });
 
 // Sign the payer offer of the record and read it from a request to pay
 const signFor = async ({offer, secret, ...args}) => {
+  const lnd = makeTestLnd(Buffer.alloc(32, secret || 2));
+
   const signed = await signPayerOffer({
     ...args,
-    lnd: makeLnd(Buffer.alloc(32, secret || 2)),
+    lnd,
     payer_id: payerId,
-    record: recordFor(offer || payerOffer),
+    record: await recordFor({lnd, offer: offer || payerOffer}),
   });
 
   return {offer: signed.offer, read: read({records: [signed]})};

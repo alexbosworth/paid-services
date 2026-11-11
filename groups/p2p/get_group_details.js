@@ -1,4 +1,5 @@
 const asyncAuto = require('async/auto');
+const asyncify = require('async/asyncify');
 const asyncRetry = require('async/retry');
 const {connectPeer} = require('ln-sync');
 const {returnResult} = require('asyncjs-util');
@@ -72,13 +73,13 @@ module.exports = ({coordinator, id, lnd}, cbk) => {
       }],
 
       // Parse the group details records
-      group: ['request', ({request}, cbk) => {
+      group: ['request', asyncify(({request}) => {
         try {
-          return cbk(null, decodeGroupDetails({records: request.records}));
+          return decodeGroupDetails({records: request.records});
         } catch (err) {
-          return cbk([503, err.message]);
+          throw [503, err.message];
         }
-      }],
+      })],
     },
     returnResult({reject, resolve, of: 'group'}, cbk));
   });

@@ -22,8 +22,8 @@ const count = 101;
 const feeRate = 1;
 const interval = 10;
 const size = 2;
-const tokens = 1e6;
 const times = 2000;
+const tokens = 1e6;
 
 // Make a joint transaction channel group
 test(`Setup joint channel pair group`, async () => {

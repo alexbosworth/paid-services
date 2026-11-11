@@ -1,8 +1,7 @@
 const {decodeBigSize} = require('bolt01');
 
-const decodeBigSizeEncodedNumber = encoded => decodeBigSize({encoded}).decoded;
-
 const dataRequest = 'request';
+const decodeBigSizeEncodedNumber = encoded => decodeBigSize({encoded}).decoded;
 const typeRequest = '1';
 
 /** Decode data type

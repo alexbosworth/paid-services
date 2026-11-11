@@ -11,7 +11,6 @@ const {parseInvoice} = require('invoices');
 const {parseInvoiceError} = require('invoices');
 const {parseOffer} = require('invoices');
 const {pay} = require('ln-service');
-const {pointFromScalar} = require('tiny-secp256k1');
 const {sendMessage} = require('ln-service');
 const {setupChannel} = require('ln-docker-daemons');
 const {spawnLightningCluster} = require('ln-docker-daemons');
@@ -24,15 +23,13 @@ const menuIdForPages = require('./../../support/menu_id_for_pages');
 const {serviceSupportOffer} = require('./../../');
 const {signPayerOffer} = require('./../../support');
 
+const blindedPathAtSelf = ['--routing.blinding.min-num-real-hops=0', '--routing.blinding.num-hops=0'];
 const interval = 100;
-const isInvoiceReply = type => [typeInvoice, typeInvoiceError].includes(type);
-const isNotReady = n => !!n.error && n.error[1] === notReadyError;
+const msUntil = date => Date.parse(date) - Date.now();
 const mtokens = '100000';
 const notReadyError = 'FailedToCreateInvoiceForSupporter';
-const pathHops = '--routing.blinding.num-hops=0';
+const payerId = '024d4b6cd1361032ca9bd2aeb9d900aa4d45d9ead80ac9423374c451a7254d0766';
 const payerSecret = Buffer.alloc(32, 2);
-const realHops = '--routing.blinding.min-num-real-hops=0';
-const blindedPathAtSelf = [realHops, pathHops];
 const size = 2;
 const timeout = 1000 * 3;
 const times = 100;
@@ -42,10 +39,11 @@ const typeInvoiceRequest = '64';
 const waitInterval = 1000;
 const waitTimes = 60;
 
-const payerId = Buffer.from(pointFromScalar(payerSecret)).toString('hex');
-
 // Send an invoice request for an offer and wait for the invoice reply
 const requestInvoice = ({from, lnd, offer, records}) => {
+  // Replies to a request are invoices or invoice errors
+  const isReply = type => [typeInvoice, typeInvoiceError].includes(type);
+
   return new Promise((resolve, reject) => {
     const [path] = parseOffer({offer}).paths;
     const sub = subscribeToMessages({lnd});
@@ -79,7 +77,7 @@ const requestInvoice = ({from, lnd, offer, records}) => {
     sub.on('error', err => reject(err));
 
     sub.on('message_received', ({message}) => {
-      if (!message || !isInvoiceReply(message.type)) {
+      if (!message || !isReply(message.type)) {
         return;
       }
 
@@ -188,6 +186,9 @@ test(`Service support offer`, async () => {
       record: supporter.record,
     });
 
+    // A problem of an invoice that cannot be made yet, which is tried again
+    const isNotReady = n => !!n.error && n.error[1] === notReadyError;
+
     // Retry and mine blocks while invoices cannot be made yet, but stop when
     // the service reports any other problem with the request
     const invoice = await asyncRetry({
@@ -213,10 +214,10 @@ test(`Service support offer`, async () => {
       throw err;
     });
 
-    const {issuer_id} = parseOffer({offer: created.offer});
+    const issuerId = parseOffer({offer: created.offer}).issuer_id;
 
-    equal(invoice.node_id, issuer_id, 'Invoice signed by offer issuer');
-    equal(issuer_id !== server.id, true, 'Offer issuer is not node key');
+    equal(invoice.node_id, issuerId, 'Invoice signed by offer issuer');
+    equal(issuerId !== server.id, true, 'Offer issuer is not node key');
     equal(invoice.mtokens, mtokens, 'Invoice is for the requested amount');
     equal(invoice.payer_id, payerId, 'Invoice is for the payer');
 
@@ -271,7 +272,7 @@ test(`Service support offer`, async () => {
     });
 
     // The signed page expires in a day
-    const expiresIn = Date.parse(menu.expires_at) - Date.now();
+    const expiresIn = msUntil(menu.expires_at);
 
     equal(expiresIn > 0 && expiresIn <= 86400000, true, 'Menu expires');
 
@@ -300,7 +301,7 @@ test(`Service support offer`, async () => {
           is_same_issuer: true,
           is_support_offer: true,
           issuer: undefined,
-          issuer_id,
+          issuer_id: issuerId,
           mtokens: undefined,
           offer: listed.offer,
           service: {id: art.service_id, type: '1', version: 1},

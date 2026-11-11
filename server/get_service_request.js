@@ -1,4 +1,5 @@
 const asyncAuto = require('async/auto');
+const asyncify = require('async/asyncify');
 const asyncReflect = require('async/reflect');
 const {getInvoice} = require('ln-service');
 const {parsePaymentRequest} = require('invoices');
@@ -102,7 +103,7 @@ module.exports = ({env, id, lnd, network}, cbk) => {
         'getParent',
         'getReference',
         'paidServiceInvoice',
-        ({getParent, getReference, paidServiceInvoice}, cbk) =>
+        asyncify(({getParent, getReference, paidServiceInvoice}) =>
       {
         try {
           const paid = invoiceAsRequest({
@@ -114,7 +115,7 @@ module.exports = ({env, id, lnd, network}, cbk) => {
 
           // Exit early when there is no related reply request
           if (!paid.request) {
-            return cbk(null, {});
+            return {};
           }
 
           const {destination} = attempt(parsePaymentRequest, {
@@ -124,17 +125,17 @@ module.exports = ({env, id, lnd, network}, cbk) => {
           // A paywall invoice has the parent push as its description hash
           const isPaywall = !!getParent && !!getParent.value;
 
-          return cbk(null, {
+          return {
             error: paid.error,
             node: destination,
             paywall: !!isPaywall ? getReference.request : undefined,
             request: paid.request,
             service: paid.service,
-          });
+          };
         } catch (err) {
-          return cbk(null, {});
+          return {};
         }
-      }],
+      })],
     },
     returnResult({reject, resolve, of: 'invoiceAsRequest'}, cbk));
   });

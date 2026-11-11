@@ -11,13 +11,11 @@ const randomSecret = require('./../offers/random_secret');
 const {typeMenuRequest} = require('./constants');
 const {typeMenuRequestPage} = require('./constants');
 
-const {isSafeInteger} = Number;
 const bufferAsHex = buffer => Buffer.from(buffer).toString('hex');
 const byType = (a, b) => BigInt(a.type) < BigInt(b.type) ? -1 : 1;
 const hexAsBuffer = hex => Buffer.from(hex, 'hex');
 const isHex = n => typeof n === 'string' && /^([0-9a-f]{2})+$/i.test(n);
-const isPage = n => n === undefined || (isSafeInteger(n) && n >= 0);
-const isSecret = n => isHex(n) && isPrivate(hexAsBuffer(n));
+const isPage = n => n === undefined || (Number.isSafeInteger(n) && n >= 0);
 
 /** Create a signed invoice request that asks for a page of the menu of an
   offer
@@ -45,7 +43,11 @@ const isSecret = n => isHex(n) && isPrivate(hexAsBuffer(n));
   }
 */
 module.exports = args => {
-  if (!!args.secret && !isSecret(args.secret)) {
+  if (!!args.secret && !isHex(args.secret)) {
+    throw new Error('ExpectedPrivateKeyToCreateMenuRequest');
+  }
+
+  if (!!args.secret && !isPrivate(hexAsBuffer(args.secret))) {
     throw new Error('ExpectedPrivateKeyToCreateMenuRequest');
   }
 

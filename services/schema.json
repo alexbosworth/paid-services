@@ -15,12 +15,6 @@
         "type": "1"
       }
     ],
-    "7": [{
-      "data": "request",
-      "description": "Payment request to relay",
-      "limit": 500,
-      "type": "0"
-    }],
     "8": [{
       "description": "Socket to connect to (host:port)",
       "limit": 144,
@@ -47,7 +41,6 @@
     "4": "inbox",
     "5": "network",
     "6": "activity",
-    "7": "relay",
     "8": "connect",
     "9": "invoice"
   },
@@ -59,7 +52,6 @@
     "4": "Deliver a message to this node's inbox",
     "5": "Get ids of other nodes offering paid services",
     "6": "Get routing activity statistics",
-    "7": "Relay a payment through this node",
     "8": "Connect up as peers",
     "9": "Create an invoice"
   },
@@ -71,7 +63,6 @@
     "network": "5",
     "ping": "2",
     "profile": "3",
-    "relay": "7",
     "schema": "0",
     "services": "1"
   }

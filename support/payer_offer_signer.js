@@ -5,7 +5,6 @@ const hexAsBip353Name = require('./hex_as_bip353_name');
 const {truncatedAsNumber} = require('./../service_records');
 
 const hexAsBuffer = hex => Buffer.from(hex, 'hex');
-const isIssuerKey = n => n.length === lengthKeyHex && isPoint(hexAsBuffer(n));
 const lengthIdHex = 32;
 const lengthKeyHex = 66;
 const numberOf = ({value}) => truncatedAsNumber({encoded: value}).number;
@@ -64,7 +63,11 @@ module.exports = args => {
 
   const issuerId = args.issuer.value;
 
-  if (!isIssuerKey(issuerId)) {
+  if (issuerId.length !== lengthKeyHex) {
+    return {};
+  }
+
+  if (!isPoint(hexAsBuffer(issuerId))) {
     return {};
   }
 
@@ -80,12 +83,12 @@ module.exports = args => {
   // A sequence is a minimal tu64
   const lowest = !args.sequence ? '0' : numberOf(args.sequence);
 
-  const {bip353_name} = hexAsBip353Name({encoded: args.name.value});
+  const decodedName = hexAsBip353Name({encoded: args.name.value});
 
   return {
     issuer_id: issuerId,
     payer_offer_reference: {
-      bip353_name,
+      bip353_name: decodedName.bip353_name,
       issuer_id: issuerId,
       network: args.network,
       service_id: !args.service ? undefined : args.service.value,

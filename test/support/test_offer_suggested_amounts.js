@@ -3,15 +3,17 @@ const {test} = require('node:test');
 
 const {createOffer} = require('invoices');
 const {encodeTlvStream} = require('bolt01');
-const {pointFromScalar} = require('tiny-secp256k1');
 
 const addOfferRecords = require('./../../support/add_offer_records');
 const decode = require('./../../support/decode_suggested_amounts');
 const encode = require('./../../support/encode_suggested_amounts');
 const suggestedAmounts = require('./../../support/offer_suggested_amounts');
 
-const issuer = Buffer.from(pointFromScalar(Buffer.alloc(32, 1)))
-  .toString('hex');
+const amountMillion = '00000000000f4240';
+const amounts = {type: '0', value: '00000000000001f4'};
+const currency = value => ({value, type: '2'});
+const inUsd = '0010' + '00000000000001f4' + '00000000000007d0' + '0203555344';
+const issuer = '031b84c5567b126440995d3ed5aaba0565d71e1834604819ff9c17f5e9d5dd078f';
 const type = '1000805807';
 
 // Make a suggested amounts record value from its own records
@@ -30,12 +32,6 @@ const withRecord = (args, value) => addOfferRecords({
 
 // Make an offer with raw suggested amounts
 const withAmounts = (args, amounts) => withRecord(args, list(amounts));
-
-// Suggested amounts records: amounts of 500 and 2,000, and a currency
-const amountMillion = '00000000000f4240';
-const amounts = {type: '0', value: '00000000000001f4'};
-const currency = value => ({value, type: '2'});
-const inUsd = '0010' + '00000000000001f4' + '00000000000007d0' + '0203555344';
 
 const tests = [
   {

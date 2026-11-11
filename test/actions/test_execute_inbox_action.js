@@ -6,7 +6,9 @@ const {encodeTlvStream} = require('bolt01');
 const method = require('./../../actions/execute_inbox_action');
 
 const encode = records => encodeTlvStream({records}).encoded;
+const {keys} = Object;
 
+// Make arguments for the method, replacing defaults with overrides
 const makeArgs = overrides => {
   const args = {
     arguments: encode([{type: '0', value: Buffer.from('m').toString('hex')}]),
@@ -22,7 +24,7 @@ const makeArgs = overrides => {
     fetch: () => new Promise(resolve => resolve({status: 200})),
   };
 
-  Object.keys(overrides).forEach(k => args[k] = overrides[k]);
+  keys(overrides).forEach(k => args[k] = overrides[k]);
 
   return args;
 };

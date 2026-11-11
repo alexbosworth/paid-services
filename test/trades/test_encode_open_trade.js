@@ -3,6 +3,8 @@ const {test} = require('node:test');
 
 const method = require('./../../trades/encode_open_trade');
 
+const tradeWithId = '626f73ff000101010101040c000a0108000001000002000305200000000000000000000000000000000000000000000000000000000000000000';
+
 const tests = [
   {
     args: {},
@@ -49,7 +51,7 @@ const tests = [
     },
     description: 'A trade id record is added',
     expected: {
-      trade: '626f73ff000101010101040c000a0108000001000002000305200000000000000000000000000000000000000000000000000000000000000000',
+      trade: tradeWithId,
     },
   },
   {

@@ -1,6 +1,5 @@
 const bufferAsHex = buffer => Buffer.from(buffer).toString('hex');
-const isName = n => typeof n === 'string' && namePattern.test(n);
-const namePattern = /^[0-9a-zA-Z\-_.]+@[0-9a-zA-Z\-_.]+$/;
+const isName = n => typeof n === 'string' && /^[\w.-]+@[\w.-]+$/.test(n);
 const maxPartBytes = 255;
 
 /** Encode a BIP 353 human readable name as in `invreq_bip_353_name`

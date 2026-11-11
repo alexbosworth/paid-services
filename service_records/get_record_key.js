@@ -1,4 +1,5 @@
 const asyncAuto = require('async/auto');
+const asyncify = require('async/asyncify');
 const {diffieHellmanComputeSecret} = require('ln-service');
 const {returnResult} = require('asyncjs-util');
 
@@ -7,8 +8,8 @@ const {recordKeyFamily} = require('./constants');
 const recordKeyForSecret = require('./record_key_for_secret');
 const recordPoint = require('./record_point');
 
-const {isSafeInteger} = Number;
 const defaultIndex = 0;
+const {isSafeInteger} = Number;
 const partnerPublicKey = recordPoint().public_key;
 
 /** Get the record key of a record key index, derived from a node key that
@@ -66,18 +67,18 @@ module.exports = ({index, lnd}, cbk) => {
       }],
 
       // Derive the record key from the shared secret
-      key: ['getSecret', ({getSecret}, cbk) => {
+      key: ['getSecret', asyncify(({getSecret}) => {
         try {
           const {key} = recordKeyForSecret({secret: getSecret.secret});
 
-          return cbk(null, {
+          return {
             key,
             index: index === undefined ? defaultIndex : index,
-          });
+          };
         } catch (err) {
-          return cbk([503, 'FailedToDeriveServiceRecordKey', {err}]);
+          throw [503, 'FailedToDeriveServiceRecordKey', {err}];
         }
-      }],
+      })],
     },
     returnResult({reject, resolve, of: 'key'}, cbk));
   });

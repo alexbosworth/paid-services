@@ -10,7 +10,6 @@ const {typeVersion} = require('./constants');
 
 const isEven = type => !(BigInt(type) % BigInt(2));
 const isHex = n => typeof n === 'string' && /^([0-9a-f]{2})*$/i.test(n);
-const isUnknownEven = n => !knownTypes.includes(n.type) && isEven(n.type);
 const numberOf = ({value}) => truncatedAsNumber({encoded: value}).number;
 
 /** Decode a service label that names the service and version of an offer
@@ -48,7 +47,7 @@ module.exports = ({encoded}) => {
   const {records} = decodeRecords({encoded});
 
   // Unknown even records cannot be ignored
-  if (!!records.find(isUnknownEven)) {
+  if (!!records.find(n => !knownTypes.includes(n.type) && isEven(n.type))) {
     throw new Error('UnexpectedUnknownRequiredRecordInServiceLabel');
   }
 

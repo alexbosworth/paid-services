@@ -70,20 +70,6 @@ const tests = [
           name: 'activity',
         },
         {
-          id: '7',
-          description: 'Relay a payment through this node',
-          fields: [
-            {
-              data: 'request',
-              description: 'Payment request to relay',
-              limit: 500,
-              type: '0',
-            },
-          ],
-          is_enabled: false,
-          name: 'relay',
-        },
-        {
           id: '8',
           description: 'Connect up as peers',
           fields: [{

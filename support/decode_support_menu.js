@@ -16,13 +16,11 @@ const {typeMenuSignature} = require('./constants');
 const {typeSupportMenu} = require('./constants');
 const {withoutRecord} = require('./../service_records');
 
-const asNumber = n => decodeSafeNumber({error, encoded: n.value}).number;
-const dateOf = seconds => new Date(seconds * msPerSecond);
+const dateOf = seconds => new Date(seconds * 1e3);
 const error = 'ExpectedSafeNumberInSupportMenu';
 const findRecord = (records, type) => records.find(n => n.type === type);
 const isValidDate = date => !isNaN(date.getTime());
 const lengthSignatureHex = 128;
-const msPerSecond = 1e3;
 
 /** Decode a page of a support menu from an invoice error
 
@@ -106,6 +104,9 @@ module.exports = ({encoded}) => {
   if (!expiryRecord) {
     throw new Error('ExpectedExpiryInSupportMenu');
   }
+
+  // Numbers in a menu are safe numbers
+  const asNumber = n => decodeSafeNumber({error, encoded: n.value}).number;
 
   const expiry = dateOf(asNumber(expiryRecord));
 

@@ -1,6 +1,7 @@
 const {randomBytes} = require('crypto');
 
 const asyncAuto = require('async/auto');
+const asyncify = require('async/asyncify');
 const {returnResult} = require('asyncjs-util');
 const {sendMessageToPeer} = require('ln-service');
 const {subscribeToPeerMessages} = require('ln-service');
@@ -59,16 +60,16 @@ module.exports = ({lnd, records, timeout, to, type}, cbk) => {
       id: ['validate', ({}, cbk) => cbk(null, makeId())],
 
       // Encode the request message
-      message: ['id', ({id}, cbk) => {
+      message: ['id', asyncify(({id}) => {
         try {
           // Encode the peer request elements into an encoded request
           const {message} = encodePeerRequest({id, records, type});
 
-          return cbk(null, message);
+          return message;
         } catch (err) {
-          return cbk([400, err.message]);
+          throw [400, err.message];
         }
-      }],
+      })],
 
       // Make the request to the peer
       request: ['id', 'message', ({id, message}, cbk) => {
@@ -77,7 +78,12 @@ module.exports = ({lnd, records, timeout, to, type}, cbk) => {
 
         // Stop waiting for a response if things have gone on too long
         const timer = (() => {
-          return !timeout ? null : setTimeout(() => {
+          // Exit early when there is no timeout
+          if (!timeout) {
+            return null;
+          }
+
+          return setTimeout(() => {
             sub.removeAllListeners();
 
             return cbk([0, 'PeerRequestTimeout']);

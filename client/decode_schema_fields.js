@@ -5,9 +5,9 @@ const decodeDataType = require('./decode_data_type');
 
 const decodeNumber = n => decodeBigSize({encoded: n.value}).decoded;
 const defaultLimit = Number.MAX_SAFE_INTEGER;
+const findByteLimit = records => records.find(n => n.type === '1');
 const findData = records => records.find(n => n.type === '2');
 const findDescription = records => records.find(n => n.type === '0');
-const findByteLimit = records => records.find(n => n.type === '1');
 const hexAsUtf8 = hex => Buffer.from(hex, 'hex').toString('utf8');
 
 /** Decode encoded schema field records

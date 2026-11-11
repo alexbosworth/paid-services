@@ -1,4 +1,5 @@
 const asyncAuto = require('async/auto');
+const asyncify = require('async/asyncify');
 const {parsePaymentRequest} = require('ln-service');
 const {payViaRoutes} = require('ln-service');
 const {returnResult} = require('asyncjs-util');
@@ -48,11 +49,11 @@ module.exports = ({ask, lnd, logger, request}, cbk) => {
       },
 
       // Decode the payment request
-      parseRequest: ['validate', ({}, cbk) => {
+      parseRequest: ['validate', asyncify(({}) => {
         try {
           const details = parsePaymentRequest({request});
 
-          return cbk(null, {
+          return {
             cltv_delta: details.cltv_delta,
             destination: details.destination,
             features: details.features,
@@ -61,11 +62,11 @@ module.exports = ({ask, lnd, logger, request}, cbk) => {
             payment: details.payment,
             routes: details.routes,
             tokens: details.tokens,
-          });
+          };
         } catch (err) {
-          return cbk([400, 'ExpectedValidPaymentRequestToBuyPreimage', {err}]);
+          throw [400, 'ExpectedValidPaymentRequestToBuyPreimage', {err}];
         }
-      }],
+      })],
 
       // Subscribe to a probe to a route
       getRoute: ['parseRequest', ({parseRequest}, cbk) => {

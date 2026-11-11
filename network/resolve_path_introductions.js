@@ -1,4 +1,5 @@
 const asyncAuto = require('async/auto');
+const asyncify = require('async/asyncify');
 const asyncMap = require('async/map');
 const {getChannel} = require('ln-service');
 const {returnResult} = require('asyncjs-util');
@@ -69,7 +70,7 @@ module.exports = (args, cbk) => {
       }],
 
       // Set the starting node of each path that can be resolved
-      resolved: ['getChannels', ({getChannels}, cbk) => {
+      resolved: ['getChannels', asyncify(({getChannels}) => {
         // Paths over a channel that was not found cannot be resolved
         const known = args.paths.filter((path, i) => {
           return !path.introduction_edge || !!getChannels[i];
@@ -89,11 +90,11 @@ module.exports = (args, cbk) => {
             return {...path, introduction_node: introduction};
           });
 
-          return cbk(null, {paths});
+          return {paths};
         } catch (err) {
-          return cbk([503, err.message]);
+          throw [503, err.message];
         }
-      }],
+      })],
     },
     returnResult({reject, resolve, of: 'resolved'}, cbk));
   });

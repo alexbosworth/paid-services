@@ -36,25 +36,27 @@ const isKey = n => typeof n === 'string' && /^0[23][0-9a-f]{64}$/i.test(n);
 */
 module.exports = ({offer, reference}) => {
   try {
-    const {is_expired, issuer_id, networks} = parseOffer({offer});
+    const details = parseOffer({offer});
 
     // An offer that has expired is not used
-    if (is_expired) {
+    if (details.is_expired) {
       return {is_valid: false};
     }
 
     // A reference without an issuer id is not for any offer
-    if (!reference || !isKey(reference.issuer_id) || !issuer_id) {
+    if (!reference || !isKey(reference.issuer_id) || !details.issuer_id) {
       return {is_valid: false};
     }
 
+    const issuerId = details.issuer_id.toLowerCase();
+
     // The offer has the issuer id of the reference, in any case
-    if (issuer_id.toLowerCase() !== reference.issuer_id.toLowerCase()) {
+    if (issuerId !== reference.issuer_id.toLowerCase()) {
       return {is_valid: false};
     }
 
     // The offer can be paid on the network of the reference
-    if (!reference.network || !networks.includes(reference.network)) {
+    if (!reference.network || !details.networks.includes(reference.network)) {
       return {is_valid: false};
     }
 

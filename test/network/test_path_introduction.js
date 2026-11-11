@@ -3,9 +3,8 @@ const {test} = require('node:test');
 
 const method = require('./../../network/path_introduction');
 
-const bufferAsHex = buffer => buffer.toString('hex');
-const key1 = bufferAsHex(Buffer.alloc(33, 2));
-const key2 = bufferAsHex(Buffer.alloc(33, 3));
+const key1 = '02'.repeat(33);
+const key2 = '03'.repeat(33);
 
 const tests = [
   {

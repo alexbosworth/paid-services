@@ -5,6 +5,10 @@ const {encodeTlvStream} = require('bolt01');
 
 const method = require('./../../services/response_for_schema');
 
+const inboxDescription = '44656c697665722061206d65737361676520746f2074686973206e6f6465277320696e626f78';
+const inboxFields = '0022001b4d65737361676520746f2064656c6976657220746f20696e626f780103fd01180130002b5265706c7920656d61696c2061646472657373206f72206f7468657220636f6e74616374206d6574686f64010190';
+const pingDescription = 'Get a pong response to a ping payment';
+
 const tests = [
   {
     args: {arguments: '0003000102', env: {}},
@@ -13,7 +17,7 @@ const tests = [
       response: {
         records: [{
           type: '2',
-          value: Buffer.from('Get a pong response to a ping payment').toString('hex'),
+          value: Buffer.from(pingDescription).toString('hex'),
         }],
       },
     },
@@ -40,7 +44,7 @@ const tests = [
           {type: '1', value: '02'},
           {
             type: '2',
-            value: Buffer.from('Get a pong response to a ping payment').toString('hex'),
+            value: Buffer.from(pingDescription).toString('hex'),
           },
         ],
       },
@@ -72,11 +76,11 @@ const tests = [
           {type: '1', value: '04'},
           {
             type: '2',
-            value: '44656c697665722061206d65737361676520746f2074686973206e6f6465277320696e626f78',
+            value: inboxDescription,
           },
           {
             type: '3',
-            value: '0022001b4d65737361676520746f2064656c6976657220746f20696e626f780103fd01180130002b5265706c7920656d61696c2061646472657373206f72206f7468657220636f6e74616374206d6574686f64010190',
+            value: inboxFields,
           },
         ],
       },

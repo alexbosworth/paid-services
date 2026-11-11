@@ -1,4 +1,5 @@
 const asyncAuto = require('async/auto');
+const asyncify = require('async/asyncify');
 const asyncMapSeries = require('async/mapSeries');
 const {getPublicKey} = require('ln-service');
 const {parseOffer} = require('invoices');
@@ -43,28 +44,23 @@ const {typePayerOffer} = require('./constants');
 const unpaidInvoices = require('./unpaid_invoices');
 const {unpaidWindowMs} = require('./constants');
 
-const {isArray} = Array;
-const {isSafeInteger} = Number;
 const asMs = date => new Date(date).getTime();
 const byteLength = hex => hex.length / 2;
-const errorMessage = err => (isArray(err) && err[1]) || failedToCreate;
+const errorMessage = err => Array.isArray(err) && err[1];
 const failedToCreate = 'FailedToCreateInvoice';
 const isAccepted = (indexes, index) => !indexes || indexes.includes(index);
-const isAmount = mtokens => isText(mtokens) && /^[1-9][0-9]*$/.test(mtokens);
+const isAmount = n => typeof n === 'string' && /^[1-9][0-9]*$/.test(n);
+const {isArray} = Array;
 const isExpired = offer => parseOffer({offer}).is_expired;
-const isIndex = index => isSafeInteger(index) && index >= 0;
-const isKeyIndex = index => isIndex(index) && index <= maxKeyIndex;
-const isKeyIndexes = indexes => !indexes || indexes.every(isKeyIndex);
-const isNote = note => isText(note) && noteBytes(note) <= maxSupportNoteBytes;
+const isKeyIndex = n => Number.isSafeInteger(n) && n >= 0 && n <= maxKeyIndex;
+const isLongNote = n => Buffer.byteLength(n, 'utf8') > maxSupportNoteBytes;
 const isText = text => typeof text === 'string' && !!text;
-const isTooLarge = err => isArray(err) && err[0] === 413;
+const isTooLarge = err => Array.isArray(err) && err[0] === 413;
 const lengthSignatureRecord = 66;
-const noteBytes = note => Buffer.byteLength(note, 'utf8');
 const now = () => Date.now();
 const payerOfferTooLarge = 'PayerOfferTooLarge';
 const requestTooLarge = 'InvoiceRequestTooLarge';
-const signatureExpiry = () => new Date(now() + menuSignatureMs);
-const tooLarge = isOffer => isOffer ? payerOfferTooLarge : requestTooLarge;
+const signatureExpiry = () => new Date(Date.now() + menuSignatureMs);
 const typeRequestAmount = '82';
 
 /** Service payments from supporters to a support offer
@@ -226,7 +222,7 @@ module.exports = args => {
     throw new Error('ExpectedArrayOfRecordKeyIndexesToServiceSupportOffer');
   }
 
-  if (!isKeyIndexes(args.record_key_indexes)) {
+  if (!(args.record_key_indexes || []).every(isKeyIndex)) {
     throw new Error('ExpectedRecordKeyIndexesToServiceSupportOffer');
   }
 
@@ -234,7 +230,11 @@ module.exports = args => {
     throw new Error('ExpectedArrayOfRelatedOffersToServiceSupportOffer');
   }
 
-  if (args.support_note !== undefined && !isNote(args.support_note)) {
+  if (args.support_note !== undefined && !isText(args.support_note)) {
+    throw new Error('ExpectedSupportNoteOfAtMost128BytesToServiceOffer');
+  }
+
+  if (args.support_note !== undefined && isLongNote(args.support_note)) {
     throw new Error('ExpectedSupportNoteOfAtMost128BytesToServiceOffer');
   }
 
@@ -298,21 +298,25 @@ module.exports = args => {
 
   // Tell a listener about an event apart from the code that found it, so
   // that a listener that throws cannot stop the service or crash it
-  const emit = (event, details) => process.nextTick(() => {
+  const emit = (eventName, details) => process.nextTick(() => {
     // Exit early when the service stopped before it could say it started
-    if (event === 'start' && isStopped) {
+    if (eventName === 'start' && isStopped) {
       return;
     }
 
     try {
-      return service[event](details);
+      return service[eventName](details);
     } catch (err) {
       // Exit early when the error listener threw, as it cannot be told
-      if (event === 'error') {
+      if (eventName === 'error') {
         return;
       }
 
-      return emit('error', [500, 'UnexpectedErrorInListener', {err, event}]);
+      return emit('error', [
+        500,
+        'UnexpectedErrorInListener',
+        {err, event: eventName},
+      ]);
     }
   });
 
@@ -371,16 +375,16 @@ module.exports = args => {
     },
 
     // Check the record was made by this node and read it
-    decode: ['getRecordKey', ({getRecordKey}, cbk) => {
+    decode: ['getRecordKey', asyncify(({getRecordKey}) => {
       try {
-        return cbk(null, decodeSupportRecord({
+        return decodeSupportRecord({
           key: getRecordKey.key,
           record: args.record,
-        }));
+        });
       } catch (err) {
-        return cbk([400, err.message]);
+        throw [400, err.message];
       }
-    }],
+    })],
 
     // Get the issuer id of the offer
     issuerId: ['decode', ({decode}, cbk) => {
@@ -424,19 +428,19 @@ module.exports = args => {
       'checkRelated',
       'decode',
       'issuerId',
-      ({decode, issuerId}, cbk) =>
+      asyncify(({decode, issuerId}) =>
     {
       try {
-        return cbk(null, relatedMenus({
+        return relatedMenus({
           expires_at: signatureExpiry().toISOString(),
           issuer_id: issuerId,
           offer: decode.offer,
           related: args.related,
-        }));
+        });
       } catch (err) {
-        return cbk([400, err.message]);
+        throw [400, err.message];
       }
-    }],
+    })],
 
     // Get the signing key of the offer
     getKey: ['decode', ({decode}, cbk) => {
@@ -664,32 +668,34 @@ module.exports = args => {
       value: received.value,
     });
 
-    const {error, is_ignored, is_menu, offer, page, request} = forRequest;
+    const {error, offer, page, request} = forRequest;
+    const isIgnored = forRequest.is_ignored;
+    const isMenu = forRequest.is_menu;
 
     // Exit early when the request was not received on an offer path
-    if (!error && !is_menu && !request) {
+    if (!error && !isMenu && !request) {
       return;
     }
 
     // Exit early when a menu request has a reply path that is too long
-    if (!!is_menu && received.reply_hops > maxReplyHops) {
+    if (!!isMenu && received.reply_hops > maxReplyHops) {
       return;
     }
 
     // Exit early when too many menu requests have been answered
-    if (!!is_menu && !state.answered_menus.take({
+    if (!!isMenu && !state.answered_menus.take({
       key: String(++answeredMenusCount),
     })) {
       return;
     }
 
     // Exit early when too many requests to pay have been answered
-    if (!is_menu && !state.answered.take({key: String(++answeredCount)})) {
+    if (!isMenu && !state.answered.take({key: String(++answeredCount)})) {
       return;
     }
 
     // Exit early when the menu request is not replied to
-    if (!!is_ignored) {
+    if (!!isIgnored) {
       return;
     }
 
@@ -733,7 +739,7 @@ module.exports = args => {
     }
 
     // Exit early and send back the menu page when the request asks for it
-    if (!!is_menu) {
+    if (!!isMenu) {
       const menu = state.menus.get(offer.offer);
 
       // Only the offer and the related offers given menus have them here
@@ -815,7 +821,7 @@ module.exports = args => {
 
       return sendError({
         erroneous_field: isPayerOffer ? typePayerOffer : undefined,
-        message: tooLarge(isPayerOffer),
+        message: isPayerOffer ? payerOfferTooLarge : requestTooLarge,
       });
     }
 
@@ -955,7 +961,7 @@ module.exports = args => {
 
       return entry.invoice.get(guard((err, invoice) => {
         if (!!err) {
-          return sendError({message: errorMessage(err)});
+          return sendError({message: errorMessage(err) || failedToCreate});
         }
 
         // A note is sealed to the payment preimage and a salt, and is the
@@ -1014,7 +1020,7 @@ module.exports = args => {
 
             emit('error', [503, 'FailedToSignInvoiceForSupporter', {err}]);
 
-            return sendError({message: errorMessage(err)});
+            return sendError({message: errorMessage(err) || failedToCreate});
           }
 
           return sendInvoice({existing, signed});

@@ -4,9 +4,8 @@ const {returnResult} = require('asyncjs-util');
 const getOfferInvoice = require('./get_offer_invoice');
 const payOfferInvoice = require('./pay_offer_invoice');
 
-const {isSafeInteger} = Number;
 const isMtokens = n => typeof n === 'string' && /^\d+$/.test(n);
-const isTimeout = n => isSafeInteger(n) && n > 0;
+const isTimeout = n => Number.isSafeInteger(n) && n > 0;
 
 /** Pay a BOLT 12 offer: `getOfferInvoice` and then `payOfferInvoice`
 

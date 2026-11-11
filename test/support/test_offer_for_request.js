@@ -1,41 +1,21 @@
 const {deepStrictEqual} = require('node:assert/strict');
 const {test} = require('node:test');
 
-const {blindedPathFromHops} = require('bolt04');
-const {createOffer} = require('invoices');
 const {createSignedInvoiceRequest} = require('invoices');
 const {createUnsignedInvoiceRequest} = require('invoices');
 const {decodeTlvStream} = require('bolt01');
 const {encodeTlvStream} = require('bolt01');
-const {pointFromScalar} = require('tiny-secp256k1');
 
+const {amountless} = require('./fixtures/offer_for_request');
 const createMenuRequest = require('./../../support/create_menu_request');
+const {makeOffer} = require('./fixtures/offer_for_request');
 const method = require('./../../support/offer_for_request');
+const {offer} = require('./fixtures/offer_for_request');
 
-const asKey = n => Buffer.from(pointFromScalar(Buffer.alloc(32, n)))
-  .toString('hex');
-const otherPathId = Buffer.alloc(32).toString('hex');
-const pathId = Buffer.alloc(32, 3).toString('hex');
-const payerId = asKey(2);
-const payerSecret = Buffer.alloc(32, 2).toString('hex');
-
-const issuerId = asKey(1);
-const path = blindedPathFromHops({hops: [issuerId], id: pathId});
-const paths = [{hops: path.path, introduction_node: issuerId, key: path.key}];
-
-// Make an offer of the issuer on the path
-const makeOffer = ({description, mtokens}) => createOffer({
-  description,
-  mtokens,
-  paths,
-  issuer_id: issuerId,
-  networks: ['regtest'],
-})
-.offer;
-
-// An offer with an amount, and one without, like a support offer
-const amountless = makeOffer({description: 'support'});
-const offer = makeOffer({description: 'description', mtokens: '1000'});
+const otherPathId = '00'.repeat(32);
+const pathId = '03'.repeat(32);
+const payerId = '024d4b6cd1361032ca9bd2aeb9d900aa4d45d9ead80ac9423374c451a7254d0766';
+const payerSecret = '02'.repeat(32);
 
 // Make the records of an unsigned request for an offer
 const unsignedRecords = forOffer => {
@@ -77,13 +57,20 @@ const match = args => {
     return matched;
   }
 
-  const {mtokens, offer, payer_id} = request;
-
-  return {...matched, request: {mtokens, offer, payer_id}};
+  return {
+    ...matched,
+    request: {
+      mtokens: request.mtokens,
+      offer: request.offer,
+      payer_id: request.payer_id,
+    },
+  };
 };
 
 // Offers serviced on the path
 const serviced = [{offer, path_id: pathId}];
+
+// The support offer serviced on the path
 const support = [{offer: amountless, path_id: pathId}];
 
 // The parts of a request for the support offer

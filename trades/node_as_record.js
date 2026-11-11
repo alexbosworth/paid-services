@@ -6,12 +6,12 @@ const {rawChanId} = require('bolt07');
 const highOrderKeyType = '1';
 const ipV4SocketsType = '3';
 const ipV6SocketsType = '4';
-const torV3SocketsType = '5';
 const {isArray} = Array;
 const isPublicKey = n => !!n && /^0[2-3][0-9A-F]{64}$/i.test(n);
 const join = arr => arr.join('');
 const lowOrderKeyType = '0';
 const nodeIdType = '2';
+const torV3SocketsType = '5';
 
 /** Convert node details to a node record
 

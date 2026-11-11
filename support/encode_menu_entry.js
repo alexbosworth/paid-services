@@ -14,12 +14,9 @@ const {typeEntryServiceSequence} = require('./constants');
 const {typeOfferPaths} = require('./constants');
 const {withoutRecord} = require('./../service_records');
 
-const hexAsBuffer = hex => Buffer.from(hex, 'hex');
 const isHex = n => typeof n === 'string' && /^([0-9a-f]{2})*$/i.test(n);
-const isKey = n => isHex(n) && n.length === 66 && isPoint(hexAsBuffer(n));
-const isSequence = n => /^\d+$/.test(String(n)) && BigInt(n) < maxSequence;
-const isServiceId = n => isHex(n) && n.length === 32;
-const maxSequence = BigInt('18446744073709551616');
+const isKey = n => /^[0-9a-f]{66}$/i.test(n) && isPoint(Buffer.from(n, 'hex'));
+const isSequence = n => /^\d+$/.test(String(n)) && BigInt(n) < 2n ** 64n;
 
 /** Encode an entry of a support menu: a whole offer, an offer of the
   recipient without its paths, or a reference to an offer at a BIP 353 name
@@ -81,7 +78,11 @@ module.exports = args => {
     throw new Error('ExpectedIssuerIdToEncodeMenuEntryReference');
   }
 
-  if (args.service_id !== undefined && !isServiceId(args.service_id)) {
+  if (args.service_id !== undefined && !isHex(args.service_id)) {
+    throw new Error('ExpectedServiceIdToEncodeMenuEntryReference');
+  }
+
+  if (args.service_id !== undefined && args.service_id.length !== 32) {
     throw new Error('ExpectedServiceIdToEncodeMenuEntryReference');
   }
 

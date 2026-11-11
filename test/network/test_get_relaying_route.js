@@ -1,47 +1,38 @@
 const {deepStrictEqual, rejects} = require('node:assert/strict');
 const {test} = require('node:test');
 
-const lnService = require('ln-service');
-const {pointFromScalar} = require('tiny-secp256k1');
-
-const asKey = n => Buffer.from(pointFromScalar(Buffer.alloc(32, n)))
-  .toString('hex');
-
-const destination = asKey(1);
-const relay = asKey(2);
-const other = asKey(3);
-const source = asKey(4);
-
-// Nodes that relay onion messages signal feature bit 38 or 39
-const relaying = {features: [{bit: 39}]};
-const silent = {features: []};
-
-// Routes and node details are faked, so that nothing is looked up
-const fakes = {nodes: {}, route: null};
-
-lnService.getNode = ({public_key}, cbk) => {
-  const node = fakes.nodes[public_key];
-
-  return !node ? cbk([503, 'UnknownNode']) : cbk(null, node);
-};
-
-lnService.getRouteToDestination = ({}, cbk) => cbk(null, {route: fakes.route});
+const {makeLnd} = require('mock-lnd');
 
 const method = require('./../../network/get_relaying_route');
+
+const destination = '031b84c5567b126440995d3ed5aaba0565d71e1834604819ff9c17f5e9d5dd078f';
+const {entries} = Object;
+const other = '02531fe6068134503d2723133227c867ac8fa6c83c537e9a44c3c5bdbdcb1fe337';
+const relay = '024d4b6cd1361032ca9bd2aeb9d900aa4d45d9ead80ac9423374c451a7254d0766';
+const relaying = [39];
+const silent = [];
+const source = '03462779ad4aad39514614751a71085f2f10e1c7a593e4e030efb5b8721ce55b0b';
 
 // A route found from the destination back to the source goes through hops
 const routeThrough = hops => ({hops: hops.map(key => ({public_key: key}))});
 
-// Get the relaying route with faked routes and node details
+// Get the relaying route from a fake LND that knows nodes and a route
 const getRoute = async ({nodes, peers, route}) => {
-  fakes.nodes = nodes || {};
-  fakes.route = route;
+  const lnd = makeLnd({
+    graph: {
+      nodes: entries(nodes || {}).map(([key, features]) => ({
+        features,
+        public_key: key,
+      })),
+    },
+    routes: !route ? [] : [route],
+  });
 
   return await method({
     destination,
+    lnd,
     source,
     ignore: [],
-    lnd: {},
     peers: (peers || []).map(key => ({public_key: key})),
   });
 };

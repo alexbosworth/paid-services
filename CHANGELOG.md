@@ -1,5 +1,19 @@
 # Versions
 
+## Version 11.0.0
+
+- `completeOffToOnSwap`: Add method to complete an off to on swap request
+- `decodeLoopResponse`: Add method to decode the Loop service response details
+    of a swap out request
+- `decodeOffToOnRestart`, `encodeOffToOnRestart`: Add methods to encode and
+    decode the restart details of an off to on swap request
+- `requestLoopOut`: Add method to request a swap out from the Loop service
+- `startOffToOnSwap`: Add method to start an off to on swap request
+
+### Breaking Changes
+
+- `servicePaidRequests`: Remove service `relay`
+
 ## Version 10.3.3
 
 - `getOfferInvoice`: Add support for offer paths that start at the payer

@@ -17,7 +17,6 @@ const {typeRecordMaxUnpaid} = require('./constants');
 const {typeRecordOffer} = require('./constants');
 const {typeRecordPathIds} = require('./constants');
 
-const asNumber = n => decodeSafeNumber({error, encoded: n.value}).number;
 const error = 'ExpectedSafeNumberInSupportRecord';
 const findRecord = (records, type) => records.find(n => n.type === type);
 const isPathId = n => n.length / 2 >= minPathIdBytes;
@@ -81,6 +80,9 @@ module.exports = ({key, record}) => {
   if (!offer || !keyIndex || !pathIds) {
     throw new Error('ExpectedOfferKeyIndexAndPathIdsInSupportRecord');
   }
+
+  // Numbers in a support record are safe numbers
+  const asNumber = n => decodeSafeNumber({error, encoded: n.value}).number;
 
   // The signing key index is below 2^31, so it is a valid key index
   if (asNumber(keyIndex) > maxKeyIndex) {

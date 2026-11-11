@@ -4,7 +4,6 @@ const {test} = require('node:test');
 const {hexAsList} = require('./../../service_records');
 const {listAsHex} = require('./../../service_records');
 
-// Many empty items, which are each only a length byte
 const empties = Array(5000).fill(String());
 
 // Encode a list and decode it again

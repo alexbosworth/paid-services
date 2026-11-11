@@ -1,4 +1,3 @@
-const {createHash} = require('node:crypto');
 const {deepStrictEqual, throws} = require('node:assert/strict');
 const {test} = require('node:test');
 
@@ -15,20 +14,17 @@ const openSupportNote = require('./../../support/support_note_for_invoice');
 const sealNote = require('./../../support/seal_support_note');
 const supportNoteKey = require('./../../support/support_note_key');
 
-const asKey = n => Buffer.from(pointFromScalar(Buffer.alloc(32, n)))
-  .toString('hex');
-const sha256 = n => createHash('sha256').update(n).digest('hex');
-
-const id = sha256(Buffer.alloc(32, 14));
+const id = '49cc2209d036c94d6e522c73af1fb6332a22a86b8a7722613864f5616bcaa9e4';
+const notUtf8 = '0d'.repeat(16) + '7b31b6a5ddc81924c0e859c3d219efc6d2';
 const otherPreimage = '0f'.repeat(32);
 const preimage = '0e'.repeat(32);
 const salt = '0c'.repeat(16);
+const sealed = '0c'.repeat(16) + '1277377bd4ee1c8bdba7fabb8485e432f1d244a34475ebbac207';
 
-// The note `Thank you!` sealed to the preimage with the salt, as in the spec
-const sealed = salt + '1277377bd4ee1c8bdba7fabb8485e432f1d244a34475ebbac207';
-
-// The byte ff, which is not UTF-8 text, sealed to the preimage
-const notUtf8 = '0d'.repeat(16) + '7b31b6a5ddc81924c0e859c3d219efc6d2';
+// Get the public key of a secret of 32 bytes of a number
+const asKey = n => {
+  return Buffer.from(pointFromScalar(Buffer.alloc(32, n))).toString('hex');
+};
 
 // Make a signed invoice for the payment hash, with a sealed note or not
 const makeInvoice = note => {

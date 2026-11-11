@@ -1,32 +1,28 @@
 const {deepStrictEqual, throws} = require('node:assert/strict');
 const {test} = require('node:test');
 
-const {createOffer} = require('invoices');
 const {encodeTlvStream} = require('bolt01');
 const {parseOffer} = require('invoices');
-const {pointFromScalar} = require('tiny-secp256k1');
 
 const decode = require('./../../support/decode_support_record');
 const encode = require('./../../support/encode_support_record');
 const {encodeServiceRecord} = require('./../../service_records');
 const {listAsHex} = require('./../../service_records');
 
-const issuer = Buffer.from(pointFromScalar(Buffer.alloc(32, 3)));
-const key = Buffer.alloc(32, 1).toString('hex');
-// Path ids are at least 16 bytes, so a path id of 15 bytes is too short
-const pathIds = [Buffer.alloc(32, 2), Buffer.alloc(16, 3)].map(n => {
-  return n.toString('hex');
-});
-const shortPathId = Buffer.alloc(15, 4).toString('hex');
+const key = '01'.repeat(32);
+const {keys} = Object;
+const offer = 'lno1qgsqvgnwgcg35z6ee2h3yczraddm72xrfua9uve2rlrm9deu7xyfzrc2qaeh2ursdae8g93pqff3lesxsy69q0f8yvfnyf7gv7kglfkg83fhaxjyc0zmm0wtrl3nw';
+const pathIds = ['02'.repeat(32), '03'.repeat(16)];
+const shortPathId = '04'.repeat(15);
 
-const {offer} = createOffer({
-  description: 'support',
-  issuer_id: issuer.toString('hex'),
-  networks: ['regtest'],
-});
+// Make arguments to encode a record with, replacing defaults with overrides
+const makeArgs = overrides => {
+  const args = {offer, key_index: 0, path_ids: pathIds, record_key_index: 0};
 
-// Arguments to encode a record with
-const base = {offer, key_index: 0, path_ids: pathIds, record_key_index: 0};
+  keys(overrides).forEach(k => args[k] = overrides[k]);
+
+  return args;
+};
 
 // Support data with a key index, path ids, and any extra records
 const makeData = ({ids, index, records}) => encodeTlvStream({
@@ -48,12 +44,11 @@ const wrap = ({data, type, version}) => encodeServiceRecord({
 
 const tests = [
   {
-    args: {
-      ...base,
+    args: makeArgs({
       key_index: 7,
       max_requests_per_hour: 500,
       max_unpaid_invoices_per_hour: 25,
-    },
+    }),
     description: 'A record is decoded to what it was encoded with',
     expected: {
       offer,
@@ -64,7 +59,7 @@ const tests = [
     },
   },
   {
-    args: base,
+    args: makeArgs({}),
     description: 'A record without limits has no limits',
     expected: {
       offer,
@@ -75,7 +70,7 @@ const tests = [
     },
   },
   {
-    args: {...base, key_index: 2147483647},
+    args: makeArgs({key_index: 2147483647}),
     description: 'The highest signing key index is below 2^31',
     expected: {
       offer,
@@ -122,17 +117,17 @@ const tests = [
     record: wrap({data: makeData({records: [{type: '8', value: ''}]})}),
   },
   {
-    args: {...base, max_requests_per_hour: 0},
+    args: makeArgs({max_requests_per_hour: 0}),
     description: 'A limit of zero is not encoded',
     error: 'ExpectedPositiveMaxRequestsToEncodeSupportRecord',
   },
   {
-    args: {...base, key_index: 2147483648},
+    args: makeArgs({key_index: 2147483648}),
     description: 'A signing key index of 2^31 is not encoded',
     error: 'ExpectedKeyIndexToEncodeSupportRecord',
   },
   {
-    args: {...base, path_ids: [pathIds[0], shortPathId]},
+    args: makeArgs({path_ids: [pathIds[0], shortPathId]}),
     description: 'A path id of less than 16 bytes is not encoded',
     error: 'ExpectedPathIdsOfAtLeast16BytesToEncodeSupportRecord',
   },

@@ -1,11 +1,11 @@
 const {onionForPath} = require('bolt04');
 
-const {floor} = Math;
+const {largeOnionBytes} = require('./constants');
+
 const bufferAsHex = buffer => Buffer.from(buffer).toString('hex');
 const isLargeOnion = onion => onion.length / 2 === largeOnionBytes;
-const largeOnionBytes = 32834;
 const lengthPayloadsBytes = 1300;
-const middleOf = (low, high) => floor((low + high) / 2);
+const middleOf = (low, high) => Math.floor((low + high) / 2);
 
 /** Get the most bytes of a reply, the single payload record of the final
   hop, that fit in an onion message of the regular size over a reply path

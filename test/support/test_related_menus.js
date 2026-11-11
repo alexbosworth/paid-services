@@ -1,60 +1,25 @@
 const {deepStrictEqual, throws} = require('node:assert/strict');
 const {test} = require('node:test');
 
-const {addServiceLabel} = require('./../../service_records');
-const {blindedPathFromHops} = require('bolt04');
-const {createOffer} = require('invoices');
 const {pointFromScalar} = require('tiny-secp256k1');
 
+const {clip} = require('./fixtures/related_menus');
+const {episode} = require('./fixtures/related_menus');
+const {guest} = require('./fixtures/related_menus');
+const {level} = require('./fixtures/related_menus');
 const method = require('./../../support/related_menus');
+const {other} = require('./fixtures/related_menus');
+const {support} = require('./fixtures/related_menus');
+const {testnet} = require('./fixtures/related_menus');
+const {tip} = require('./fixtures/related_menus');
 
-const asKey = n => Buffer.from(pointFromScalar(Buffer.alloc(32, n)))
-  .toString('hex');
 const expiresAt = '2100-01-01T00:00:00.000Z';
-const issuer = asKey(1);
-const node = asKey(9);
+const issuer = '031b84c5567b126440995d3ed5aaba0565d71e1834604819ff9c17f5e9d5dd078f';
 
-const blinded = blindedPathFromHops({hops: [node]});
-const {key} = blinded;
-const paths = [{key, hops: blinded.path, introduction_node: node}];
-
-// Make an offer of the issuer, labeled as a support offer when it has an id
-const makeOffer = ({description, id, issuer_id}) => {
-  const offer = createOffer({
-    description,
-    paths,
-    issuer_id: issuer_id || issuer,
-  })
-  .offer;
-
-  if (!id) {
-    return offer;
-  }
-
-  return addServiceLabel({id, offer, type: '1', version: 1}).offer;
+// Get the public key of a secret of 32 bytes of a number
+const asKey = n => {
+  return Buffer.from(pointFromScalar(Buffer.alloc(32, n))).toString('hex');
 };
-
-const support = makeOffer({description: 'support', id: '0d'.repeat(16)});
-
-const clip = makeOffer({description: 'clip', id: '0f'.repeat(16)});
-const episode = makeOffer({description: 'episode', id: '0e'.repeat(16)});
-const guest = makeOffer({description: 'guest', issuer_id: asKey(2)});
-const other = makeOffer({id: '0e'.repeat(16), issuer_id: asKey(2)});
-const tip = makeOffer({description: 'tip'});
-
-const testnet = createOffer({
-  paths,
-  description: 'testnet',
-  issuer_id: issuer,
-  networks: ['testnet'],
-})
-.offer;
-
-// Support offers of the issuer for levels of related menus
-const level = [1, 2, 3, 4, 5].map(n => makeOffer({
-  description: `level ${n}`,
-  id: Buffer.alloc(16, n).toString('hex'),
-}));
 
 // Nest offers so that the menu of each lists the one before it
 const nest = offers => offers.reduce((related, offer) => {

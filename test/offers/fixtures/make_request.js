@@ -5,7 +5,7 @@ const requestForOffer = require('./../../../offers/invoice_request_for_offer');
 
 const bufferAsHex = buffer => Buffer.from(buffer).toString('hex');
 const defaultSecret = Buffer.alloc(32, 4);
-const keyOf = secret => bufferAsHex(pointFromScalar(secret));
+const keyOf = secret => Buffer.from(pointFromScalar(secret)).toString('hex');
 
 /** Make a signed BOLT 12 invoice request for an offer, by the payer of
   secret 4 by default

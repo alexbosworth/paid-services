@@ -146,9 +146,14 @@ module.exports = args => {
     descRecord(utf8AsHex(args.description || chanDescription(args.channel))),
   ];
 
-  const requestType = !!args.channel ?
-    serviceTypeRequestChannelSale :
-    serviceTypeRequestTrades;
+  const requestType = (() => {
+    // Exit early when the trade is a channel sale
+    if (!!args.channel) {
+      return serviceTypeRequestChannelSale;
+    }
+
+    return serviceTypeRequestTrades;
+  })();
 
   // Wait for a request for the open trade
   service.request({type: requestType}, (req, res) => {
@@ -187,9 +192,14 @@ module.exports = args => {
           return;
         }
 
-        const receiveType = !!args.channel ?
-          serviceTypeReceiveChannelSale :
-          serviceTypeReceiveTrades;
+        const receiveType = (() => {
+          // Exit early when the trade is a channel sale
+          if (!!args.channel) {
+            return serviceTypeReceiveChannelSale;
+          }
+
+          return serviceTypeReceiveTrades;
+        })();
 
         // Ping the node with trade details
         return makePeerRequest({

@@ -1,4 +1,5 @@
 const asyncAuto = require('async/auto');
+const asyncify = require('async/asyncify');
 const {getNetwork} = require('ln-sync');
 const {parseInvoice} = require('invoices');
 const {payViaRoutes} = require('ln-service');
@@ -55,13 +56,13 @@ module.exports = (args, cbk) => {
       },
 
       // Read the invoice, which checks its signature
-      details: ['validate', ({}, cbk) => {
+      details: ['validate', asyncify(({}) => {
         try {
-          return cbk(null, parseInvoice({invoice: args.invoice}));
+          return parseInvoice({invoice: args.invoice});
         } catch (err) {
-          return cbk([400, 'ExpectedValidInvoiceToPay', {err: err.message}]);
+          throw [400, 'ExpectedValidInvoiceToPay', {err: err.message}];
         }
-      }],
+      })],
 
       // Get the network of the node to check the invoice is for it
       getNetwork: ['details', ({}, cbk) => getNetwork({lnd: args.lnd}, cbk)],

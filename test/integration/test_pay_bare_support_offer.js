@@ -12,7 +12,6 @@ const {parseInvoice} = require('invoices');
 const {parseInvoiceError} = require('invoices');
 const {parseOffer} = require('invoices');
 const {payViaRoutes} = require('ln-service');
-const {pointFromScalar} = require('tiny-secp256k1');
 const {probeForRoute} = require('ln-service');
 const {spawnLightningCluster} = require('ln-docker-daemons');
 
@@ -27,9 +26,10 @@ const {serviceSupportOffer} = require('./../../');
 const bufferAsHex = buffer => buffer.toString('hex');
 const capacity = 1e6;
 const interval = 1000;
-const keyOf = secret => bufferAsHex(Buffer.from(pointFromScalar(secret)));
+const isFuture = date => Date.parse(date) > Date.now();
 const maxFeeMtokens = '100000';
 const mtokens = '250000';
+const payerId = '02531fe6068134503d2723133227c867ac8fa6c83c537e9a44c3c5bdbdcb1fe337';
 const payerSecret = Buffer.alloc(32, 3);
 const sha256 = n => createHash('sha256').update(n).digest('hex');
 const size = 3;
@@ -39,8 +39,6 @@ const typeInvoice = '66';
 const typeInvoiceError = '68';
 const typeInvoiceRequest = '64';
 const typeSupportNote = '3000805805';
-
-const payerId = keyOf(payerSecret);
 
 // A support offer is paid by a payer that only knows BOLT 12: it sends an
 // invoice request for the offer, checks the invoice, and pays it over the
@@ -202,7 +200,7 @@ test(`Pay a bare support offer as a BOLT 12 offer`, async () => {
 
     equal(offerInvoice.mtokens, mtokens, 'Got an invoice for the amount');
     equal(offerInvoice.payer_id === payerId, false, 'With a new payer id');
-    equal(Date.parse(offerInvoice.expires_at) > Date.now(), true, 'Unexpired');
+    equal(isFuture(offerInvoice.expires_at), true, 'Unexpired');
 
     // The payer id is a key that the payer node derives at the key index
     const derivedKey = await getPublicKey({

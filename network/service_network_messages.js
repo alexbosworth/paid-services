@@ -2,6 +2,7 @@ const {subscribeToMessages} = require('ln-service');
 
 const getPathId = require('./get_path_id');
 const getPathOutbound = require('./get_path_outbound');
+const {largeOnionBytes} = require('./constants');
 const regularReplyBytes = require('./regular_reply_bytes');
 const returnNetworkResponse = require('./return_network_response');
 const subscriptionRejectionError = require('./subscription_rejection_error');
@@ -10,12 +11,10 @@ const defaultDelayMs = 1000 * 30;
 const endedError = [503, 'NetworkMessagesSubscriptionEnded'];
 const failedReplyBytes = err => [400, 'FailedToGetRegularReplyBytes', {err}];
 const {isArray} = Array;
-const isDelay = n => isSafeInteger(n) && n > 0;
+const isDelay = n => Number.isSafeInteger(n) && n > 0;
 const isHex = n => typeof n === 'string' && /^([0-9a-f]{2})+$/i.test(n);
 const isLargeOnion = onion => !!onion && onion.length / 2 === largeOnionBytes;
-const {isSafeInteger} = Number;
-const isUnsupported = err => isArray(err) && err[0] === 501;
-const largeOnionBytes = 32834;
+const isUnsupported = err => Array.isArray(err) && err[0] === 501;
 const stoppedError = [503, 'ServiceStoppedBeforeReplyWasSent'];
 
 /** Get a listener for onion messages received over the network
@@ -39,7 +38,7 @@ const stoppedError = [503, 'ServiceStoppedBeforeReplyWasSent'];
   reported to the error listener.
 
   {
-    [delay]: <Subscribe Again After Delay Milliseconds Number> // Default: 30000
+    [delay]: <Resubscribe After Delay Milliseconds Number> // Default: 30000
     [ids]: [<Accepted Path Identifier Hex String>]
     lnd: <Authenticated LND API Object>
   }
@@ -209,8 +208,8 @@ module.exports = ({delay, ids, lnd}) => {
     };
 
     // Send a reply message back through the reply path
-    const sendReply = ({is_regular, type, value}, cbk) => {
-      const response = {type, value};
+    const sendReply = (args, cbk) => {
+      const response = {type: args.type, value: args.value};
 
       const done = err => {
         // Exit early when the caller is told how the reply went
@@ -237,13 +236,13 @@ module.exports = ({delay, ids, lnd}) => {
         .then(res => {
           // Exit early when the service stopped while the route was found
           if (isStopped) {
-            return Promise.reject(stoppedError);
+            throw stoppedError;
           }
 
           return returnNetworkResponse({
-            is_regular,
             lnd,
             reply,
+            is_regular: args.is_regular,
             message: response,
             route: res,
           });

@@ -14,5 +14,7 @@
   "codeUnauthenticated": 16,
   "codeUnimplemented": 12,
   "knownHopRecordTypes": ["1", "2", "4", "6", "8", "10", "12", "14"],
+  "largeOnionBytes": 32834,
+  "minPathIdBytes": 16,
   "typePathId": "6"
 }

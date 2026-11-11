@@ -37,6 +37,7 @@ const {typeVersion} = publicTypes;
     claim_solo_public_key: <Claim Path Unilateral Public Key Hex String>
     deposit: <Deposit Invoice Id Hex String>>
     hash: <Swap Hash Hex String>
+    [incoming_peer]: <Constrained to Inbound Peer Public Key Id Hex String>
     [key_index]: <Refund Unilateral Key Id Number>
     refund_coop_private_key: <Refund Cooperative Private Key Hex String>
     refund_coop_private_key_hash: <Refund Coop Private Key Hash Hex String>
@@ -147,6 +148,7 @@ module.exports = ({decrypt, recovery}) => {
     claim_coop_public_key_hash: claimCoopPubKeyHash.value,
     claim_solo_public_key: claimSoloPublicKeyRecord.value,
     hash: hashRecord.value,
+    incoming_peer: !!inboundRecord ? inboundRecord.value : undefined,
     key_index: secrets.key_index,
     refund_coop_private_key: secrets.coop_private_key,
     refund_coop_private_key_hash: sha256(hexAsBuf(secrets.coop_private_key)),

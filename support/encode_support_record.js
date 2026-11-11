@@ -16,11 +16,9 @@ const {typeRecordOffer} = require('./constants');
 const {typeRecordPathIds} = require('./constants');
 
 const {isArray} = Array;
-const {isSafeInteger} = Number;
 const isHex = n => typeof n === 'string' && /^([0-9a-f]{2})+$/i.test(n);
-const isKeyIndex = n => isSafeInteger(n) && n >= 0 && n <= maxKeyIndex;
-const isLimit = n => n === undefined || (isSafeInteger(n) && n > 0);
-const isPathId = n => isHex(n) && n.length / 2 >= minPathIdBytes;
+const isKeyIndex = n => Number.isSafeInteger(n) && n >= 0 && n <= maxKeyIndex;
+const isLimit = n => n === undefined || (Number.isSafeInteger(n) && n > 0);
 const truncated = number => numberAsTruncated({number}).encoded;
 
 /** Encode a support service record
@@ -67,8 +65,12 @@ module.exports = args => {
     throw new Error('ExpectedPathIdsToEncodeSupportRecord');
   }
 
+  if (!args.path_ids.every(isHex)) {
+    throw new Error('ExpectedPathIdsOfAtLeast16BytesToEncodeSupportRecord');
+  }
+
   // Path ids are at least 16 random bytes, so they cannot be guessed
-  if (!args.path_ids.every(isPathId)) {
+  if (!args.path_ids.every(n => n.length / 2 >= minPathIdBytes)) {
     throw new Error('ExpectedPathIdsOfAtLeast16BytesToEncodeSupportRecord');
   }
 

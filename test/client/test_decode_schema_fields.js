@@ -6,6 +6,7 @@ const {encodeTlvStream} = require('bolt01');
 const method = require('./../../client/decode_schema_fields');
 
 const encode = records => encodeTlvStream({records}).encoded;
+const inboxFields = '0022001b4d65737361676520746f2064656c6976657220746f20696e626f780103fd0118012b00265265706c7920656d61696c2061646472657373206f72206e6f6465207075626c6963206b6579010190';
 
 const tests = [
   {
@@ -60,7 +61,7 @@ const tests = [
   },
   {
     args: {
-      encoded: '0022001b4d65737361676520746f2064656c6976657220746f20696e626f780103fd0118012b00265265706c7920656d61696c2061646472657373206f72206e6f6465207075626c6963206b6579010190',
+      encoded: inboxFields,
     },
     description: 'Fields are returned',
     expected: {

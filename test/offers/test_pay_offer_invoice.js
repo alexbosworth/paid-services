@@ -4,43 +4,45 @@ const {test} = require('node:test');
 const {blindedPathFromHops} = require('bolt04');
 const {createOffer} = require('invoices');
 const {makeLnd} = require('mock-lnd');
-const {pointFromScalar} = require('tiny-secp256k1');
 
 const makeInvoice = require('./fixtures/make_invoice');
 const makeRequest = require('./fixtures/make_request');
 const method = require('./../../offers/pay_offer_invoice');
 
-const bufferAsHex = buffer => buffer.toString('hex');
-const asKey = n => bufferAsHex(keyOf(Buffer.alloc(32, n)));
-const keyOf = secret => Buffer.from(pointFromScalar(secret));
-const node = asKey(9);
-
-const blinded = blindedPathFromHops({hops: [node]});
-const {key} = blinded;
-
-const offerPath = {key, hops: blinded.path, introduction_node: node};
+const issuer = '031b84c5567b126440995d3ed5aaba0565d71e1834604819ff9c17f5e9d5dd078f';
+const node = '0256b328b30c8bf5839e24058747879408bdb36241dc9c2e7c619faa12b2920967';
 
 // A payment path into the recipient that starts at a node or at an edge
-const paymentPath = start => ({
-  key,
-  base_fee_mtokens: '1',
-  cltv_delta: 40,
-  fee_rate: 1,
-  hops: blinded.path,
-  max_htlc_mtokens: '1000000',
-  min_htlc_mtokens: '1',
-  ...start,
-});
+const paymentPath = start => {
+  const blinded = blindedPathFromHops({hops: [node]});
+
+  return {
+    base_fee_mtokens: '1',
+    cltv_delta: 40,
+    fee_rate: 1,
+    hops: blinded.path,
+    key: blinded.key,
+    max_htlc_mtokens: '1000000',
+    min_htlc_mtokens: '1',
+    ...start,
+  };
+};
 
 // Make an invoice of an offer for a network over payment paths
 const makeOfferInvoice = args => {
+  const blinded = blindedPathFromHops({hops: [node]});
+
   const {encoded} = makeRequest({
     mtokens: '1000',
     network: args.network,
     offer: createOffer({
-      issuer_id: asKey(1),
+      issuer_id: issuer,
       networks: [args.network],
-      paths: [offerPath],
+      paths: [{
+        hops: blinded.path,
+        introduction_node: node,
+        key: blinded.key,
+      }],
     })
     .offer,
   });

@@ -2,11 +2,9 @@ const {deepStrictEqual, rejects} = require('node:assert/strict');
 const {mock} = require('node:test');
 const {test} = require('node:test');
 
-const {blindedPathFromHops} = require('bolt04');
 const {createInvoiceError} = require('invoices');
 const {createOffer} = require('invoices');
 const {decodeTlvStream} = require('bolt01');
-const {encodeTlvStream} = require('bolt01');
 const {makeLnd} = require('mock-lnd');
 const {parseInvoiceRequest} = require('invoices');
 const {pointFromScalar} = require('tiny-secp256k1');
@@ -18,19 +16,41 @@ const createMenuRequest = require('./../../support/create_menu_request');
 const decodeEntry = require('./../../support/decode_menu_entry');
 const encodeEntry = require('./../../support/encode_menu_entry');
 const encodeSupportMenu = require('./../../support/encode_support_menu');
+const {episode} = require('./fixtures/get_support_menu');
+const {forNetworks} = require('./fixtures/get_support_menu');
+const {guest} = require('./fixtures/get_support_menu');
 const isSupportOffer = require('./../../support/is_support_offer');
+const {label} = require('./fixtures/get_support_menu');
+const {labeled} = require('./fixtures/get_support_menu');
 const menuOffers = require('./../../support/menu_offers');
 const network = require('./../../network');
+const {ownPaths} = require('./fixtures/get_support_menu');
+const {paths} = require('./fixtures/get_support_menu');
+const {plain} = require('./fixtures/get_support_menu');
 const preimage = require('./../../support/menu_signature_preimage');
+const {reached} = require('./fixtures/get_support_menu');
+const {regtest} = require('./fixtures/get_support_menu');
+const {regtestAndTestnet} = require('./fixtures/get_support_menu');
+const {supportOffer} = require('./fixtures/get_support_menu');
 
-const asKey = n => Buffer.from(pointFromScalar(Buffer.alloc(32, n)))
-  .toString('hex');
 const {entries} = Object;
 const {fromEntries} = Object;
 const hexAsBuffer = hex => Buffer.from(hex, 'hex');
+const hourFromNow = () => new Date(Date.now() + 1000 * 60 * 60).toISOString();
+const isFuture = date => Date.parse(date) > Date.now();
+const issuer = '031b84c5567b126440995d3ed5aaba0565d71e1834604819ff9c17f5e9d5dd078f';
 const menuId = '0a'.repeat(16);
-const secret = Buffer.alloc(32, 4).toString('hex');
+const node = '0256b328b30c8bf5839e24058747879408bdb36241dc9c2e7c619faa12b2920967';
+const notAnswered = '01047741dfad0517537570706f72744d656e7550616765546f6f4c61726765fe000c4baf00';
+const other = '024d4b6cd1361032ca9bd2aeb9d900aa4d45d9ead80ac9423374c451a7254d0766';
+const secret = '04'.repeat(32);
+const unreadable = '050b537570706f72744d656e75fe000c4bad1208100a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a';
 const version = 1;
+
+// Get the public key of a secret of 32 bytes of a number
+const asKey = n => {
+  return Buffer.from(pointFromScalar(Buffer.alloc(32, n))).toString('hex');
+};
 
 // Reply to a menu request with the reply the fake LND has, keeping the request
 const fakeReply = (args, cbk) => {
@@ -48,91 +68,19 @@ mock.method(network, 'requestNetworkReply', fakeReply);
 
 const getSupportMenu = require('./../../support/get_support_menu');
 
-const issuer = asKey(1);
-const node = asKey(9);
-const other = asKey(2);
-
-const blinded = blindedPathFromHops({hops: [node]});
-
-const {key} = blinded;
-const paths = [{key, hops: blinded.path, introduction_node: node}];
-
-// Make an offer with a path, labeled as a support offer
-const label = args => addServiceLabel({
-  version,
-  id: '0d'.repeat(16),
-  offer: createOffer({paths, networks: ['regtest'], ...args}).offer,
-  type: '1',
-})
-.offer;
-
-// Make an offer of the issuer with a label of a service type and version
-const labeled = (type, major) => addServiceLabel({
-  type,
-  id: '0d'.repeat(16),
-  offer: createOffer({paths, issuer_id: issuer, networks: ['regtest']}).offer,
-  version: major,
-})
-.offer;
-
-// Make an offer of the issuer for networks
-const forNetworks = networks => createOffer({
-  networks,
-  description: String(networks),
-  issuer_id: issuer,
-})
-.offer;
-
-const supportOffer = label({description: 'support', issuer_id: issuer});
-
-// Offers that can be listed on a menu
-const episode = label({description: 'episode', issuer_id: issuer});
-const guest = createOffer({
-  description: 'guest',
-  issuer_id: other,
-  networks: ['regtest'],
-})
-.offer;
-const plain = createOffer({issuer_id: issuer, networks: ['regtest']}).offer;
-const regtest = forNetworks(['regtest']);
-const regtestAndTestnet = forNetworks(['regtest', 'testnet']);
-
-// An offer of the issuer with paths of its own, and as it is reached over
-// the paths of the support offer when it is listed without its paths
-const otherNode = asKey(8);
-const otherPath = blindedPathFromHops({hops: [otherNode]});
-
-const ownPaths = createOffer({
-  description: 'episode',
-  issuer_id: issuer,
-  networks: ['regtest'],
-  paths: [{
-    hops: otherPath.path,
-    introduction_node: otherNode,
-    key: otherPath.key,
-  }],
-})
-.offer;
-
-const reached = createOffer({
-  paths,
-  description: 'episode',
-  issuer_id: issuer,
-  networks: ['regtest'],
-})
-.offer;
+// A field has a value
+const isDefined = ([, v]) => v !== undefined;
 
 // Leave out the fields that have no value
-const isDefined = ([, v]) => v !== undefined;
 const defined = n => fromEntries(entries(n).filter(isDefined));
 
 // Make a menu request and read it back as an invoice request
 const askFor = args => {
-  const {encoded, payer_id} = createMenuRequest(args);
+  const menu = createMenuRequest(args);
 
-  const request = parseInvoiceRequest({encoded});
+  const request = parseInvoiceRequest({encoded: menu.encoded});
 
-  const menuRequest = decodeTlvStream({encoded}).records
+  const menuRequest = decodeTlvStream({encoded: menu.encoded}).records
     .find(n => n.type === '2000805805');
 
   return defined({
@@ -140,7 +88,7 @@ const askFor = args => {
     menu_request: menuRequest.value,
     mtokens: request.mtokens,
     offer: request.offer,
-    payer_id: request.payer_id === payer_id ? payer_id : undefined,
+    payer_id: request.payer_id === menu.payer_id ? menu.payer_id : undefined,
   });
 };
 
@@ -171,19 +119,11 @@ const shown = (offer, details) => ({
 });
 
 // Make a fake LND on regtest that has a reply to the menu request
-const makeTestLnd = ({is_mainnet, reply}) => {
-  const lnd = makeLnd({});
-
-  const {getInfo} = lnd.default;
-
+const makeTestLnd = args => {
   // The node is on regtest, like the support offer, unless on mainnet
-  const chains = [{chain: 'bitcoin', network: 'regtest'}];
+  const lnd = makeLnd({network: !args.is_mainnet ? 'regtest' : 'mainnet'});
 
-  lnd.default.getInfo = (args, cbk) => getInfo(args, (err, res) => {
-    return cbk(err, {...res, chains: !is_mainnet ? chains : res.chains});
-  });
-
-  lnd.reply = reply;
+  lnd.reply = args.reply;
   lnd.requests = [];
 
   return lnd;
@@ -191,11 +131,9 @@ const makeTestLnd = ({is_mainnet, reply}) => {
 
 // Make a page of the menu of the support offer, signed by a secret key
 const makePage = args => {
-  const expiresAt = new Date(Date.now() + 1000 * 60 * 60).toISOString();
-
   const page = {
     entries: args.entries || [{offer: episode}],
-    expires_at: args.expires_at || expiresAt,
+    expires_at: args.expires_at || hourFromNow(),
     menu_id: args.menu_id || menuId,
     page: args.page || 0,
     pages: args.pages || 1,
@@ -219,28 +157,21 @@ const makePage = args => {
   return createInvoiceError({message: 'SupportMenu'}).encoded + encoded;
 };
 
-// An error about the menu request, with the reply too large record
-const notAnswered = createInvoiceError({
-  erroneous_field: '2000805805',
-  message: 'SupportMenuPageTooLarge',
-})
-.encoded + encodeTlvStream({records: [{type: '805807', value: ''}]}).encoded;
-
-// A page without an expiry cannot be read
-const unreadable = createInvoiceError({message: 'SupportMenu'}).encoded +
-  encodeTlvStream({records: [{type: '805805', value: '0810' + menuId}]})
-    .encoded;
-
 // Get the menu of the support offer from a fake recipient and summarize it
-const getMenu = async ({is_mainnet, menu_id, page, reply}) => {
-  const lnd = makeTestLnd({is_mainnet, reply});
+const getMenu = async args => {
+  const lnd = makeTestLnd(args);
 
-  const got = await getSupportMenu({lnd, menu_id, page, offer: supportOffer});
+  const got = await getSupportMenu({
+    lnd,
+    menu_id: args.menu_id,
+    offer: supportOffer,
+    page: args.page,
+  });
 
   const [request] = lnd.requests;
 
   return {
-    is_unexpired: Date.parse(got.expires_at) > Date.now(),
+    is_unexpired: isFuture(got.expires_at),
     max_reply_hops: request.max_reply_hops,
     menu_id: got.menu_id,
     offers: got.offers.map(defined),

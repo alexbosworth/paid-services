@@ -3,11 +3,11 @@ const {returnResult} = require('asyncjs-util');
 
 const decodeTrade = require('./decode_trade');
 const {makePeerRequest} = require('./../p2p');
+const {serviceTypeRequestChannelSale} = require('./../service_types');
+const {serviceTypeRequestTrades} = require('./../service_types');
 
 const findTradeRecord = records => records.find(n => n.type === '1');
 const requestTradeTimeoutMs = 1000 * 30;
-const {serviceTypeRequestChannelSale} = require('./../service_types');
-const {serviceTypeRequestTrades} = require('./../service_types');
 const tradeIdRecordType = '0';
 
 /** Request a specific trade by its id
@@ -78,16 +78,12 @@ module.exports = ({id, lnd, to}, cbk) => {
             return cbk([503, 'ExpectedTradeSecretInResponseForTradeById']);
           }
 
-          try {
-            return cbk(null, {
-              auth: secret.auth,
-              payload: secret.payload,
-              request: secret.request,
-              trade: tradeRecord.value,
-            });
-          } catch (err) {
-            return cbk([503, 'ExpectedValidTradeRecordFromPeer', {err}]);
-          }
+          return cbk(null, {
+            auth: secret.auth,
+            payload: secret.payload,
+            request: secret.request,
+            trade: tradeRecord.value,
+          });
         });
       }],
     },

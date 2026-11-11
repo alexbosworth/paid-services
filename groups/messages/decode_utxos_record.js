@@ -2,9 +2,8 @@ const {componentsOfTransaction} = require('@alexbosworth/blockchain');
 const {decodeBigSize} = require('bolt01');
 const {decodeTlvStream} = require('bolt01');
 
-const findRecord = (records, type) => records.find(n => n.type === type);
-
 const expectedTxIdHexLength = 64;
+const findRecord = (records, type) => records.find(n => n.type === type);
 const isP2tr = n => n.startsWith('5120') && n.length === 68;
 const isP2wpkh = n => n.startsWith('0014') && n.length === 44;
 const maxOutputIndex = BigInt(150000);

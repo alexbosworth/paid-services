@@ -1,4 +1,5 @@
 const asyncAuto = require('async/auto');
+const asyncify = require('async/asyncify');
 const asyncWhilst = require('async/whilst');
 const {getChannel} = require('ln-service');
 const {getIdentity} = require('ln-service');
@@ -95,7 +96,7 @@ module.exports = (args, cbk) => {
       }],
 
       // Determine the introduction node of the path
-      introduction: ['getChannel', ({getChannel}, cbk) => {
+      introduction: ['getChannel', asyncify(({getChannel}) => {
         try {
           const {introduction} = pathIntroduction({
             channel: getChannel,
@@ -103,11 +104,11 @@ module.exports = (args, cbk) => {
           });
 
           // Node keys are compared in lowercase, as LND gives them
-          return cbk(null, introduction.toLowerCase());
+          return introduction.toLowerCase();
         } catch (err) {
-          return cbk([400, err.message]);
+          throw [400, err.message];
         }
-      }],
+      })],
 
       // Step past the hops of self while the path starts at self
       stepped: [

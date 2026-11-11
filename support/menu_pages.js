@@ -1,9 +1,8 @@
 const encodeSupportMenu = require('./encode_support_menu');
 const {menuIdBytes} = require('./constants');
 
-const bufferAsHex = buffer => Buffer.from(buffer).toString('hex');
 const largePage = 65534;
-const menuId = bufferAsHex(Buffer.alloc(menuIdBytes));
+const menuId = Buffer.alloc(menuIdBytes).toString('hex');
 
 /** Split the entries of a support menu into pages, in their order, with as
   many entries on each page as fit

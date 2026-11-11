@@ -3,6 +3,8 @@ const {test} = require('node:test');
 
 const method = require('./../../client/byte_limited_string');
 
+const emojiText = '01🧔🏻‍♀️45';
+
 const tests = [
   {
     args: {limit: 10},
@@ -28,7 +30,7 @@ tests.forEach(({args, description, error, expected}) => {
 
       strictEqual(none, '', 'Null result is allowed');
 
-      const res = Buffer.from(method(args).limited('01🧔🏻‍♀️45')).toString('hex');
+      const res = Buffer.from(method(args).limited(emojiText)).toString('hex');
 
       strictEqual(res, expected, 'Got expected result');
     }

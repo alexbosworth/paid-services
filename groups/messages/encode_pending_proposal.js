@@ -3,15 +3,15 @@ const {encodeTlvStream} = require('bolt01');
 
 const encodeNumber = n => encodeBigSize({number: n.toString()}).encoded;
 const encodeTlv = records => encodeTlvStream({records}).encoded;
+const typeChange = '2';
+const typeFunding = '3';
+const typeId = '1';
+const typeUtxos = '4';
 const utxoTypeNonWitnessUtxo = '0';
 const utxoTypeScriptPub = '1';
 const utxoTypeTokens = '2';
 const utxoTypeTransactionId = '3';
 const utxoTypeTransactionVout = '4';
-const typeChange = '2';
-const typeFunding = '3';
-const typeId = '1';
-const typeUtxos = '4';
 
 /** Encode pending proposal into records
 

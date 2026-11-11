@@ -2,8 +2,8 @@ const {decodeBigSize} = require('bolt01');
 
 const findRecord = (records, type) => records.find(n => n.type === type);
 const {isArray} = Array;
-const maxMembersCount = BigInt(420);
 const maxFeeRate = BigInt(1e5);
+const maxMembersCount = BigInt(420);
 const maxTokens = BigInt(7e14);
 const minMembersCount = BigInt(3);
 const typeCount = '2';

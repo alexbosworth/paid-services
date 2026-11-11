@@ -3,10 +3,10 @@ const {test} = require('node:test');
 
 const method = require('./../../network/route_relays');
 
-const bufferAsHex = buffer => buffer.toString('hex');
-const key = n => `02${bufferAsHex(Buffer.alloc(32, n))}`;
-
-const [source, a, b, destination] = [1, 2, 3, 4].map(key);
+const a = '02'.repeat(33);
+const b = '02' + '03'.repeat(32);
+const destination = '02' + '04'.repeat(32);
+const source = '02' + '01'.repeat(32);
 
 // A route from the destination back to the source
 const route = keys => ({hops: keys.map(n => ({public_key: n}))});

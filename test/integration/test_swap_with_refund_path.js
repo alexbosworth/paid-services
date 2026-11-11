@@ -17,12 +17,14 @@ const {spawnLightningCluster} = require('ln-docker-daemons');
 const requestSwapOut = require('./../../swaps/request_swap_out');
 const respondToSwapOut = require('./../../swaps/respond_to_swap_out_request');
 
+const all = promises => Promise.all(promises);
 const capacity = 1e6;
 const count = 50;
 const delay = ms => new Promise(done => setTimeout(done, ms).unref());
 const interval = 100;
 const isRejected = err => err[1] === 'PaymentRejectedByDestination';
 const maturity = 100;
+const race = promises => Promise.race(promises);
 const settleMs = 1000 * 60;
 const size = 2;
 const taprootDerivationPath = `m/86'/0'/0'`;
@@ -214,12 +216,12 @@ test(`Timeout a swap`, async () => {
     equal(!!complete, true, 'Swap refund completed');
 
     // Background work like the responder finishing its side must not fail
-    await Promise.race([Promise.all(background), delay(settleMs)]);
+    await race([all(background), delay(settleMs)]);
 
     deepStrictEqual(failures, [], 'No failures in swap callbacks');
   } finally {
     // Give background work a chance to finish before its nodes go away
-    await Promise.race([Promise.all(background), delay(settleMs)]);
+    await race([all(background), delay(settleMs)]);
 
     await kill({});
   }

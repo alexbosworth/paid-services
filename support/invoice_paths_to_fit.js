@@ -6,7 +6,6 @@ const {withoutRecord} = require('./../service_records');
 const byteLength = hex => hex.length / 2;
 const lengthSignatureRecordBytes = 66;
 const onePath = 1;
-const signedBytes = hex => byteLength(hex) + lengthSignatureRecordBytes;
 
 /** Get how many payment paths an invoice can have to fit in `bytes`, leaving
   out paths from the last until it fits
@@ -54,7 +53,8 @@ module.exports = ({bytes, invoice, paths, records, request}) => {
       paths: paths.slice(Number(), count),
     });
 
-    return signedBytes(unsigned.encoded);
+    // A signed request also has a signature record
+    return byteLength(unsigned.encoded) + lengthSignatureRecordBytes;
   };
 
   const counts = paths.map((path, i) => paths.length - i);

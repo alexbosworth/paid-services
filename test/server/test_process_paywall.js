@@ -4,19 +4,17 @@ const {test} = require('node:test');
 const {encodeTlvStream} = require('bolt01');
 const {makeInvoice} = require('mock-lnd');
 const {makeLnd} = require('mock-lnd');
-const {makePaymentRequest} = require('mock-lnd');
-const {sign} = require('tiny-secp256k1');
 
 const messagesForRequest = require('./../../client/messages_for_request');
 const method = require('./../../server/process_paywall');
 
-// mock-lnd makes payment requests with an ECPair-shaped signing factory
-const ecp = {fromPrivateKey: key => ({sign: hash => sign(hash, key)})};
 const encode = records => encodeTlvStream({records: [records]}).encoded;
-const id1 = Buffer.alloc(32).toString('hex');
-const id2 = Buffer.alloc(32, 1).toString('hex');
-const {request} = makePaymentRequest({ecp});
+const id1 = '00'.repeat(32);
+const id2 = '01'.repeat(32);
+const {keys} = Object;
+const request = 'lnbc10n1y250dfzpp5qqqsyqcyq5rqwzqfqqqsyqcyq5rqwzqfqqqsyqcyq5rqwzqfqypqhp58yjmdan79s6qqdhdzgynm4zwqd5d7xmw5fk98klysy043l2ahrqsjqjp7xkfkr6u6fkcy6nh6x4mez3ge7d4lrj8u8gf0kn74jsdfg3sglhzv4ky5ax3xflrhhmts3t7knrxxrw8hg8k3z39f4jwu5lmywcpzkwrsl';
 
+// Make arguments for the method, replacing defaults with overrides
 const makeArgs = overrides => {
   const args = {
     env: {
@@ -62,7 +60,7 @@ const makeArgs = overrides => {
     payer: makeLnd({}),
   };
 
-  Object.keys(overrides).forEach(k => args[k] = overrides[k]);
+  keys(overrides).forEach(k => args[k] = overrides[k]);
 
   return args;
 };

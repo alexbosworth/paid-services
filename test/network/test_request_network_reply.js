@@ -1,43 +1,30 @@
-const {createHash} = require('node:crypto');
 const {deepStrictEqual} = require('node:assert/strict');
-const EventEmitter = require('node:events');
 const {mock} = require('node:test');
 const {test} = require('node:test');
 
 const {blindedPathFromHops} = require('bolt04');
 const lnService = require('ln-service');
 const {makeLnd} = require('mock-lnd');
-const {pointFromScalar} = require('tiny-secp256k1');
-const {pointMultiply} = require('tiny-secp256k1');
+const {makeOnionMessage} = require('mock-lnd');
 
 const bufferAsHex = buffer => buffer.toString('hex');
-const asKey = n => Buffer.from(pointFromScalar(Buffer.alloc(32, n)))
-  .toString('hex');
 const defaultTimeoutMs = 1000 * 30;
-const g = '79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798';
-const generator = Buffer.from(`02${g}`, 'hex');
 const hexAsBuffer = hex => Buffer.from(hex, 'hex');
+const identity = '031b84c5567b126440995d3ed5aaba0565d71e1834604819ff9c17f5e9d5dd078f';
+const {keys} = Object;
 const nextTick = () => new Promise(resolve => setImmediate(resolve));
 const now = () => Date.now();
-const otherId = bufferAsHex(Buffer.alloc(32, 4));
-const peer = `03${g}`;
-const replyId = bufferAsHex(Buffer.alloc(32, 3));
-const secret = Buffer.alloc(32, 1);
+const other = '024d4b6cd1361032ca9bd2aeb9d900aa4d45d9ead80ac9423374c451a7254d0766';
+const otherId = '04'.repeat(32);
+const partner = '0362c0a046dacce86ddd0343c6d3c7c79c2208ba0d9c9cf24a6d046d21d21f90f7';
+const peer = '0379be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798';
+const recipient = '02531fe6068134503d2723133227c867ac8fa6c83c537e9a44c3c5bdbdcb1fe337';
+const relay = '03462779ad4aad39514614751a71085f2f10e1c7a593e4e030efb5b8721ce55b0b';
+const replyId = '03'.repeat(32);
+const secret = '01'.repeat(32);
 const {sendMessage} = lnService;
-const sentWithReplyId = () => ({reply: replyId});
-const sha256 = n => createHash('sha256').update(n).digest();
+const sentWithReplyId = () => ({reply: '03'.repeat(32)});
 const waitLimitMs = 1000 * 5;
-
-// The node identity public key for a secret of 32 bytes of 0x01
-const identity = bufferAsHex(Buffer.from(pointMultiply(generator, secret)));
-
-// Nodes that are not connected peers, reached over a route through relays
-const other = asKey(2);
-const recipient = asKey(3);
-const relay = asKey(4);
-
-// A connected peer that has a channel with self
-const partner = asKey(5);
 
 // Reply path ids are random, so sent messages are given a known reply path id,
 // and the reply path of a sent message is kept to check its hops
@@ -47,92 +34,46 @@ lnService.sendMessage = args => {
   return sendMessage(args).then(sentWithReplyId);
 };
 
-// Routes to nodes that are not peers are faked, so that nothing is looked up,
-// and every node that is looked up relays onion messages
-const fakes = {routes: []};
-
-lnService.getNode = ({}, cbk) => cbk(null, {features: [{bit: 39}]});
-
-lnService.getRouteToDestination = ({}, cbk) => {
-  return cbk(null, {route: fakes.routes.shift() || null});
-};
-
 const method = require('./../../network/request_network_reply');
 
-// RPC uint64 map keys are eight little-endian bytes
-const typeAsKey = type => {
-  const bytes = Buffer.alloc(8);
+// The messages that a fake LND sent
+const sentBy = lnd => lnd.calls
+  .filter(n => n.method === 'sendOnionMessage')
+  .map(n => n.args);
 
-  bytes.writeBigUInt64LE(BigInt(type));
+// The stream of messages that a fake LND gave to listen for replies
+const subscriptionOf = lnd => lnd.calls
+  .filter(n => n.method === 'subscribeOnionMessages')
+  .map(n => n.subscription)
+  .pop();
 
-  return bytes.toString('latin1');
-};
-
-// Make a fake LND with connected peers, a channel with the partner peer, and
-// a stream of messages, which can take messages only over channels
-const makeTestLnd = ({isChannelsOnly, isUnsupported}) => {
-  const lnd = makeLnd({});
-  const sent = [];
-  const subscription = new EventEmitter();
-
-  subscription.cancel = () => {};
-
-  const {getInfo, listChannels} = lnd.default;
-
-  // A node that only takes messages over channels signals feature bit 66 or 67
-  const features = !isChannelsOnly ? {} : {
-    '66': {is_known: true, is_required: false, name: 'only-channels'},
-  };
-
-  lnd.default.getInfo = (args, cbk) => getInfo(args, (err, res) => {
-    return cbk(err, {...res, features, identity_pubkey: identity});
+// Make a fake LND with connected peers and a channel with the partner peer,
+// which can take messages only over channels, or not take messages at all,
+// and that has routes back to self through relays. Every node relays.
+const makeTestLnd = ({isChannelsOnly, isUnsupported, routes}) => {
+  const lnd = makeLnd({
+    channels: [{partner_public_key: partner}],
+    features: !isChannelsOnly ? [] : [66],
+    graph: {
+      nodes: [other, partner, peer, recipient, relay].map(key => ({
+        features: [39],
+        public_key: key,
+      })),
+    },
+    peers: [{public_key: peer}, {public_key: partner}],
+    routes: routes || [],
+    secret,
   });
-
-  lnd.default.listChannels = (args, cbk) => listChannels(args, (err, res) => {
-    const [channel] = res.channels;
-
-    return cbk(err, {channels: [{...channel, remote_pubkey: partner}]});
-  });
-
-  lnd.default.listPeers = ({}, cbk) => cbk(null, {
-    peers: [peer, partner].map(key => ({
-      address: '127.0.0.1:9735',
-      bytes_recv: '0',
-      bytes_sent: '0',
-      errors: [],
-      features: {},
-      flap_count: 0,
-      inbound: false,
-      last_flap_ns: '0',
-      ping_time: '0',
-      pub_key: key,
-      sat_recv: '0',
-      sat_sent: '0',
-      sync_type: 'ACTIVE_SYNC',
-    })),
-  });
-
-  lnd.default.sendOnionMessage = (args, cbk) => {
-    sent.push(args);
-
-    return cbk();
-  };
 
   // LND without onion messages has no method to subscribe to them
-  if (!isUnsupported) {
-    lnd.default.subscribeOnionMessages = () => subscription;
+  if (!!isUnsupported) {
+    delete lnd.default.subscribeOnionMessages;
   }
-
-  lnd.signer = {
-    deriveSharedKey: ({ephemeral_pubkey}, cbk) => cbk(null, {
-      shared_key: sha256(pointMultiply(ephemeral_pubkey, secret, true)),
-    }),
-  };
 
   // The reply paths of the messages that are sent
   lnd.replies = [];
 
-  return {lnd, sent, subscription};
+  return lnd;
 };
 
 // A route found from a node back to self, that a message to the node goes
@@ -143,27 +84,27 @@ const routeThrough = relays => ({
   }),
 });
 
-// Make an RPC onion message received over a blinded path to self
+// Make an onion message received over a blinded path to self
 const makeReceived = ({id, type}) => {
   const path = blindedPathFromHops({id, hops: [identity]});
 
-  return {
-    custom_records: {[typeAsKey(type)]: hexAsBuffer('0102')},
-    encrypted_recipient_data: hexAsBuffer(path.path[0].encrypted_data),
-    onion: Buffer.alloc(1366),
-    path_key: hexAsBuffer(path.key),
-    peer: hexAsBuffer(peer),
-  };
+  const [hop] = path.path;
+
+  return makeOnionMessage({
+    encrypted: hop.encrypted_data,
+    key: path.key,
+    message: {type, value: '0102'},
+    via: peer,
+  });
 };
 
-// A message of a reply type with data that does not decrypt to a path id
-const unreadable = {
-  custom_records: {[typeAsKey('66')]: hexAsBuffer('00')},
-  encrypted_recipient_data: Buffer.alloc(40, 7),
-  onion: Buffer.alloc(1366),
-  path_key: hexAsBuffer(peer),
-  peer: hexAsBuffer(peer),
-};
+// Make a message of a reply type with data that does not decrypt to a path id
+const unreadable = () => makeOnionMessage({
+  encrypted: '07'.repeat(40),
+  key: peer,
+  message: {type: '66', value: '00'},
+  via: peer,
+});
 
 // Make arguments to request a reply
 const makeArgs = ({lnd, overrides}) => {
@@ -176,7 +117,7 @@ const makeArgs = ({lnd, overrides}) => {
     types: ['66'],
   };
 
-  Object.keys(overrides || {}).forEach(k => args[k] = overrides[k]);
+  keys(overrides || {}).forEach(k => args[k] = overrides[k]);
 
   return args;
 };
@@ -184,28 +125,28 @@ const makeArgs = ({lnd, overrides}) => {
 // Wait for the request to be sent, which is when it listens for a reply, or
 // for it to finish before it is sent. A request that does neither is given
 // up on after a limit, so that its test fails instead of hanging.
-const untilSent = async ({requesting, sent}) => {
+const untilSent = async ({lnd, requesting}) => {
   const limit = now() + waitLimitMs;
 
   let isFinished = false;
 
   requesting.then(() => isFinished = true, () => isFinished = true);
 
-  while (!sent.length && !isFinished && now() < limit) {
+  while (!sentBy(lnd).length && !isFinished && now() < limit) {
     await nextTick();
   }
 };
 
 // Request a reply, give the stream events, and get the result
 const request = async ({events, isUnsupported, overrides}) => {
-  const {lnd, sent, subscription} = makeTestLnd({isUnsupported});
+  const lnd = makeTestLnd({isUnsupported});
 
   // Failures are caught at once since they can come before the events
   const requesting = method(makeArgs({lnd, overrides})).catch(err => ({err}));
 
-  await untilSent({requesting, sent});
+  await untilSent({lnd, requesting});
 
-  events.forEach(([event, data]) => subscription.emit(event, data));
+  events.forEach(([type, data]) => subscriptionOf(lnd).emit(type, data));
 
   return await requesting;
 };
@@ -214,9 +155,10 @@ const request = async ({events, isUnsupported, overrides}) => {
 // reached through relays when it is not a peer, and get the reply path hops
 // and the peer that the request was sent to
 const replyHops = async ({hops, isChannelsOnly, maxHops, relays}) => {
-  const {lnd, sent, subscription} = makeTestLnd({isChannelsOnly});
-
-  fakes.routes = !relays ? [] : [routeThrough(relays)];
+  const lnd = makeTestLnd({
+    isChannelsOnly,
+    routes: !relays ? [] : [routeThrough(relays)],
+  });
 
   const [introduction] = hops;
 
@@ -230,21 +172,21 @@ const replyHops = async ({hops, isChannelsOnly, maxHops, relays}) => {
     },
   }));
 
-  await untilSent({requesting, sent});
+  await untilSent({lnd, requesting});
 
-  subscription.emit('data', makeReceived({id: replyId, type: '66'}));
+  subscriptionOf(lnd).emit('data', makeReceived({id: replyId, type: '66'}));
 
   await requesting;
 
   const [reply] = lnd.replies;
-  const [request] = sent;
+  const [request] = sentBy(lnd);
 
   return {reply, to: bufferAsHex(request.peer)};
 };
 
 // Request a reply that never comes and check the default timeout
 const requestUntilTimeout = async ({}) => {
-  const {lnd, sent} = makeTestLnd({});
+  const lnd = makeTestLnd({});
 
   mock.timers.enable({apis: ['setTimeout']});
 
@@ -252,7 +194,7 @@ const requestUntilTimeout = async ({}) => {
     const requesting = method(makeArgs({lnd})).catch(err => ({err}));
 
     // Wait for the request to be sent, which starts the wait for the reply
-    while (!sent.length) {
+    while (!sentBy(lnd).length) {
       await nextTick();
     }
 
@@ -283,7 +225,7 @@ const tests = [
     method: request,
   },
   {
-    args: {events: [['data', unreadable], ['end']]},
+    args: {events: [['data', unreadable()], ['end']]},
     description: 'A message that cannot be read does not end the request',
     expected: {err: [503, 'NetworkReplyListenerEnded']},
     method: request,
@@ -326,7 +268,7 @@ const tests = [
   },
   {
     args: {hops: [peer, recipient]},
-    description: 'The reply path starts at an introduction node that is a peer',
+    description: 'A reply path starts at an introduction node that is a peer',
     expected: {reply: [peer, identity], to: peer},
     method: replyHops,
   },

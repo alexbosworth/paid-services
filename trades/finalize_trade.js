@@ -2,6 +2,7 @@ const {createHash} = require('crypto');
 const {randomBytes} = require('crypto');
 
 const asyncAuto = require('async/auto');
+const asyncify = require('async/asyncify');
 const {createHodlInvoice} = require('ln-service');
 const {createInvoice} = require('ln-service');
 const {getInvoice} = require('ln-service');
@@ -211,14 +212,18 @@ module.exports = (args, cbk) => {
       }],
 
       // Encode all the trade data into wire format
-      encode: ['createInvoice', 'encrypt', ({createInvoice, encrypt}, cbk) => {
+      encode: [
+        'createInvoice',
+        'encrypt',
+        asyncify(({createInvoice, encrypt}) =>
+      {
         // Exit early when this is a channel trade, there is no secret
         if (!!args.channel) {
-          return cbk(null, {
+          return {
             id: createInvoice.id,
             secret: encrypt.payment_secret,
             trade: encodeTradePayment({request: createInvoice.request}).trade,
-          });
+          };
         }
 
         try {
@@ -229,15 +234,15 @@ module.exports = (args, cbk) => {
             request: createInvoice.request,
           });
 
-          return cbk(null, {
+          return {
             trade,
             id: createInvoice.id,
             secret: encrypt.payment_secret,
-          });
+          };
         } catch (err) {
-          return cbk([500, err.message]);
+          throw [500, err.message];
         }
-      }],
+      })],
     },
     returnResult({reject, resolve, of: 'encode'}, cbk));
   });

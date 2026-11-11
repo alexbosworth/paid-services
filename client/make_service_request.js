@@ -1,6 +1,7 @@
 const {randomBytes} = require('crypto');
 
 const asyncAuto = require('async/auto');
+const asyncify = require('async/asyncify');
 const {createInvoice} = require('ln-service');
 const {payViaRoutes} = require('ln-service');
 const {probeForRoute} = require('ln-service');
@@ -70,18 +71,18 @@ module.exports = ({arguments, id, lnd, network, node, secret}, cbk) => {
       createReply: ['validate', ({}, cbk) => createInvoice({lnd}, cbk)],
 
       // Derive messages for the service request
-      requestMessages: ['createReply', ({createReply}, cbk) => {
+      requestMessages: ['createReply', asyncify(({createReply}) => {
         try {
-          return cbk(null, messagesForRequest({
+          return messagesForRequest({
             arguments,
             reply: createReply.request,
             secret: secret || makeSecret(),
             service: id,
-          }));
+          });
         } catch (err) {
-          return cbk([400, 'FailedToEncodeMessagesForRequest', {err}]);
+          throw [400, 'FailedToEncodeMessagesForRequest', {err}];
         }
-      }],
+      })],
 
       // Listen for a reply to the invoice
       response: ['createReply', ({createReply}, cbk) => {
@@ -133,12 +134,12 @@ module.exports = ({arguments, id, lnd, network, node, secret}, cbk) => {
       }],
 
       // Decode the server response
-      decode: ['response', 'push', ({push, response}, cbk) => {
+      decode: ['response', 'push', asyncify(({push, response}) => {
         // Exit early when there was an error with the server response
         if (!!response.error) {
           const [code, message] = response.error;
 
-          return cbk([code, message, {paid: push.tokens}]);
+          throw [code, message, {paid: push.tokens}];
         }
 
         const {payments} = response.value;
@@ -147,20 +148,20 @@ module.exports = ({arguments, id, lnd, network, node, secret}, cbk) => {
         const payment = payments.find(n => findResponse(n.messages));
 
         if (!payment) {
-          return cbk([503, 'FailedToReceivePaidServiceResponseFromServer']);
+          throw [503, 'FailedToReceivePaidServiceResponseFromServer'];
         }
 
         const {messages} = payment;
 
         try {
-          return cbk(null, messagesAsResponse({
+          return messagesAsResponse({
             messages,
             network: invoiceNetwork[network],
-          }));
+          });
         } catch (err) {
-          return cbk([503, 'UnexpectedErrorParsingServiceResponse', {err}]);
+          throw [503, 'UnexpectedErrorParsingServiceResponse', {err}];
         }
-      }],
+      })],
 
       // Final response from the server
       service: ['decode', ({decode}, cbk) => {

@@ -1,4 +1,5 @@
 const asyncAuto = require('async/auto');
+const asyncify = require('async/asyncify');
 const {decodeBigSize} = require('bolt01');
 const {decodeTlvStream} = require('bolt01');
 const {encodeBigSize} = require('bolt01');
@@ -60,22 +61,22 @@ module.exports = ({env, arguments}, cbk) => {
       },
 
       // Decode the arguments for the inbox request
-      decodeArguments: ['validate', ({}, cbk) => {
+      decodeArguments: ['validate', asyncify(({}) => {
         const {records} = decodeTlvStream({encoded: arguments});
 
         const service = findService(records);
 
         if (!service || !service.value) {
-          return cbk([400, 'ExpectedPaidServiceToReturnSchemaFor']);
+          throw [400, 'ExpectedPaidServiceToReturnSchemaFor'];
         }
 
         // The service value should itself be a TLV stream
         try {
-          return cbk(null, decodeTlvStream({encoded: service.value}).records);
+          return decodeTlvStream({encoded: service.value}).records;
         } catch (err) {
-          return cbk([400, 'ExpectedServiceIdentificationTlvStream']);
+          throw [400, 'ExpectedServiceIdentificationTlvStream'];
         }
-      }],
+      })],
 
       // Derive the registered services
       services: ['validate', ({}, cbk) => {

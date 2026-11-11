@@ -4,46 +4,42 @@ const {test} = require('node:test');
 
 const {blindedPathFromHops} = require('bolt04');
 const {decryptBlindedPath} = require('bolt04');
-const {pointFromScalar} = require('tiny-secp256k1');
+const {makeLnd} = require('mock-lnd');
 const {pointMultiply} = require('tiny-secp256k1');
 
 const method = require('./../../network/get_path_after_self');
 
-const asKey = n => Buffer.from(pointFromScalar(Buffer.alloc(32, n)))
-  .toString('hex');
 const bufferAsHex = buffer => buffer.toString('hex');
 const hexAsBuffer = hex => Buffer.from(hex, 'hex');
-const id = bufferAsHex(Buffer.alloc(32, 9));
+const id = '09'.repeat(32);
+const identity = '031b84c5567b126440995d3ed5aaba0565d71e1834604819ff9c17f5e9d5dd078f';
+const {keys} = Object;
+const peer = '024d4b6cd1361032ca9bd2aeb9d900aa4d45d9ead80ac9423374c451a7254d0766';
 const secretOf = n => Buffer.alloc(32, n);
 const sha256 = n => createHash('sha256').update(n).digest();
 
-// The node identity is the key of secret 1, its peer the key of secret 2
-const identity = asKey(1);
-const peer = asKey(2);
-
-// A fake LND of the identity node, which derives shared keys with its key
-const lnd = {
-  signer: {
-    deriveSharedKey: ({ephemeral_pubkey}, cbk) => cbk(null, {
-      shared_key: sha256(pointMultiply(ephemeral_pubkey, secretOf(1), true)),
-    }),
-  },
-};
-
-// A path that starts at self and ends at the peer
-const path = blindedPathFromHops({id, hops: [identity, peer]});
-
+// Make arguments for the method, replacing defaults with overrides
 const makeArgs = overrides => {
-  const args = {identity, lnd, hops: path.path, key: path.key};
+  // A path that starts at self, the node of secret 1, and ends at the peer
+  const path = blindedPathFromHops({id, hops: [identity, peer]});
 
-  Object.keys(overrides).forEach(k => args[k] = overrides[k]);
+  const args = {
+    identity,
+    hops: path.path,
+    key: path.key,
+    lnd: makeLnd({secret: '01'.repeat(32)}),
+  };
+
+  keys(overrides).forEach(k => args[k] = overrides[k]);
 
   return args;
 };
 
 // Get the path after self and read its first hop as the next node would
 const pathAfterSelf = async args => {
-  const {hops, introduction_node, key} = await method(args);
+  const res = await method(args);
+
+  const {hops, key} = res;
 
   const [first] = hops;
 
@@ -55,7 +51,11 @@ const pathAfterSelf = async args => {
     secret: bufferAsHex(secret),
   });
 
-  return {introduction_node, hops: hops.length, id: read.id};
+  return {
+    hops: hops.length,
+    id: read.id,
+    introduction_node: res.introduction_node,
+  };
 };
 
 const tests = [

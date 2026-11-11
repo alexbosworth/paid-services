@@ -1,4 +1,5 @@
 const asyncAuto = require('async/auto');
+const asyncify = require('async/asyncify');
 const {getNetwork} = require('ln-sync');
 const {parseInvoiceError} = require('invoices');
 const {parseOffer} = require('invoices');
@@ -21,11 +22,10 @@ const {typeInvoiceRequest} = require('./constants');
 const {typeMenuRequest} = require('./constants');
 const verifyMenuSignature = require('./verify_menu_signature');
 
-const {isSafeInteger} = Number;
 const isExpired = date => Date.parse(date) <= Date.now();
 const isMenuId = n => typeof n === 'string' && /^[0-9a-f]{32}$/i.test(n);
-const isPage = n => n === undefined || (isSafeInteger(n) && n >= 0);
-const isTimeout = n => n === undefined || (isSafeInteger(n) && n > 0);
+const isPage = n => n === undefined || (Number.isSafeInteger(n) && n >= 0);
+const isTimeout = n => n === undefined || (Number.isSafeInteger(n) && n > 0);
 
 /** Get a page of the menu of a support offer
 
@@ -140,13 +140,13 @@ module.exports = (args, cbk) => {
       },
 
       // Read the offer
-      parse: ['validate', ({}, cbk) => {
+      parse: ['validate', asyncify(({}) => {
         try {
-          return cbk(null, parseOffer({offer: args.offer}));
+          return parseOffer({offer: args.offer});
         } catch (err) {
-          return cbk([400, 'ExpectedValidOfferToGetSupportMenu']);
+          throw [400, 'ExpectedValidOfferToGetSupportMenu'];
         }
-      }],
+      })],
 
       // Check the offer is a support offer
       details: ['parse', ({parse}, cbk) => {
@@ -186,7 +186,10 @@ module.exports = (args, cbk) => {
 
           // Exit early when the path has no known introduction node
           if (!res.paths.length) {
-            return cbk([503, 'FailedToFindIntroductionNodeOfSupportOfferPath']);
+            return cbk([
+              503,
+              'FailedToFindIntroductionNodeOfSupportOfferPath',
+            ]);
           }
 
           return cbk(null, res.paths[Number()]);
@@ -194,7 +197,7 @@ module.exports = (args, cbk) => {
       }],
 
       // Make a signed invoice request that asks for the page
-      message: ['checkNetwork', ({}, cbk) => {
+      message: ['checkNetwork', asyncify(({}) => {
         try {
           const {encoded} = createMenuRequest({
             bip353_name: args.bip353_name,
@@ -202,11 +205,11 @@ module.exports = (args, cbk) => {
             page: args.page,
           });
 
-          return cbk(null, {type: typeInvoiceRequest, value: encoded});
+          return {type: typeInvoiceRequest, value: encoded};
         } catch (err) {
-          return cbk([400, 'FailedToCreateMenuRequest', {err}]);
+          throw [400, 'FailedToCreateMenuRequest', {err}];
         }
-      }],
+      })],
 
       // Send the request and wait for the reply
       getReply: ['getPath', 'message', ({getPath, message}, cbk) => {
@@ -222,32 +225,32 @@ module.exports = (args, cbk) => {
       }],
 
       // Read the invoice error from the reply
-      invoiceError: ['getReply', ({getReply}, cbk) => {
+      invoiceError: ['getReply', asyncify(({getReply}) => {
         const {reply} = getReply;
 
         // An invoice is not paid, it is from a node without menu support
         if (reply.type !== typeInvoiceError) {
-          return cbk([503, 'ExpectedInvoiceErrorWithSupportMenu']);
+          throw [503, 'ExpectedInvoiceErrorWithSupportMenu'];
         }
 
         try {
-          return cbk(null, parseInvoiceError({encoded: reply.value}));
+          return parseInvoiceError({encoded: reply.value});
         } catch (err) {
-          return cbk([503, 'ExpectedValidInvoiceErrorWithSupportMenu']);
+          throw [503, 'ExpectedValidInvoiceErrorWithSupportMenu'];
         }
-      }],
+      })],
 
       // Decode the page in the invoice error
-      decode: ['getReply', 'invoiceError', ({getReply}, cbk) => {
+      decode: ['getReply', 'invoiceError', asyncify(({getReply}) => {
         const {reply} = getReply;
 
         // A page that cannot be read is no menu, from a node with menu support
         try {
-          return cbk(null, decodeSupportMenu({encoded: reply.value}));
+          return decodeSupportMenu({encoded: reply.value});
         } catch (error) {
-          return cbk([503, 'ExpectedValidSupportMenuPage', {error}]);
+          throw [503, 'ExpectedValidSupportMenuPage', {error}];
         }
-      }],
+      })],
 
       // Read the page from the reply
       read: [
@@ -312,7 +315,7 @@ module.exports = (args, cbk) => {
       }],
 
       // Show the offers on the page that can be paid
-      menu: ['check', 'read', ({read}, cbk) => {
+      menu: ['check', 'read', asyncify(({read}) => {
         const {menu} = read;
 
         try {
@@ -320,7 +323,7 @@ module.exports = (args, cbk) => {
 
           const suggested = offerSuggestedAmounts({offer: args.offer});
 
-          return cbk(null, {
+          return {
             offers,
             expires_at: menu.expires_at,
             menu_id: menu.menu_id,
@@ -329,11 +332,11 @@ module.exports = (args, cbk) => {
             suggested_amounts: suggested.amounts,
             suggested_currency: suggested.currency,
             suggested_mtokens: suggested.mtokens,
-          });
+          };
         } catch (err) {
-          return cbk([503, 'FailedToReadSupportMenuOffers', {err}]);
+          throw [503, 'FailedToReadSupportMenuOffers', {err}];
         }
-      }],
+      })],
     },
     returnResult({reject, resolve, of: 'menu'}, cbk));
   });

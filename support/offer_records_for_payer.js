@@ -9,12 +9,9 @@ const {typePayerOfferOffer} = require('./constants');
 const {typePayerOfferServiceId} = require('./constants');
 const {typePayerOfferServiceSequence} = require('./constants');
 
-const hexAsBuffer = hex => Buffer.from(hex, 'hex');
-const isHex = n => typeof n === 'string' && /^([0-9a-f]{2})*$/i.test(n);
-const isKey = n => isHex(n) && n.length === 66 && isPoint(hexAsBuffer(n));
-const isSequence = n => /^\d+$/.test(String(n)) && BigInt(n) < maxSequence;
+const isKey = n => /^[0-9a-f]{66}$/i.test(n) && isPoint(Buffer.from(n, 'hex'));
+const isSequence = n => /^\d+$/.test(String(n)) && BigInt(n) < 2n ** 64n;
 const isServiceId = n => typeof n === 'string' && /^[0-9a-f]{32}$/i.test(n);
-const maxSequence = BigInt('18446744073709551616');
 
 /** Get the records of a payer offer: the whole `offer`, or a reference to
   it at a BIP 353 name, with its issuer id, and for a support offer, its

@@ -2,47 +2,30 @@ const {createHash} = require('node:crypto');
 const {deepStrictEqual, throws} = require('node:assert/strict');
 const {test} = require('node:test');
 
-const {blindedPathFromHops} = require('bolt04');
-const {createOffer} = require('invoices');
 const {createSignedInvoiceRequest} = require('invoices');
 const {isPoint} = require('tiny-secp256k1');
 const {parseInvoiceRequest} = require('invoices');
 const {pointFromScalar} = require('tiny-secp256k1');
 const {signSchnorr} = require('tiny-secp256k1');
 
+const {amountless} = require('./fixtures/invoice_request_for_offer');
+const {currency} = require('./fixtures/invoice_request_for_offer');
+const {issuerOnly} = require('./fixtures/invoice_request_for_offer');
+const {makeOffer} = require('./fixtures/invoice_request_for_offer');
 const method = require('./../../offers/invoice_request_for_offer');
+const {paths} = require('./fixtures/invoice_request_for_offer');
+const {priced} = require('./fixtures/invoice_request_for_offer');
 
 const bufferAsHex = buffer => buffer.toString('hex');
-const asKey = n => bufferAsHex(keyOf(Buffer.alloc(32, n)));
 const hexAsBuffer = hex => Buffer.from(hex, 'hex');
-const keyOf = secret => Buffer.from(pointFromScalar(secret));
-const node = asKey(9);
-const payerId = asKey(4);
+const payerId = '03462779ad4aad39514614751a71085f2f10e1c7a593e4e030efb5b8721ce55b0b';
 const secret = Buffer.alloc(32, 4);
 const sha256 = n => createHash('sha256').update(n).digest();
 
-const blinded = blindedPathFromHops({hops: [node]});
-const {key} = blinded;
-const paths = [{key, hops: blinded.path, introduction_node: node}];
-
-// Make an offer of the issuer of secret 1 with blinded paths
-const makeOffer = args => createOffer({
-  paths,
-  issuer_id: asKey(1),
-  networks: ['regtest'],
-  ...args,
-})
-.offer;
-
-// An offer without an amount, and one with an amount
-const amountless = makeOffer({});
-const priced = makeOffer({description: 'thing', mtokens: '5000'});
-
-// An offer with an amount in a currency
-const currency = makeOffer({amount: '100', currency: 'USD', description: 'x'});
-
-// An offer with an issuer id and no paths
-const issuerOnly = createOffer({issuer_id: asKey(1), networks: ['regtest']});
+// Get the public key of a secret of 32 bytes of a number
+const asKey = n => {
+  return Buffer.from(pointFromScalar(Buffer.alloc(32, n))).toString('hex');
+};
 
 // The tagged hash of a preimage
 const taggedHash = (tag, hex) => {

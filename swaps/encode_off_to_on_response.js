@@ -9,14 +9,13 @@ const {swapVersion} = require('./swap_field_types');
 
 const encode = records => encodeTlvStream({records}).encoded;
 const encodeNumber = n => encodeBigSize({number: n.toString()}).encoded;
-
 const {typeClaimCoopPublicKeyHash} = publicTypes;
 const {typeClaimSoloPublicKey} = publicTypes;
 const {typeDeposit} = publicTypes;
 const {typeHash} = publicTypes;
 const {typeInboundPeer} = publicTypes;
-const {typePush} = publicTypes;
 const {typePrivateRefundDetails} = publicTypes;
+const {typePush} = publicTypes;
 const {typeRefundCoopPrivateKeyHash} = publicTypes;
 const {typeRefundCoopPublicKey} = publicTypes;
 const {typeRefundSoloPublicKey} = publicTypes;

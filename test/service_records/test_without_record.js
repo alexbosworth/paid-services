@@ -3,7 +3,6 @@ const {test} = require('node:test');
 
 const {withoutRecord} = require('./../../service_records');
 
-// Known records, an unknown odd record, and a record after the signature
 const encoded = '0101aa' + '0701bb' + 'f040' + '00'.repeat(64) + 'f10100';
 
 const tests = [

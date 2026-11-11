@@ -461,6 +461,8 @@ module.exports = (args, cbk) => {
         const isInLimited = !!response.incoming_peer;
         const timeout = `that times out at ${response.timeout}`;
 
+        const inbound = response.incoming_peer;
+
         const inPeer = isExternal && isInLimited ? ` in via ${inbound}` : '';
 
         const {restart} = encodeOffToOnRestart({

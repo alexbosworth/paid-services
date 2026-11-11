@@ -6,19 +6,19 @@ const {parseInvoiceError} = require('invoices');
 
 const method = require('./../../support/reply_invoice_error');
 
-// The reply too large record, type 805807 with an empty value
 const tooLargeRecord = 'fe000c4baf00';
 
 // Read an invoice error back as BOLT 12 does, with the types of its records
 const read = args => {
   const {encoded} = method(args);
 
-  const {erroneous_field, message} = parseInvoiceError({encoded});
+  const invoiceError = parseInvoiceError({encoded});
 
+  // A reply that is too large ends with record 805807, which has no value
   return {
-    erroneous_field,
-    message,
+    erroneous_field: invoiceError.erroneous_field,
     is_reply_too_large: encoded.endsWith(tooLargeRecord),
+    message: invoiceError.message,
     types: decodeTlvStream({encoded}).records.map(n => n.type),
   };
 };

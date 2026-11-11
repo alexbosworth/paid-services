@@ -9,9 +9,7 @@ const {typeVersion} = require('./constants');
 const versionAsHex = require('./version_as_hex');
 
 const isHex = n => typeof n === 'string' && /^([0-9a-f]{2})*$/i.test(n);
-const isDigits = n => /^\d+$/.test(String(n));
-const isSequence = n => isDigits(n) && BigInt(n) <= maxSequence;
-const maxSequence = BigInt('18446744073709551615');
+const isSequence = n => /^\d+$/.test(String(n)) && BigInt(n) < 2n ** 64n;
 const isType = n => typeof n === 'string' && /^\d+$/.test(n);
 
 /** Encode a service label, the value of the `offer_service` record that

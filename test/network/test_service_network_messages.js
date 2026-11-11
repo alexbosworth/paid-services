@@ -1,52 +1,34 @@
-const {createHash} = require('node:crypto');
 const {deepStrictEqual, rejects} = require('node:assert/strict');
-const EventEmitter = require('node:events');
 const {test} = require('node:test');
 
 const {blindedPathFromHops} = require('bolt04');
-const {pointMultiply} = require('tiny-secp256k1');
+const {makeLnd} = require('mock-lnd');
+const {makeOnionMessage} = require('mock-lnd');
 
 const encodePeerRequest = require('./../../p2p/encode_peer_request');
 const method = require('./../../network/service_network_messages');
 const {serviceNetworkRequests} = require('./../../network');
 
 const bufferAsHex = buffer => buffer.toString('hex');
-const g = '79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798';
-const generator = Buffer.from(`02${g}`, 'hex');
-const hexAsBuffer = hex => Buffer.from(hex, 'hex');
-const id = bufferAsHex(Buffer.alloc(32, 1));
-const peer = `03${g}`;
-const requestId = bufferAsHex(Buffer.alloc(32, 2));
-const secret = Buffer.alloc(32, 1);
-const sha256 = n => createHash('sha256').update(n).digest();
-
-// The node identity public key for a secret of 32 bytes of 0x01
-const identity = bufferAsHex(Buffer.from(pointMultiply(generator, secret)));
-
-const lengthsOf = lists => lists.map(([list]) => list.length).join(',');
+const denied = {code: 7, details: 'permission denied'};
+const id = '01'.repeat(32);
+const identity = '031b84c5567b126440995d3ed5aaba0565d71e1834604819ff9c17f5e9d5dd078f';
+const largeOnionBytes = 32834;
+const lengthsOf = lists => lists.map(([list]) => list().length).join(',');
 const nextTick = () => new Promise(resolve => setImmediate(resolve));
 const now = () => Date.now();
-const wait = () => new Promise(resolve => setTimeout(resolve, 50));
-const waitLimitMs = 1000 * 5;
-
-// Errors that the stream of messages can fail with
-const denied = {code: 7, details: 'permission denied'};
+const peer = '0379be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798';
+const requestId = '02'.repeat(32);
+const secret = '01'.repeat(32);
 const unavailable = {code: 14, details: 'read ECONNRESET'};
-
-// The error reported when the stream fails with an unavailable LND
-const failed = [503, 'NetworkMessagesSubscriptionFailed', {err: unavailable}];
 const unimplemented = {code: 12, details: 'unknown service'};
 const unsupported = {details: 'unknown method SubscribeOnionMessages'};
 const unverified = {code: 2, details: 'verification failed: bad signature'};
+const wait = () => new Promise(resolve => setTimeout(resolve, 50));
+const waitLimitMs = 1000 * 5;
 
-// RPC uint64 map keys are eight little-endian bytes
-const typeAsKey = type => {
-  const bytes = Buffer.alloc(8);
-
-  bytes.writeBigUInt64LE(BigInt(type));
-
-  return bytes.toString('latin1');
-};
+// The error reported when the stream fails with an unavailable LND
+const failed = [503, 'NetworkMessagesSubscriptionFailed', {err: unavailable}];
 
 // Wait for the service to finish what the test expects of it: for its
 // callbacks and events to fill the lists to the lengths expected, turn by turn
@@ -54,7 +36,9 @@ const typeAsKey = type => {
 // service that never finishes is given up on after a limit, so that its test
 // fails instead of hanging.
 const untilFinished = async lists => {
-  const isFilling = () => lists.some(([list, length]) => list.length < length);
+  const isFilling = () => lists.some(([list, size]) => {
+    return list().length < size;
+  });
   const limit = now() + waitLimitMs;
 
   while (isFilling() && now() < limit) {
@@ -70,98 +54,69 @@ const untilFinished = async lists => {
   } while (lengthsOf(lists) !== lengths);
 };
 
-// Make a fake LND that delivers messages on each subscription to them, and
-// records sent messages, and that can stop giving subscriptions
-const makeLnd = ({failPeers, subscribes}) => {
-  const sent = [];
-  const subscriptions = [];
+// The messages that a fake LND sent
+const sentBy = lnd => lnd.calls
+  .filter(n => n.method === 'sendOnionMessage')
+  .map(n => n.args);
+
+// The streams of messages that a fake LND gave
+const subscriptionsOf = lnd => lnd.calls
+  .filter(n => n.method === 'subscribeOnionMessages')
+  .map(n => n.subscription);
+
+// Make a fake LND connected to the peer, that can fail getting peers a number
+// of times, and that can stop giving streams after a number of streams
+const makeTestLnd = ({failPeers, subscribes}) => {
+  const lnd = makeLnd({secret, peers: [{public_key: peer}]});
+
+  const {deriveSharedKey} = lnd.signer;
+  const {listPeers, subscribeOnionMessages} = lnd.default;
 
   // Getting peers can fail a number of times before it works
   let failures = failPeers || Number();
 
+  lnd.default.listPeers = (args, cbk) => {
+    return failures-- > 0 ? cbk('err') : listPeers(args, cbk);
+  };
+
   // Each subscription to messages is a new stream, while there are more
-  const subscribe = () => {
-    if (subscriptions.length === subscribes) {
+  lnd.default.subscribeOnionMessages = args => {
+    if (subscriptionsOf(lnd).length === subscribes) {
       throw new Error('ChannelClosed');
     }
 
-    const subscription = new EventEmitter();
-
-    subscription.cancel = () => {};
-
-    subscriptions.push(subscription);
-
-    return subscription;
+    return subscribeOnionMessages(args);
   };
 
-  const lnd = {
-    default: {
-      listPeers: ({}, cbk) => failures-- > 0 ? cbk('err') : cbk(null, {
-        peers: [{
-          address: '127.0.0.1:9735',
-          bytes_recv: '0',
-          bytes_sent: '0',
-          errors: [],
-          features: {},
-          flap_count: 0,
-          inbound: false,
-          last_flap_ns: '0',
-          ping_time: '0',
-          pub_key: peer,
-          sat_recv: '0',
-          sat_sent: '0',
-          sync_type: 'ACTIVE_SYNC',
-        }],
-      }),
-      sendOnionMessage: (args, cbk) => {
-        sent.push(args);
-
-        return cbk();
-      },
-      subscribeOnionMessages: subscribe,
-    },
-    signer: {
-      // Shared keys are derived after a moment, like over the network
-      deriveSharedKey: ({ephemeral_pubkey}, cbk) => setImmediate(() => {
-        return cbk(null, {
-          shared_key: sha256(pointMultiply(ephemeral_pubkey, secret, true)),
-        });
-      }),
-    },
-    wallet: {
-      // The node identity key is derived
-      deriveKey: ({key_family, key_index}, cbk) => cbk(null, {
-        key_loc: {key_family, key_index},
-        raw_key_bytes: hexAsBuffer(identity),
-      }),
-    },
+  // Shared keys are derived after a moment, like over the network
+  lnd.signer.deriveSharedKey = (args, cbk) => {
+    return setImmediate(() => deriveSharedKey(args, cbk));
   };
 
-  return {lnd, sent, subscriptions};
+  return lnd;
 };
 
-// Make an RPC onion message received on a path to self
+// Make an onion message received on a path to self
 const makeReceived = ({isLarge, type, value, withReply}) => {
   const path = blindedPathFromHops({id, hops: [identity]});
   const reply = blindedPathFromHops({hops: [peer]});
 
+  const [hop] = path.path;
+
   const replyPath = {
-    blinded_hops: reply.path.map(hop => ({
-      blinded_node: hexAsBuffer(hop.relay_key),
-      encrypted_data: hexAsBuffer(hop.encrypted_data),
-    })),
-    blinding_point: hexAsBuffer(reply.key),
-    introduction_node: hexAsBuffer(peer),
+    inbound: reply.path,
+    introduction_node: peer,
+    key: reply.key,
   };
 
-  return {
-    custom_records: {[typeAsKey(type)]: hexAsBuffer(value)},
-    encrypted_recipient_data: hexAsBuffer(path.path[0].encrypted_data),
-    onion: Buffer.alloc(!isLarge ? 1366 : 32834),
-    path_key: hexAsBuffer(path.key),
-    peer: hexAsBuffer(peer),
-    reply_path: !withReply ? undefined : replyPath,
-  };
+  return makeOnionMessage({
+    encrypted: hop.encrypted_data,
+    key: path.key,
+    message: {type, value},
+    onion: !isLarge ? undefined : '00'.repeat(largeOnionBytes),
+    reply: !withReply ? undefined : replyPath,
+    via: peer,
+  });
 };
 
 // Summarize the onion messages that were sent
@@ -173,12 +128,12 @@ const summary = sent => sent.map(n => ({
 // Service messages of type 64 with a listener and give the service messages,
 // waiting for what the test expects of the service
 const serve = async (args, expected) => {
-  const {lnd, sent, subscriptions} = makeLnd({failPeers: args.fail_peers});
   const got = [];
+  const lnd = makeTestLnd({failPeers: args.fail_peers});
 
   const service = method({lnd, delay: args.delay, ids: args.ids});
 
-  const [subscription] = subscriptions;
+  const [subscription] = subscriptionsOf(lnd);
 
   service.end(() => got.push('ended'));
   service.error(err => got.push({err}));
@@ -196,25 +151,25 @@ const serve = async (args, expected) => {
   }
 
   await untilFinished([
-    [got, expected.got.length],
-    [sent, expected.sent.length],
+    [() => got, expected.got.length],
+    [() => sentBy(lnd), expected.sent.length],
   ]);
 
   service.stop({});
 
-  return {got, sent: summary(sent)};
+  return {got, sent: summary(sentBy(lnd))};
 };
 
 // Service messages, fail the stream with events, and see if the stream is
 // subscribed to again after the delay, with messages on the new stream
 // reaching the listener, waiting for what the test expects of the service
 const resubscribe = async (args, expected) => {
-  const {lnd, subscriptions} = makeLnd({subscribes: args.subscribes});
   const got = [];
+  const lnd = makeTestLnd({subscribes: args.subscribes});
 
   const service = method({lnd, delay: 1});
 
-  const [subscription] = subscriptions;
+  const [subscription] = subscriptionsOf(lnd);
 
   service.end(() => got.push('ended'));
   service.message({type: '64'}, msg => got.push(msg.value));
@@ -227,7 +182,7 @@ const resubscribe = async (args, expected) => {
   });
 
   // The stream fails, and can send more than one event when it does
-  args.events.forEach(([event, data]) => subscription.emit(event, data));
+  args.events.forEach(([type, data]) => subscription.emit(type, data));
 
   // The service can be stopped while waiting to subscribe again
   if (!!args.is_stopping) {
@@ -239,28 +194,28 @@ const resubscribe = async (args, expected) => {
   await wait();
 
   // Messages arrive on the newest stream
-  const [current] = subscriptions.slice(-1);
+  const [current] = subscriptionsOf(lnd).slice(-1);
 
   (args.received || []).forEach(n => current.emit('data', makeReceived(n)));
 
-  await untilFinished([[got, expected.got.length]]);
+  await untilFinished([[() => got, expected.got.length]]);
 
   const receivers = service.receivers();
 
   service.stop({});
 
-  return {got, receivers, subscriptions: subscriptions.length};
+  return {got, receivers, subscriptions: subscriptionsOf(lnd).length};
 };
 
 // Service requests of type 0 and give the service messages, waiting for what
 // the test expects of the service
-const serveRequests = async ({is_stopping, received, records}, expected) => {
-  const {lnd, sent, subscriptions} = makeLnd({});
+const serveRequests = async (args, expected) => {
   const got = [];
+  const lnd = makeTestLnd({});
 
   const service = serviceNetworkRequests({lnd});
 
-  const [subscription] = subscriptions;
+  const [subscription] = subscriptionsOf(lnd);
 
   service.error(err => got.push({err}));
 
@@ -268,26 +223,28 @@ const serveRequests = async ({is_stopping, received, records}, expected) => {
   service.request({type: '0'}, (req, res) => {
     got.push(req);
 
-    res.success({records: records || [{type: '1', value: '01'}]});
+    res.success({records: args.records || [{type: '1', value: '01'}]});
 
-    return !is_stopping ? undefined : service.stop({});
+    return !args.is_stopping ? undefined : service.stop({});
   });
 
-  received.forEach(n => subscription.emit('data', makeReceived(n)));
+  args.received.forEach(n => subscription.emit('data', makeReceived(n)));
 
   await untilFinished([
-    [got, expected.got.length],
-    [sent, expected.sent.length],
+    [() => got, expected.got.length],
+    [() => sentBy(lnd), expected.sent.length],
   ]);
 
   service.stop({});
 
-  return {got, sent: summary(sent)};
+  return {got, sent: summary(sentBy(lnd))};
 };
 
 // Reply with replies that fit, that do not fit, and that have no limit
-const replyOfEachSize = (msg, {reply, reply_bytes}, push) => {
-  return reply_bytes({type: '66'}, (err, res) => {
+const replyOfEachSize = (msg, responder, push) => {
+  const {reply} = responder;
+
+  return responder.reply_bytes({type: '66'}, (err, res) => {
     push({bytes: res.bytes, is_large: msg.is_large});
 
     const fits = bufferAsHex(Buffer.alloc(res.bytes));

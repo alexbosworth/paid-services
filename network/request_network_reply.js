@@ -1,4 +1,5 @@
 const asyncAuto = require('async/auto');
+const asyncify = require('async/asyncify');
 const {getIdentity} = require('ln-service');
 const {returnResult} = require('asyncjs-util');
 const {sendMessage} = require('ln-service');
@@ -9,10 +10,9 @@ const getPathOutbound = require('./get_path_outbound');
 
 const defaultTimeoutMs = 1000 * 30;
 const {isArray} = Array;
-const isHops = n => isSafeInteger(n) && n > 0;
+const isHops = n => n === undefined || (Number.isSafeInteger(n) && n > 0);
 const isPublicKey = n => typeof n === 'string' && /^[0-9A-F]{66}$/i.test(n);
-const {isSafeInteger} = Number;
-const isTimeout = n => isSafeInteger(n) && n > 0;
+const isTimeout = n => Number.isSafeInteger(n) && n > 0;
 
 /** Send an onion message over a blinded path and wait for its reply
 
@@ -100,7 +100,7 @@ module.exports = (args, cbk) => {
           }
         }
 
-        if (args.max_reply_hops !== undefined && !isHops(args.max_reply_hops)) {
+        if (!isHops(args.max_reply_hops)) {
           return cbk([400, 'ExpectedMaximumReplyHopsToRequestNetworkReply']);
         }
 
@@ -144,7 +144,7 @@ module.exports = (args, cbk) => {
 
         const relays = !isRecipient ? outbound : outbound.slice(0, -1);
 
-        const hops = [].concat(relays).reverse().concat(getIdentity.public_key);
+        const hops = relays.slice().reverse().concat(getIdentity.public_key);
 
         // Exit early when the reply path has no more hops than allowed
         if (!args.max_reply_hops || hops.length <= args.max_reply_hops) {
@@ -157,18 +157,18 @@ module.exports = (args, cbk) => {
       }],
 
       // Listen to incoming onion messages
-      subscribe: ['getIdentity', 'getOutbound', ({}, cbk) => {
+      subscribe: ['getIdentity', 'getOutbound', asyncify(({}) => {
         // Subscribing throws when LND does not support onion messages
         try {
-          return cbk(null, subscribeToMessages({lnd: args.lnd}));
+          return subscribeToMessages({lnd: args.lnd});
         } catch (err) {
-          return cbk([
+          throw [
             501,
             'ExpectedLndSupportingOnionMessagesToRequestNetworkReply',
             {err},
-          ]);
+          ];
         }
-      }],
+      })],
 
       // Send the message and wait for the reply
       request: [

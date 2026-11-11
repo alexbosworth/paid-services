@@ -1,8 +1,8 @@
 const findRecord = (records, type) => records.find(n => n.type === type);
 const inIdFromPartnersValue = n => n.slice(0, 66);
+const {isArray} = Array;
 const isPublicKey = n => !!n && /^0[2-3][0-9A-F]{64}$/i.test(n);
 const outIdFromPartnersValue = n => n.slice(66);
-const {isArray} = Array;
 const typePartnersRecord = '1';
 const typeVersionRecord = '0';
 

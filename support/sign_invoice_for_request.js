@@ -1,4 +1,5 @@
 const asyncAuto = require('async/auto');
+const asyncify = require('async/asyncify');
 const {createSignedInvoice} = require('invoices');
 const {createUnsignedInvoice} = require('invoices');
 const {returnResult} = require('asyncjs-util');
@@ -71,9 +72,9 @@ module.exports = (args, cbk) => {
       },
 
       // Create the unsigned BOLT 12 invoice
-      unsigned: ['validate', ({}, cbk) => {
+      unsigned: ['validate', asyncify(({}) => {
         try {
-          return cbk(null, createUnsignedInvoice({
+          return createUnsignedInvoice({
             created_at: args.invoice.created_at,
             encoded: args.request.encoded,
             expires_at: args.invoice.expires_at,
@@ -81,11 +82,11 @@ module.exports = (args, cbk) => {
             mtokens: args.invoice.mtokens,
             paths: args.paths,
             records: args.records,
-          }));
+          });
         } catch (err) {
-          return cbk([503, 'FailedToCreateUnsignedInvoice', {err}]);
+          throw [503, 'FailedToCreateUnsignedInvoice', {err}];
         }
-      }],
+      })],
 
       // Sign the invoice with the derived key of the offer
       sign: ['unsigned', ({unsigned}, cbk) => {
@@ -101,24 +102,24 @@ module.exports = (args, cbk) => {
       }],
 
       // Assemble the signed invoice
-      signed: ['sign', 'unsigned', ({sign, unsigned}, cbk) => {
+      signed: ['sign', 'unsigned', asyncify(({sign, unsigned}) => {
         try {
           const signed = createSignedInvoice({
             encoded: unsigned.encoded,
             signature: sign.signature,
           });
 
-          return cbk(null, {
+          return {
             encoded: signed.encoded,
             expires_at: args.invoice.expires_at,
             id: args.invoice.id,
             invoice: signed.invoice,
             mtokens: args.invoice.mtokens,
-          });
+          };
         } catch (err) {
-          return cbk([503, 'FailedToCreateSignedInvoice', {err}]);
+          throw [503, 'FailedToCreateSignedInvoice', {err}];
         }
-      }],
+      })],
     },
     returnResult({reject, resolve, of: 'signed'}, cbk));
   });

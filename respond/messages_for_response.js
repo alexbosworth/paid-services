@@ -15,7 +15,6 @@ const errorType = '0';
 const linksType = '4';
 const nodesType = '3';
 const paywallRecordsType = '2';
-const relayRecordsType = '5';
 const responseType = '805805';
 const standardRecordsType = '0';
 const textMessageType = '1';

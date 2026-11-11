@@ -4,12 +4,9 @@ const {parseOffer} = require('invoices');
 
 const issuerPath = require('./issuer_path');
 
-const hexAsBuffer = hex => Buffer.from(hex, 'hex');
-const isHex = n => typeof n === 'string' && /^([0-9a-f]{2})+$/i.test(n);
-const isKey = n => isHex(n) && n.length === 66 && isPoint(hexAsBuffer(n));
+const isKey = n => /^[0-9a-f]{66}$/i.test(n) && isPoint(Buffer.from(n, 'hex'));
 const isMtokens = n => typeof n === 'string' && /^[1-9]\d*$/.test(n);
-const isName = n => typeof n === 'string' && namePattern.test(n);
-const namePattern = /^[0-9a-zA-Z\-_.]+@[0-9a-zA-Z\-_.]+$/;
+const isName = n => typeof n === 'string' && /^[\w.-]+@[\w.-]+$/.test(n);
 
 /** Make an unsigned BOLT 12 invoice request for an offer, with a payer id
 

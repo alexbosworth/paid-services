@@ -1,8 +1,9 @@
 const {createHash} = require('crypto');
 
 const asyncAuto = require('async/auto');
+const asyncify = require('async/asyncify');
 const {beginGroupSigningSession} = require('ln-service');
-const {createTaprootSwapOut} = require('goldengate');
+const {createSwapOut} = require('goldengate');
 const {diffieHellmanComputeSecret} = require('ln-service');
 const {getHeight} = require('ln-service');
 const {getIdentity} = require('ln-service');
@@ -18,41 +19,56 @@ const {pay} = require('ln-service');
 const {returnResult} = require('asyncjs-util');
 const {swapScriptBranches} = require('goldengate');
 
-const decodeLoopResponse = require('./decode_loop_response');
 const decodeOffToOnRecovery = require('./decode_off_to_on_recovery');
 const encodeLoopResponse = require('./encode_loop_response');
 
 const defaultFundAt = () => new Date(Date.now() + (1000 * 3600)).toISOString();
 const family = 805;
 const hexAsBuffer = hex => Buffer.from(hex, 'hex');
-const maxServiceFee = 1337;
 const maxRoutingFee = 100;
+const maxServiceFee = 1337;
 const sha256 = preimage => createHash('sha256').update(preimage).digest('hex');
 const timeoutHeight = current => 400 + current - 3;
 
 /** Request an offchain to onchain swap from the Lightning Loop server
 
+  When a paid macaroon is not specified, a macaroon will be purchased
+
   {
     [before]: <Request Publishing On-Chain Before ISO 8601 Date String>
     lnd: <Authenticated LND API Object>
+    [macaroon]: <Paid Service Macaroon Base64 String>
+    [preimage]: <Paid Service Macaroon Payment Preimage Hex String>
     recovery: <Swap Out Recovery Hex String>
+    [socket]: <Custom Swap Service Socket String>
   }
 
   @returns via cbk or Promise
   {
+    deposit_request: <Deposit Payment Request BOLT 11 String>
+    fund_request: <Funding Payment Request BOLT 11 String>
     response: <Hex Encoded Lightning Loop Response String>
+    timeout: <Swap Timeout Path Height Number>
   }
 */
-module.exports = ({before, lnd, recovery}, cbk) => {
+module.exports = (args, cbk) => {
   return new Promise((resolve, reject) => {
     return asyncAuto({
       // Check arguments
       validate: cbk => {
-        if (!lnd) {
+        if (!args.lnd) {
           return cbk([400, 'ExpectedAuthenticatedLndToRequestLoopOut']);
         }
 
-        if (!recovery) {
+        if (!!args.macaroon && !args.preimage) {
+          return cbk([400, 'ExpectedMacaroonPreimageToRequestLoopOut']);
+        }
+
+        if (!args.macaroon && !!args.preimage) {
+          return cbk([400, 'ExpectedPaidMacaroonToRequestLoopOut']);
+        }
+
+        if (!args.recovery) {
           return cbk([400, 'ExpectedRequestRecoveryToRequestLoopOut']);
         }
 
@@ -60,15 +76,17 @@ module.exports = ({before, lnd, recovery}, cbk) => {
       },
 
       // Get the self public key to use for the decryption key
-      getIdentity: ['validate', ({}, cbk) => getIdentity({lnd}, cbk)],
+      getIdentity: ['validate', ({}, cbk) => {
+        return getIdentity({lnd: args.lnd}, cbk);
+      }],
 
       // Get the network name
-      getNetwork: ['validate', ({}, cbk) => getNetwork({lnd}, cbk)],
+      getNetwork: ['validate', ({}, cbk) => getNetwork({lnd: args.lnd}, cbk)],
 
       // Get the encryption key to decode the recovery secrets
       getDecrypt: ['getIdentity', ({getIdentity}, cbk) => {
         return diffieHellmanComputeSecret({
-          lnd,
+          lnd: args.lnd,
           partner_public_key: getIdentity.public_key,
         },
         cbk);
@@ -76,16 +94,19 @@ module.exports = ({before, lnd, recovery}, cbk) => {
 
       // Initialize the service
       service: ['getNetwork', ({getNetwork}, cbk) => {
-        const {network} = getNetwork;
+        const {service} = lightningLabsSwapService({
+          network: getNetwork.network,
+          socket: args.socket,
+        });
 
-        return cbk(null, lightningLabsSwapService({network}).service);
+        return cbk(null, service);
       }],
 
       // Decode swap request details
       requestDetails: ['getDecrypt', ({getDecrypt}, cbk) => {
         const decoded = decodeOffToOnRecovery({
-          recovery,
           decrypt: getDecrypt.secret,
+          recovery: args.recovery,
         });
 
         return cbk(null, {
@@ -97,25 +118,42 @@ module.exports = ({before, lnd, recovery}, cbk) => {
 
       // Get the public key for the swap
       getKey: ['requestDetails', ({requestDetails}, cbk) => {
-        return getPublicKey({family, lnd, index: requestDetails.index}, cbk);
+        return getPublicKey({
+          family,
+          index: requestDetails.index,
+          lnd: args.lnd,
+        },
+        cbk);
       }],
 
       // Get an unpaid swap macaroon
       getUnpaidMacaroon: ['service', ({service}, cbk) => {
+        // Exit early when there is already a paid macaroon
+        if (!!args.macaroon) {
+          return cbk(null, {macaroon: args.macaroon});
+        }
+
         return getSwapMacaroon({service}, cbk);
       }],
 
       // Pay for the macaroon
       payForMacaroon: ['getUnpaidMacaroon', ({getUnpaidMacaroon}, cbk) => {
+        // Exit early when the macaroon was already paid for
+        if (!!args.preimage) {
+          return cbk(null, {secret: args.preimage});
+        }
+
         const {request} = getUnpaidMacaroon;
 
+        const {tokens} = parsePaymentRequest({request});
+
         // Validate the service token payment request
-        if (parsePaymentRequest({request}).tokens > maxServiceFee) {
+        if (tokens > maxServiceFee) {
           return cbk([503, 'ExpectedLowerPriceForLoopApiKey', {fee: tokens}]);
         }
 
         // Pay the service token payment request to purchase the macaroon
-        return pay({lnd, request, max_fee: maxRoutingFee}, cbk);
+        return pay({request, lnd: args.lnd, max_fee: maxRoutingFee}, cbk);
       }],
 
       // Create authentication metadata object
@@ -134,25 +172,21 @@ module.exports = ({before, lnd, recovery}, cbk) => {
         return cbk(null, lightningLabsSwapAuth({macaroon, preimage}).metadata);
       }],
 
-      // Final service method details
-      paidService: ['metadata', 'service', ({metadata, service}, cbk) => {
-        return cbk(null, {metadata, service});
-      }],
-
       // Starting height
-      startHeight: ['paidService', ({}, cbk) => getHeight({lnd}, cbk)],
+      startHeight: ['metadata', ({}, cbk) => getHeight({lnd: args.lnd}, cbk)],
 
       // Get the quote for swaps
       getQuote: [
-        'paidService',
+        'metadata',
         'requestDetails',
+        'service',
         'startHeight',
-        ({paidService, requestDetails, startHeight}, cbk) =>
+        ({metadata, requestDetails, service, startHeight}, cbk) =>
       {
         return getSwapOutQuote({
-          fund_at: before || defaultFundAt(),
-          metadata: paidService.metadata,
-          service: paidService.service,
+          metadata,
+          service,
+          delay: args.before || defaultFundAt(),
           timeout: timeoutHeight(startHeight.current_block_height),
           tokens: requestDetails.tokens,
         },
@@ -177,10 +211,10 @@ module.exports = ({before, lnd, recovery}, cbk) => {
         },
         cbk) =>
       {
-        return createTaprootSwapOut({
+        return createSwapOut({
           metadata,
           service,
-          fund_at: before || defaultFundAt(),
+          fund_at: args.before || defaultFundAt(),
           hash: requestDetails.hash,
           network: getNetwork.network,
           public_key: getKey.public_key,
@@ -196,7 +230,7 @@ module.exports = ({before, lnd, recovery}, cbk) => {
         'getKey',
         'requestDetails',
         'startHeight',
-        ({create, getKey, requestDetails, startHeight}, cbk) =>
+        asyncify(({create, getKey, requestDetails, startHeight}) =>
       {
         try {
           const swap = swapScriptBranches({
@@ -206,11 +240,11 @@ module.exports = ({before, lnd, recovery}, cbk) => {
             timeout: timeoutHeight(startHeight.current_block_height),
           });
 
-          return cbk(null, {branches: swap.branches, claim: swap.claim});
+          return {branches: swap.branches, claim: swap.claim};
         } catch (err) {
-          return cbk([503, 'failedToDeriveSwapScriptBranches', {err}]);
+          throw [503, 'failedToDeriveSwapScriptBranches', {err}];
         }
-      }],
+      })],
 
       // Start the MuSig2 session with the server key
       start: [
@@ -221,9 +255,9 @@ module.exports = ({before, lnd, recovery}, cbk) => {
         ({create, getKey, requestDetails, script}, cbk) =>
       {
         return beginGroupSigningSession({
-          lnd,
           key_family: family,
           key_index: requestDetails.index,
+          lnd: args.lnd,
           public_keys: [getKey.public_key, create.service_public_key],
           root_hash: hashForTree({branches: script.branches}).hash,
         },
@@ -238,17 +272,24 @@ module.exports = ({before, lnd, recovery}, cbk) => {
         'startHeight',
         ({create, getUnpaidMacaroon, payForMacaroon, startHeight}, cbk) =>
       {
+        const timeout = timeoutHeight(startHeight.current_block_height);
+
         // Encode the response as a TLV stream
         const {response} = encodeLoopResponse({
+          timeout,
           deposit: create.swap_execute_request,
           fund: create.swap_fund_request,
           macaroon: getUnpaidMacaroon.macaroon,
           preimage: payForMacaroon.secret,
           remote: create.service_public_key,
-          timeout: timeoutHeight(startHeight.current_block_height),
         });
 
-        return cbk(null, {response});
+        return cbk(null, {
+          response,
+          timeout,
+          deposit_request: create.swap_execute_request,
+          fund_request: create.swap_fund_request,
+        });
       }],
     },
     returnResult({reject, resolve, of: 'swap'}, cbk));

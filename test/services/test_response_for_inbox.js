@@ -3,11 +3,39 @@ const {test} = require('node:test');
 
 const {encodeTlvStream} = require('bolt01');
 const {makeLnd} = require('mock-lnd');
+const {parsePaymentRequest} = require('ln-service');
+const {pointFromScalar} = require('tiny-secp256k1');
 
 const method = require('./../../services/response_for_inbox');
 
 const encode = records => encodeTlvStream({records}).encoded;
+const id = Buffer.alloc(32).toString('hex');
+const {keys} = Object;
+const publicKeyOf = key => Buffer.from(pointFromScalar(key)).toString('hex');
+const secret = Buffer.alloc(32, 1);
 
+// Describe a paywall by the payment that it requests
+const describePaywall = res => {
+  // Exit early when there is no paywall
+  if (!res.response.paywall) {
+    return res;
+  }
+
+  const request = parsePaymentRequest({request: res.response.paywall});
+
+  return {
+    response: {
+      paywall: {
+        description_hash: request.description_hash,
+        destination: request.destination,
+        tokens: request.tokens,
+      },
+      text: res.response.text,
+    },
+  };
+};
+
+// Make environment variables, replacing defaults with overrides
 const makeEnv = overrides => {
   const env = {
     PAID_SERVICES_INBOX_EMAIL_FROM: 'from',
@@ -15,11 +43,12 @@ const makeEnv = overrides => {
     PAID_SERVICES_INBOX_POSTMARK_API_KEY: 'key',
   };
 
-  Object.keys(overrides).forEach(k => env[k] = overrides[k]);
+  keys(overrides).forEach(k => env[k] = overrides[k]);
 
   return env;
 };
 
+// Make arguments for the method, replacing defaults with overrides
 const makeArgs = overrides => {
   const args = {
     arguments: encode([{
@@ -27,11 +56,11 @@ const makeArgs = overrides => {
     }]),
     env: makeEnv({}),
     fetch: () => new Promise(resolve => resolve()),
-    id: Buffer.alloc(32).toString('hex'),
-    lnd: makeLnd({}),
+    id,
+    lnd: makeLnd({secret: secret.toString('hex')}),
   };
 
-  Object.keys(overrides).forEach(k => args[k] = overrides[k]);
+  keys(overrides).forEach(k => args[k] = overrides[k]);
 
   return args;
 };
@@ -77,7 +106,11 @@ const tests = [
     description: 'A paywall is raised for the message',
     expected: {
       response: {
-        paywall: 'lntb1500n1pdn4czkpp5ugdqer05qrrxuchrzkcue94th9w2xzasp9qm7d0yxcgp4uh4kn4qdpa2fjkzep6yprkcmmzv9kzqsmj09c8gmmrw4e8yetwvdujq5n9va6kcct5d9hkucqzysdlghdpua7uvjjkcfj49psxtlqzkp5pdncffdfk2cp3mp76thrl29qhqgzufm503pjj96586n5w6edgw3n66j4rxxs707y4zdjuhyt6qqe5weu4',
+        paywall: {
+          description_hash: id,
+          destination: publicKeyOf(secret),
+          tokens: 1,
+        },
         text: 'Pay to deliver your inbox message',
       },
     },
@@ -109,7 +142,7 @@ tests.forEach(({args, description, error, expected}) => {
     } else {
       const res = await method(args);
 
-      deepStrictEqual(res, expected, 'Got expected result');
+      deepStrictEqual(describePaywall(res), expected, 'Got expected result');
     }
   });
 });

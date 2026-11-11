@@ -4,20 +4,19 @@ const {test} = require('node:test');
 const {makeInvoice} = require('mock-lnd');
 const {makeLnd} = require('mock-lnd');
 const {makePayViaRoutesResponse} = require('mock-lnd');
-const {makePaymentRequest} = require('mock-lnd');
-const {sign} = require('tiny-secp256k1');
 
 const messagesForRequest = require('./../../client/messages_for_request');
 const method = require('./../../server/process_request');
 
-// mock-lnd makes payment requests with an ECPair-shaped signing factory
-const ecp = {fromPrivateKey: key => ({sign: hash => sign(hash, key)})};
-const id1 = Buffer.alloc(32).toString('hex');
-const {request} = makePaymentRequest({ecp});
+const id1 = '00'.repeat(32);
+const {keys} = Object;
+const maxService = String(Number.MAX_SAFE_INTEGER);
+const request = 'lnbc10n1y250dfzpp5qqqsyqcyq5rqwzqfqqqsyqcyq5rqwzqfqqqsyqcyq5rqwzqfqypqhp58yjmdan79s6qqdhdzgynm4zwqd5d7xmw5fk98klysy043l2ahrqsjqjp7xkfkr6u6fkcy6nh6x4mez3ge7d4lrj8u8gf0kn74jsdfg3sglhzv4ky5ax3xflrhhmts3t7knrxxrw8hg8k3z39f4jwu5lmywcpzkwrsl';
 
-const {messages} = messagesForRequest({reply: request, service: '2'});
-
+// Make arguments for the method, replacing defaults with overrides
 const makeArgs = overrides => {
+  const {messages} = messagesForRequest({reply: request, service: '2'});
+
   let requests = 0;
 
   const lnd = makeLnd({
@@ -49,7 +48,7 @@ const makeArgs = overrides => {
     payer: lnd,
   };
 
-  Object.keys(overrides).forEach(k => args[k] = overrides[k]);
+  keys(overrides).forEach(k => args[k] = overrides[k]);
 
   return args;
 };
@@ -105,7 +104,7 @@ const tests = [
             payments: [{
               messages: messagesForRequest({
                 reply: request,
-                service: Number.MAX_SAFE_INTEGER.toString(),
+                service: maxService,
               }).messages,
               is_confirmed: true,
             }],

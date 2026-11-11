@@ -3,6 +3,9 @@ const {test} = require('node:test');
 
 const method = require('./../../config/is_email_configured');
 
+const {keys} = Object;
+
+// Make environment variables, replacing defaults with overrides
 const makeEnv = overrides => {
   const env = {
     PAID_SERVICES_INBOX_EMAIL_FROM: 'from',
@@ -10,7 +13,7 @@ const makeEnv = overrides => {
     PAID_SERVICES_INBOX_POSTMARK_API_KEY: 'key',
   };
 
-  Object.keys(overrides).forEach(k => env[k] = overrides[k]);
+  keys(overrides).forEach(k => env[k] = overrides[k]);
 
   return env;
 };

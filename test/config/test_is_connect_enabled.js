@@ -3,10 +3,13 @@ const {test} = require('node:test');
 
 const method = require('./../../config/is_connect_enabled');
 
+const {keys} = Object;
+
+// Make environment variables, replacing defaults with overrides
 const makeEnv = overrides => {
   const env = {};
 
-  Object.keys(overrides).forEach(k => env[k] = overrides[k]);
+  keys(overrides).forEach(k => env[k] = overrides[k]);
 
   return env;
 };

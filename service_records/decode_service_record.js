@@ -16,7 +16,6 @@ const bufferAsHex = buffer => buffer.toString('hex');
 const byteLength = hex => hex.length / 2;
 const isEven = type => !(BigInt(type) % BigInt(2));
 const isHex = n => typeof n === 'string' && /^([0-9a-f]{2})+$/i.test(n);
-const isUnknownEven = n => !knownTypes.includes(n.type) && isEven(n.type);
 const lengthKeyBytes = 32;
 
 /** Decode a service record, opening its sealed data with the record key of
@@ -79,7 +78,7 @@ module.exports = ({key, record}) => {
   });
 
   // Unknown even records cannot be ignored
-  if (!!records.find(isUnknownEven)) {
+  if (!!records.find(n => !knownTypes.includes(n.type) && isEven(n.type))) {
     throw new Error('UnexpectedUnknownRequiredRecordInServiceRecord');
   }
 

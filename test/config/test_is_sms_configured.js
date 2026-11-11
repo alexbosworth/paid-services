@@ -3,6 +3,9 @@ const {test} = require('node:test');
 
 const method = require('./../../config/is_sms_configured');
 
+const {keys} = Object;
+
+// Make environment variables, replacing defaults with overrides
 const makeEnv = overrides => {
   const env = {
     PAID_SERVICES_INBOX_SMS_FROM_NUMBER: 'from',
@@ -11,7 +14,7 @@ const makeEnv = overrides => {
     PAID_SERVICES_INBOX_TWILIO_AUTH_TOKEN: 'secret',
   };
 
-  Object.keys(overrides).forEach(k => env[k] = overrides[k]);
+  keys(overrides).forEach(k => env[k] = overrides[k]);
 
   return env;
 };

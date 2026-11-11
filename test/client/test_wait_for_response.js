@@ -11,7 +11,9 @@ const method = require('./../../client/wait_for_response');
 const encode = records => encodeTlvStream({records: [records]}).encoded;
 const id1 = Buffer.alloc(32).toString('hex');
 const id2 = Buffer.alloc(32, 1).toString('hex');
+const {keys} = Object;
 
+// Make arguments for the method, replacing defaults with overrides
 const makeArgs = overrides => {
   const args = {
     id: Buffer.alloc(32).toString('hex'),
@@ -25,7 +27,7 @@ const makeArgs = overrides => {
     ms: 1000,
   };
 
-  Object.keys(overrides).forEach(k => args[k] = overrides[k]);
+  keys(overrides).forEach(k => args[k] = overrides[k]);
 
   return args;
 };

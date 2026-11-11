@@ -16,9 +16,11 @@ const sealKeyForSalt = require('./../../service_records/seal_key_for_salt');
 
 const bufferAsHex = buffer => buffer.toString('hex');
 const data = '0001aa';
-const key = bufferAsHex(Buffer.alloc(32, 1));
+const key = '01'.repeat(32);
 const nonce = Buffer.alloc(12);
-const salt = bufferAsHex(Buffer.alloc(32, 3));
+const otherSalt = '04'.repeat(32);
+const prefix = '626f73ff';
+const salt = '03'.repeat(32);
 const version = 3;
 
 // Make a record with its own records, sealing the data over them
@@ -49,15 +51,13 @@ const sealRecords = (records, sealKey) => {
   return '626f73ff' + encodeTlvStream({records: sorted}).encoded;
 };
 
+// The records of a record before its sealed data, with the salt
 const fields = [
   {type: '0', value: '01'},
   {type: '2', value: '03'},
   {type: '4', value: '05'},
   {type: '6', value: salt},
 ];
-
-const otherSalt = bufferAsHex(Buffer.alloc(32, 4));
-const prefix = '626f73ff';
 
 // Arguments to encode a record with
 const args = {data, key, version, record_key_index: 0, type: '1'};
@@ -81,9 +81,9 @@ const hmac = n => {
 const seal = n => decode({key, record: encode(n).record});
 
 // Encode a record, change it, and decode it with a record key
-const sealChanged = ({change, record_key, ...n}) => decode({
-  key: record_key || key,
-  record: change(encode(n).record),
+const sealChanged = args => decode({
+  key: args.record_key || key,
+  record: args.change(encode(args).record),
 });
 
 // Encode a record and see what it shows
@@ -165,11 +165,11 @@ const keyOf = ({secret}) => {
   };
 };
 
-// A record that has an unknown odd record before its sealed data
-const before = sealRecords(fields.concat({type: '7', value: '00'}));
+// Make a record that has an unknown odd record before its sealed data
+const before = () => sealRecords(fields.concat({type: '7', value: '00'}));
 
-// A record that has an unknown odd record after its sealed data
-const after = sealRecords(fields.concat({type: '241', value: '00'}));
+// Make a record that has an unknown odd record after its sealed data
+const after = () => sealRecords(fields.concat({type: '241', value: '00'}));
 
 const tests = [
   {
@@ -328,25 +328,25 @@ const tests = [
     method: decode,
   },
   {
-    args: {key, record: before},
+    args: {key, record: before()},
     description: 'Unknown odd records before the sealed data are ignored',
     expected: {data, version, record_key_index: 5, type: '1'},
     method: decode,
   },
   {
-    args: {key, record: before.replace(/070100(08)/, '$1')},
+    args: {key, record: before().replace(/070100(08)/, '$1')},
     description: 'A record is not opened without its unknown records',
     error: 'ExpectedServiceRecordMadeByThisNode',
     method: decode,
   },
   {
-    args: {key, record: after},
+    args: {key, record: after()},
     description: 'Unknown odd records after the sealed data are ignored',
     expected: {data, version, record_key_index: 5, type: '1'},
     method: decode,
   },
   {
-    args: {key, record: after.replace(/f10100$/, 'f10101')},
+    args: {key, record: after().replace(/f10100$/, 'f10101')},
     description: 'Unknown odd records after the sealed data are associated',
     error: 'ExpectedServiceRecordMadeByThisNode',
     method: decode,

@@ -1,102 +1,40 @@
-const {createHash} = require('node:crypto');
 const {deepStrictEqual, rejects} = require('node:assert/strict');
 const {test} = require('node:test');
 
 const {blindedPathFromHops} = require('bolt04');
 const {makeLnd} = require('mock-lnd');
 const {parseOffer} = require('invoices');
-const {pointFromScalar} = require('tiny-secp256k1');
-const {pointMultiply} = require('tiny-secp256k1');
 
 const {decodeRecords} = require('./../../service_records');
+const {derivedKeyFamily} = require('./../../support/constants');
+const {getRecordKey} = require('./../../service_records');
 const decodeRecord = require('./../../support/decode_support_record');
-const keyForSecret = require('./../../service_records/record_key_for_secret');
 const method = require('./../../support/create_support_offer');
 const {readRecordKeyIndex} = require('./../../service_records');
 const {readServiceLabel} = require('./../../service_records');
-const recordPoint = require('./../../service_records/record_point');
 const suggestedAmounts = require('./../../support/offer_suggested_amounts');
 
-const asKey = n => Buffer.from(pointFromScalar(n)).toString('hex');
-const derived = asKey(Buffer.alloc(32, 2));
-const peer = asKey(Buffer.alloc(32, 4));
-const secret = Buffer.alloc(32, 1);
-const identity = asKey(secret);
-const sha256 = n => createHash('sha256').update(n).digest();
+const derived = '024d4b6cd1361032ca9bd2aeb9d900aa4d45d9ead80ac9423374c451a7254d0766';
+const identity = '031b84c5567b126440995d3ed5aaba0565d71e1834604819ff9c17f5e9d5dd078f';
+const issuerKeyIndex = 3;
+const issuerSecret = '02'.repeat(32);
+const otherPeer = '03f006a18d5653c4edf5391ff23a61f03ff83d237e880ee61187fa9f379a028e0a';
+const peer = '03462779ad4aad39514614751a71085f2f10e1c7a593e4e030efb5b8721ce55b0b';
+const secret = '01'.repeat(32);
 
-// The record key is derived from the shared secret of the node key and the
-// record point
-const recordKey = keyForSecret({
-  secret: sha256(pointMultiply(
-    Buffer.from(recordPoint().public_key, 'hex'),
-    secret,
-    true
-  ))
-  .toString('hex'),
-})
-.key;
-
-const read = record => decodeRecord({record, key: recordKey});
-
-const makeTestLnd = ({keys, locators, peers} = {}) => {
-  const lnd = makeLnd({});
-
-  const {getInfo} = lnd.default;
-
-  lnd.default.getInfo = (args, cbk) => getInfo(args, (err, res) => {
-    return cbk(err, {...res, identity_pubkey: identity});
-  });
-
-  // The connected peers that a created path can start at
-  lnd.default.listPeers = ({}, cbk) => cbk(null, {
-    peers: (peers || []).map(key => ({
-      address: '127.0.0.1:9735',
-      bytes_recv: '0',
-      bytes_sent: '0',
-      errors: [],
-      features: {},
-      flap_count: 0,
-      inbound: false,
-      last_flap_ns: '0',
-      ping_time: '0',
-      pub_key: key,
-      sat_recv: '0',
-      sat_sent: '0',
-      sync_type: 'ACTIVE_SYNC',
-    })),
-  });
-
-  lnd.signer = {
-    deriveSharedKey: ({ephemeral_pubkey, key_loc}, cbk) => {
-      (locators || []).push(key_loc);
-
-      return cbk(null, {
-        shared_key: sha256(pointMultiply(ephemeral_pubkey, secret, true)),
-      });
-    },
-  };
-
-  // Keys by index can be looked up
-  lnd.wallet.deriveKey = ({key_family, key_index}, cbk) => {
-    const key = (keys || {})[key_index];
-
-    if (!key) {
-      return cbk([503, 'UnexpectedIndexLookup']);
-    }
-
-    return cbk(null, {
-      key_loc: {key_family, key_index},
-      raw_key_bytes: Buffer.from(key, 'hex'),
-    });
-  };
-
-  lnd.wallet.deriveNextKey = ({}, cbk) => cbk(null, {
-    key_loc: {key_family: 806, key_index: 3},
-    raw_key_bytes: Buffer.from(derived, 'hex'),
-  });
-
-  return lnd;
-};
+// A fake LND of the node of the secret, which is connected to peers that a
+// path can start at, and that has keys at locators that are given. The
+// issuer key of an offer is the next key derived in its key family.
+const makeTestLnd = ({keys, peers} = {}) => makeLnd({
+  secret,
+  keys: (keys || []).concat({
+    family: derivedKeyFamily,
+    index: issuerKeyIndex,
+    secret: issuerSecret,
+  }),
+  next_key_indexes: [{family: derivedKeyFamily, index: issuerKeyIndex}],
+  peers: (peers || []).map(key => ({public_key: key})),
+});
 
 // Complete paths through peers to self, as a caller could make them
 const makePath = (introduction, n) => {
@@ -112,9 +50,6 @@ const makePath = (introduction, n) => {
   };
 };
 
-const path1 = makePath(peer, 8);
-const path2 = makePath(asKey(Buffer.alloc(32, 6)), 9);
-
 // Describe a value that was not given by its size, since it is random
 const given = (value, values) => {
   return values.includes(value) ? value : `${value.length / 2} random bytes`;
@@ -122,15 +57,23 @@ const given = (value, values) => {
 
 // Create a support offer and describe it and its record
 const create = async ({keys, peers, ...args}) => {
-  const locators = [];
-
-  const lnd = makeTestLnd({keys, locators, peers});
+  const lnd = makeTestLnd({keys, peers});
 
   const res = await method({...args, lnd});
 
+  // The locators of the record keys that sealed or opened records
+  const locators = lnd.calls
+    .filter(n => n.method === 'deriveSharedKey')
+    .map(n => n.args.key_loc);
+
+  // The record is read with the record key, as the node reads it
+  const recordKeyIndex = readRecordKeyIndex({record: res.record}).index;
+
+  const {key} = await getRecordKey({lnd, index: recordKeyIndex});
+
   const {id, ...label} = readServiceLabel({offer: res.offer});
   const offer = parseOffer({offer: res.offer});
-  const record = read(res.record);
+  const record = decodeRecord({key, record: res.record});
 
   const pathIds = (args.paths || []).map(n => n.id);
 
@@ -149,7 +92,7 @@ const create = async ({keys, peers, ...args}) => {
       hops: n.hops.length,
       introduction_node: n.introduction_node,
     })),
-    record_key_index: readRecordKeyIndex({record: res.record}).index,
+    record_key_index: recordKeyIndex,
     service_id: given(res.service_id, [args.service_id]),
     suggested: suggestedAmounts({offer: res.offer}),
     types: decodeRecords({encoded: offer.encoded}).records.map(n => n.type),
@@ -214,14 +157,14 @@ const tests = [
     method: createTwo,
   },
   {
-    args: {paths: [path1, path2]},
+    args: {paths: [makePath(peer, 8), makePath(otherPeer, 9)]},
     description: 'A support offer can use given blinded paths',
     expected: {
       ...created,
-      path_ids: [path1.id, path2.id],
+      path_ids: ['08'.repeat(32), '09'.repeat(32)],
       paths: [
-        {hops: 2, introduction_node: path1.introduction_node},
-        {hops: 2, introduction_node: path2.introduction_node},
+        {hops: 2, introduction_node: peer},
+        {hops: 2, introduction_node: otherPeer},
       ],
     },
     method: create,
@@ -255,7 +198,7 @@ const tests = [
     method: create,
   },
   {
-    args: {description: 'episode', keys: {3: derived}},
+    args: {description: 'episode'},
     description: 'A support offer can use the issuer id of another offer',
     expected: {
       ...created,
@@ -270,7 +213,13 @@ const tests = [
     method: createForIssuer,
   },
   {
-    args: {keys: {3: asKey(Buffer.alloc(32, 7))}},
+    args: {
+      keys: [{
+        family: derivedKeyFamily,
+        index: issuerKeyIndex,
+        secret: '07'.repeat(32),
+      }],
+    },
     description: 'An issuer record key has to be its offer issuer id',
     error: [400, 'ExpectedIssuerRecordKeyForItsOfferIssuerId'],
     method: createForIssuer,
@@ -342,7 +291,7 @@ const tests = [
     method: create,
   },
   {
-    args: {introduction: peer, paths: [path1]},
+    args: {introduction: peer, paths: [makePath(peer, 8)]},
     description: 'An introduction peer is not given with paths',
     error: [400, 'ExpectedEitherIntroductionPeerOrGivenPaths'],
     method: create,
@@ -354,7 +303,7 @@ const tests = [
     method: create,
   },
   {
-    args: {paths: path1},
+    args: {paths: makePath(peer, 8)},
     description: 'Paths are expected to be an array',
     error: [400, 'ExpectedArrayOfPathsForSupportOffer'],
     method: create,
@@ -366,37 +315,37 @@ const tests = [
     method: create,
   },
   {
-    args: {paths: [{...path1, id: undefined}]},
+    args: {paths: [{...makePath(peer, 8), id: undefined}]},
     description: 'A given path needs its path id',
     error: [400, 'ExpectedPathIdForGivenSupportOfferPath'],
     method: create,
   },
   {
-    args: {paths: [{...path1, id: '0a'.repeat(15)}]},
+    args: {paths: [{...makePath(peer, 8), id: '0a'.repeat(15)}]},
     description: 'A given path id is at least 16 bytes',
     error: [400, 'ExpectedPathIdOfAtLeast16BytesForGivenPath'],
     method: create,
   },
   {
-    args: {paths: [path1, {...path2, id: path1.id}]},
+    args: {paths: [makePath(peer, 8), makePath(otherPeer, 8)]},
     description: 'Given paths need different path ids',
     error: [400, 'ExpectedUniquePathIdsForSupportOfferPaths'],
     method: create,
   },
   {
-    args: {paths: [{...path1, hops: []}]},
+    args: {paths: [{...makePath(peer, 8), hops: []}]},
     description: 'A given path needs hops',
     error: [400, 'ExpectedHopsInGivenSupportOfferPath'],
     method: create,
   },
   {
-    args: {paths: [{...path1, introduction_node: undefined}]},
+    args: {paths: [{...makePath(peer, 8), introduction_node: undefined}]},
     description: 'A given path needs an introduction',
     error: [400, 'ExpectedIntroductionInGivenSupportOfferPath'],
     method: create,
   },
   {
-    args: {paths: [{...path1, key: undefined}]},
+    args: {paths: [{...makePath(peer, 8), key: undefined}]},
     description: 'A given path needs a path key',
     error: [400, 'ExpectedPathKeyInGivenSupportOfferPath'],
     method: create,

@@ -62,7 +62,7 @@ module.exports = ({encoded}) => {
     const sequence = findRecord(records, typeEntryServiceSequence);
     const withoutPaths = findRecord(records, typeEntryOfferWithoutPaths);
 
-    const isReference = !!nameRecord || !!issuerId || !!serviceId || !!sequence;
+    const isReference = !!(nameRecord || issuerId || serviceId || sequence);
 
     const forms = [!!offer, !!withoutPaths, isReference].filter(n => !!n);
 
@@ -113,11 +113,11 @@ module.exports = ({encoded}) => {
 
     const lowest = !sequence ? undefined : sequenceOf(sequence);
 
-    const {bip353_name} = hexAsBip353Name({encoded: nameRecord.value});
+    const decodedName = hexAsBip353Name({encoded: nameRecord.value});
 
     return {
       reference: {
-        bip353_name,
+        bip353_name: decodedName.bip353_name,
         issuer_id: issuerId.value,
         ...(!serviceId ? {} : {service_id: serviceId.value}),
         ...(!lowest || lowest === '0' ? {} : {service_sequence: lowest}),

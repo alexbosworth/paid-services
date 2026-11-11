@@ -1,14 +1,14 @@
 const asyncAuto = require('async/auto');
+const asyncify = require('async/asyncify');
 const {onionForPath} = require('bolt04');
 const {returnResult} = require('asyncjs-util');
 const {sendMessage} = require('ln-service');
 
 const getPathOutbound = require('./get_path_outbound');
+const {largeOnionBytes} = require('./constants');
 
 const errorTooLarge = 'ExpectedHopPayloadsToFitWithinMaximumOnionPacketSize';
 const isLargeOnion = onion => !!onion && onion.length / 2 === largeOnionBytes;
-const isTooLarge = err => !!err && err.message === errorTooLarge;
-const largeOnionBytes = 32834;
 
 /** Send a response to a network request back through its reply path
 
@@ -85,34 +85,41 @@ module.exports = (args, cbk) => {
       }],
 
       // Check that the response fits in an onion message that can be sent
-      checkSize: ['getRoute', ({getRoute}, cbk) => {
+      checkSize: ['getRoute', asyncify(({getRoute}) => {
         try {
-          const {onion} = onionForPath({
+          onionForPath({
             inbound: getRoute.hops,
             key: getRoute.key,
             outbound: getRoute.outbound,
             records: [args.message],
           });
-
-          // Exit early when the response can be in a large onion message
-          if (!args.is_regular) {
-            return cbk();
-          }
-
-          if (isLargeOnion(onion)) {
-            return cbk([413, 'ExpectedResponseThatFitsRegularOnionMessage']);
-          }
-
-          return cbk();
         } catch (err) {
           // Exit early when the response does not fit in any onion message
-          if (isTooLarge(err)) {
-            return cbk([413, 'ExpectedResponseThatFitsLargeOnionMessage']);
+          if (!!err && err.message === errorTooLarge) {
+            throw [413, 'ExpectedResponseThatFitsLargeOnionMessage'];
           }
 
-          return cbk([400, 'FailedToEncodeResponseOnionMessage', {err}]);
+          throw [400, 'FailedToEncodeResponseOnionMessage', {err}];
         }
-      }],
+
+        const {onion} = onionForPath({
+          inbound: getRoute.hops,
+          key: getRoute.key,
+          outbound: getRoute.outbound,
+          records: [args.message],
+        });
+
+        // Exit early when the response can be in a large onion message
+        if (!args.is_regular) {
+          return;
+        }
+
+        if (isLargeOnion(onion)) {
+          throw [413, 'ExpectedResponseThatFitsRegularOnionMessage'];
+        }
+
+        return;
+      })],
 
       // Send the response message through the reply path
       send: ['checkSize', 'getRoute', ({getRoute}, cbk) => {

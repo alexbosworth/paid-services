@@ -1,14 +1,15 @@
 const asyncAuto = require('async/auto');
+const asyncify = require('async/asyncify');
 const {blindedPathFromHops} = require('bolt04');
 const {getIdentity} = require('ln-service');
 const {getPeers} = require('ln-service');
 const {returnResult} = require('asyncjs-util');
 
-const isHex = n => !(n.length % 2) && /^[0-9A-F]*$/i.test(n);
-const isHexString = n => typeof n === 'string' && isHex(n);
+const {minPathIdBytes} = require('./constants');
+
+const isHex = n => typeof n === 'string' && /^([0-9a-f]{2})*$/i.test(n);
 const isLongPathId = n => n.length / 2 >= minPathIdBytes;
 const isPublicKey = n => typeof n === 'string' && /^[0-9A-F]{66}$/i.test(n);
-const minPathIdBytes = 16;
 
 /** Create a blinded path to self that can be published to receive messages,
   starting at a connected `introduction` peer, or at self
@@ -40,7 +41,7 @@ module.exports = ({id, introduction, lnd}, cbk) => {
     return asyncAuto({
       // Check arguments
       validate: cbk => {
-        if (!!id && !isHexString(id)) {
+        if (!!id && !isHex(id)) {
           return cbk([400, 'ExpectedHexEncodedPathIdToCreateNetworkPath']);
         }
 
@@ -50,7 +51,10 @@ module.exports = ({id, introduction, lnd}, cbk) => {
         }
 
         if (!!introduction && !isPublicKey(introduction)) {
-          return cbk([400, 'ExpectedIntroductionPublicKeyToCreateNetworkPath']);
+          return cbk([
+            400,
+            'ExpectedIntroductionPublicKeyToCreateNetworkPath',
+          ]);
         }
 
         if (!lnd) {
@@ -100,22 +104,22 @@ module.exports = ({id, introduction, lnd}, cbk) => {
       }],
 
       // Create the blinded path
-      create: ['nodes', ({nodes}, cbk) => {
+      create: ['nodes', asyncify(({nodes}) => {
         try {
           const blinded = blindedPathFromHops({id, hops: nodes.hops});
 
-          return cbk(null, {
+          return {
             id: blinded.id,
             path: {
               hops: blinded.path,
               introduction_node: nodes.introduction,
               key: blinded.key,
             },
-          });
+          };
         } catch (err) {
-          return cbk([400, 'FailedToCreateNetworkPath', {err}]);
+          throw [400, 'FailedToCreateNetworkPath', {err}];
         }
-      }],
+      })],
     },
     returnResult({reject, resolve, of: 'create'}, cbk));
   });

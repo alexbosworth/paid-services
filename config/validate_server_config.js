@@ -3,7 +3,6 @@ const isPublicKey = n => !!n && /^[0-9A-F]{66}$/i.test(n);
 const isUrl = n => {try { return !!(new URL(n)); } catch (e) { return !e; }};
 const maxProfileByteLength = 400;
 const nodes = env => (env.PAID_SERVICES_NETWORK_NODES || '').split(',');
-const notFound = -1;
 const profile = env => env.PAID_SERVICES_PROFILE_FOR_NODE || String();
 const links = env => env.PAID_SERVICES_PROFILE_URLS || String();
 const split = n => n.split('\n');
@@ -22,7 +21,7 @@ module.exports = ({env}) => {
     throw new Error('ExpectedEnvironmentVariablesToValidateServerConfig');
   }
 
-  if (nodes(env).filter(n=>!!n).findIndex(n => !isPublicKey(n)) !== notFound) {
+  if (nodes(env).filter(n => !!n).some(n => !isPublicKey(n))) {
     throw new Error('ExpectedCommaSeparatedListOfNetworkNodes');
   }
 
@@ -30,7 +29,7 @@ module.exports = ({env}) => {
     throw new Error('ExpectedLessProfileDataForProfileResponse');
   }
 
-  if (split(links(env)).filter(n=>!!n).findIndex(n => !isUrl(n)) !== notFound) {
+  if (split(links(env)).filter(n => !!n).some(n => !isUrl(n))) {
     throw new Error('ExpectedValidProfileLinksInServerConfig');
   }
 

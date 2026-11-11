@@ -12,24 +12,34 @@ const {pointFromScalar} = require('tiny-secp256k1');
 const {addServiceLabel} = require('./../../service_records');
 const method = require('./../../support/invoice_paths_to_fit');
 
-const asKey = n => Buffer.from(pointFromScalar(Buffer.alloc(32, n)))
-  .toString('hex');
+const node = '0256b328b30c8bf5839e24058747879408bdb36241dc9c2e7c619faa12b2920967';
 
-const node = asKey(9);
-const blinded = blindedPathFromHops({hops: [node]});
+// Get the public key of a secret of 32 bytes of a number
+const asKey = n => {
+  return Buffer.from(pointFromScalar(Buffer.alloc(32, n))).toString('hex');
+};
 
-const offer = addServiceLabel({
-  id: '0d'.repeat(16),
-  offer: createOffer({
-    description: 'support',
-    issuer_id: asKey(1),
-    paths: [{hops: blinded.path, introduction_node: node, key: blinded.key}],
+// Make a support offer of the issuer of secret 1, with a path from node 9
+const makeOffer = () => {
+  const blinded = blindedPathFromHops({hops: [node]});
+
+  return addServiceLabel({
+    id: '0d'.repeat(16),
+    offer: createOffer({
+      description: 'support',
+      issuer_id: asKey(1),
+      paths: [{
+        hops: blinded.path,
+        introduction_node: node,
+        key: blinded.key,
+      }],
+    })
+    .offer,
+    type: '1',
+    version: 1,
   })
-  .offer,
-  type: '1',
-  version: 1,
-})
-.offer;
+  .offer;
+};
 
 // A blinded payment path of two hops
 const paymentPath = n => ({
@@ -46,8 +56,7 @@ const paymentPath = n => ({
   min_htlc_mtokens: '1000',
 });
 
-const paths = [paymentPath(10), paymentPath(20), paymentPath(30)];
-
+// The invoice that payment paths are fit into
 const invoice = {
   created_at: '2026-10-01T00:00:00.000Z',
   expires_at: '2026-10-01T01:00:00.000Z',
@@ -58,8 +67,8 @@ const invoice = {
 // Make a request to pay the offer with a payer offer record of a size
 const makeRequest = bytes => {
   const unsigned = createUnsignedInvoiceRequest({
-    offer,
     mtokens: '1000',
+    offer: makeOffer(),
     payer_id: asKey(4),
   });
 
@@ -84,32 +93,34 @@ const makeRequest = bytes => {
   });
 };
 
-const request = makeRequest();
-
 // A support note sealed with a note of 112 bytes
 const note = {type: '3000805805', value: '00'.repeat(144)};
 
 // Find how many payment paths fit in an invoice for a request
-const fit = args => method({invoice, paths, ...args});
+const fit = args => {
+  const paths = [10, 20, 30].map(n => paymentPath(n));
+
+  return method({invoice, paths, ...args});
+};
 
 const tests = [
   {
-    args: {request, bytes: Infinity},
+    args: {bytes: Infinity, request: makeRequest()},
     description: 'Every payment path fits',
     expected: {count: 3},
   },
   {
-    args: {request, bytes: 1100},
+    args: {bytes: 1100, request: makeRequest()},
     description: 'An invoice has as many payment paths as fit',
     expected: {count: 2},
   },
   {
-    args: {request, bytes: 900},
+    args: {bytes: 900, request: makeRequest()},
     description: 'An invoice can have one payment path',
     expected: {count: 1},
   },
   {
-    args: {request, bytes: 400},
+    args: {bytes: 400, request: makeRequest()},
     description: 'No path fits, and there is no payer offer',
     expected: {is_payer_offer_too_large: false},
   },
@@ -124,7 +135,7 @@ const tests = [
     expected: {is_payer_offer_too_large: false},
   },
   {
-    args: {request, bytes: 1100, records: [note]},
+    args: {bytes: 1100, records: [note], request: makeRequest()},
     description: 'Records like a support note are counted in the size',
     expected: {count: 1},
   },

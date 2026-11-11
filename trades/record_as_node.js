@@ -6,7 +6,6 @@ const channelHexLength = 16;
 const chunkIpV4 = data => !!data ? data.value.match(/.{1,12}/g) : [];
 const chunkIpV6 = data => !!data ? data.value.match(/.{1,36}/g) : [];
 const chunkTorV3 = data => !!data ? data.value.match(/.{1,74}/g) : [];
-
 const findHighKeyChannelRecord = records => records.find(n => n.type === '1');
 const findIdRecord = records => records.find(n => n.type === '2');
 const findIpV4Record = records => records.find(n => n.type === '3');

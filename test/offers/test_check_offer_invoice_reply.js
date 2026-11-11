@@ -2,94 +2,24 @@ const {createHash} = require('node:crypto');
 const {deepStrictEqual} = require('node:assert/strict');
 const {test} = require('node:test');
 
-const {blindedPathFromHops} = require('bolt04');
 const {createInvoiceError} = require('invoices');
-const {createOffer} = require('invoices');
-const {pointFromScalar} = require('tiny-secp256k1');
 
-const makeInvoice = require('./fixtures/make_invoice');
-const makeRequest = require('./fixtures/make_request');
+const {featured} = require('./fixtures/check_offer_invoice_reply');
+const {fromNodeSix} = require('./fixtures/check_offer_invoice_reply');
+const {good} = require('./fixtures/check_offer_invoice_reply');
+const {invoiceFor} = require('./fixtures/check_offer_invoice_reply');
 const method = require('./../../offers/check_offer_invoice_reply');
+const {other} = require('./fixtures/check_offer_invoice_reply');
+const {path} = require('./fixtures/check_offer_invoice_reply');
+const {pathTo} = require('./fixtures/check_offer_invoice_reply');
+const {paymentPath} = require('./fixtures/check_offer_invoice_reply');
+const {request} = require('./fixtures/check_offer_invoice_reply');
+const {unissuedRequest} = require('./fixtures/check_offer_invoice_reply');
 
-const asKey = n => bufferAsHex(keyOf(Buffer.alloc(32, n)));
-const bufferAsHex = buffer => buffer.toString('hex');
 const createdAt = '2025-01-01T00:00:00.000Z';
 const expiresAt = '2100-01-01T00:00:00.000Z';
-const keyOf = secret => Buffer.from(pointFromScalar(secret));
 const mtokens = '1000';
-const node = asKey(9);
 const sha256 = n => createHash('sha256').update(n).digest('hex');
-
-const blinded = blindedPathFromHops({hops: [node]});
-
-// The path of the offer, that requests are sent over
-const path = {hops: blinded.path, introduction_node: node, key: blinded.key};
-
-// The offer of the issuer of secret 1
-const offer = createOffer({
-  issuer_id: asKey(1),
-  networks: ['bitcoin'],
-  paths: [path],
-})
-.offer;
-
-// A path that ends at the node of a secret, as a path of an offer
-const pathTo = n => ({
-  hops: [{encrypted_data: '00', relay_key: asKey(n)}],
-  introduction_node: node,
-  key: asKey(7),
-});
-
-// An offer without an issuer id, with paths that end at nodes 5 and 6
-const unissued = createOffer({
-  networks: ['bitcoin'],
-  paths: [pathTo(5), pathTo(6)],
-})
-.offer;
-
-// A payment path to pay an invoice over
-const paymentPath = {
-  base_fee_mtokens: '1',
-  cltv_delta: 40,
-  fee_rate: 1,
-  hops: blinded.path,
-  introduction_node: node,
-  key: blinded.key,
-  max_htlc_mtokens: '1000000',
-  min_htlc_mtokens: '1',
-};
-
-// A request for the offer, and a request for the offer of another amount
-const request = makeRequest({mtokens, offer, network: 'bitcoin'});
-
-const other = makeRequest({offer, mtokens: '2000', network: 'bitcoin'});
-
-// An invoice for a request
-const invoiceFor = ({encoded}, args) => makeInvoice({
-  encoded,
-  created_at: createdAt,
-  expires_at: expiresAt,
-  paths: [paymentPath],
-  ...args,
-});
-
-const good = invoiceFor(request);
-
-// An invoice for the request that has an invoice feature
-const featured = invoiceFor(request, {features: [{bit: 17}]});
-
-// A request for the offer without an issuer id
-const unissuedRequest = makeRequest({
-  mtokens,
-  network: 'bitcoin',
-  offer: unissued,
-});
-
-// An invoice for the request to the offer without an issuer id, from node 6
-const fromNodeSix = invoiceFor(unissuedRequest, {
-  node_id: asKey(6),
-  secret: bufferAsHex(Buffer.alloc(32, 6)),
-});
 
 const tests = [
   {

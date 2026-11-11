@@ -16,7 +16,7 @@ const tests = [
   },
   {
     args: {
-      encoded: Buffer.alloc(33, 2).toString('hex') + Buffer.alloc(33, 3).toString('hex'),
+      encoded: '02'.repeat(33) + '03'.repeat(33),
     },
     description: 'A node list is returned',
     expected: {

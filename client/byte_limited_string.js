@@ -1,4 +1,5 @@
 const byteLength = str => Buffer.byteLength(str, 'utf8');
+const charsOf = str => Array.from(str);
 
 /** Return a function that limits a string by a byte limit
 
@@ -13,7 +14,7 @@ const byteLength = str => Buffer.byteLength(str, 'utf8');
 */
 module.exports = ({limit}) => {
   const limited = string => {
-    return (Array.from(string || String()).reduce((sum, char) => {
+    return (charsOf(string || String()).reduce((sum, char) => {
       // Stop adding chars when the byte limit would be exceeded
       if (sum.limited || byteLength(sum.adjusted + char) > limit) {
         sum.limited = true;

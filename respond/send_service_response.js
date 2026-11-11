@@ -8,7 +8,6 @@ const messagesForResponse = require('./messages_for_response');
 
 const defaultSendMtokens = '1000';
 const maxFeeMtok = (requested, received) => (received - requested).toString();
-const mtokToSend = mtokens => mtokens !== '0' ? mtokens : defaultSendMtokens;
 const pathfindingTimeoutMs = 1000 * 60 * 10;
 
 /** Send a paid service response
@@ -74,7 +73,10 @@ module.exports = (args, cbk) => {
           return cbk([400, 'ExpectedUnexpiredInvoiceToSendServiceResponse']);
         }
 
-        const mtokens = BigInt(mtokToSend(details.mtokens));
+        // An invoice without an amount is paid the default amount
+        const isZero = details.mtokens === '0';
+
+        const mtokens = BigInt(isZero ? defaultSendMtokens : details.mtokens);
 
         if (mtokens > BigInt(args.mtokens)) {
           return cbk([400, 'ExpectedPaymentTokensNotGreaterThanReceived']);

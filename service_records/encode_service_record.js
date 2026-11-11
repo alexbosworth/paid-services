@@ -16,14 +16,12 @@ const {typeServiceType} = require('./constants');
 const {typeVersion} = require('./constants');
 const versionAsHex = require('./version_as_hex');
 
-const {isSafeInteger} = Number;
 const algorithm = 'chacha20-poly1305';
 const bufferAsHex = buffer => Buffer.from(buffer).toString('hex');
 const byteLength = hex => hex.length / 2;
 const hexAsBuffer = hex => Buffer.from(hex, 'hex');
 const isHex = n => typeof n === 'string' && /^([0-9a-f]{2})*$/i.test(n);
-const isIndex = n => isSafeInteger(n) && n >= 0 && n <= maxRecordKeyIndex;
-const isSalt = n => isHex(n) && byteLength(n) === lengthSaltBytes;
+const isIndex = n => Number.isInteger(n) && n >= 0 && n <= maxRecordKeyIndex;
 const isType = n => typeof n === 'string' && /^\d+$/.test(n);
 const lengthKeyBytes = 32;
 const nonce = Buffer.alloc(12);
@@ -65,7 +63,11 @@ module.exports = args => {
     throw new Error('ExpectedRecordKeyIndexToEncodeServiceRecord');
   }
 
-  if (args.salt !== undefined && !isSalt(args.salt)) {
+  if (args.salt !== undefined && !isHex(args.salt)) {
+    throw new Error('ExpectedSaltToEncodeServiceRecord');
+  }
+
+  if (args.salt !== undefined && byteLength(args.salt) !== lengthSaltBytes) {
     throw new Error('ExpectedSaltToEncodeServiceRecord');
   }
 

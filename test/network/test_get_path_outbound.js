@@ -3,35 +3,28 @@ const {deepStrictEqual, rejects} = require('node:assert/strict');
 const {test} = require('node:test');
 
 const {blindHopRecords} = require('bolt04/blinding');
-const {chanNumber} = require('bolt07');
 const {decryptBlindedPath} = require('bolt04');
 const {makeLnd} = require('mock-lnd');
-const {pointFromScalar} = require('tiny-secp256k1');
 const {pointMultiply} = require('tiny-secp256k1');
 const {rawChanId} = require('bolt07');
 
 const method = require('./../../network/get_path_outbound');
 
-const asKey = n => Buffer.from(pointFromScalar(Buffer.alloc(32, n)))
-  .toString('hex');
+const alias = '2x2x2';
 const bufferAsHex = buffer => buffer.toString('hex');
-const compareKeys = (a, b) => Buffer.compare(hexAsBuffer(a), hexAsBuffer(b));
+const channel = '1x1x1';
 const hexAsBuffer = hex => Buffer.from(hex, 'hex');
-const id = bufferAsHex(Buffer.alloc(32, 9));
-const notFound = {details: 'edge not found'};
-const numberOf = channel => chanNumber({channel}).number;
-const outpoint = `${bufferAsHex(Buffer.alloc(32))}:0`;
+const id = '09'.repeat(32);
+const identity = '031b84c5567b126440995d3ed5aaba0565d71e1834604819ff9c17f5e9d5dd078f';
+const other = '02531fe6068134503d2723133227c867ac8fa6c83c537e9a44c3c5bdbdcb1fe337';
+const peer = '024d4b6cd1361032ca9bd2aeb9d900aa4d45d9ead80ac9423374c451a7254d0766';
 const secretOf = n => Buffer.alloc(32, n);
 const sha256 = n => createHash('sha256').update(n).digest();
 const typeAllowedFeatures = '14';
 const typeNextNodeId = '4';
 const typePathId = '6';
 const typeShortChannelId = '2';
-
-// The node identity is the key of secret 1, its peer the key of secret 2
-const identity = asKey(1);
-const peer = asKey(2);
-const other = asKey(3);
+const unknown = '3x3x3';
 
 // The secrets of the nodes, to read the hops of a path as they would
 const secrets = {
@@ -40,29 +33,20 @@ const secrets = {
   [peer]: secretOf(2),
 };
 
-// The channel of self with the peer, which has a private alias
-const alias = '2x2x2';
-const channel = '1x1x1';
-
-// A channel that is not known
-const unknown = '3x3x3';
-
 // The direction of a node on the channel is 0 for the lesser key, else 1
-const [lesser] = [identity, peer].sort(compareKeys);
+const directionOf = key => {
+  const [lesser] = [identity, peer].sort((a, b) => {
+    return Buffer.compare(hexAsBuffer(a), hexAsBuffer(b));
+  });
 
-const directionOf = key => key === lesser ? '0' : '1';
-
-// The channel with the peer, as the graph has it
-const graphChannel = {
-  capacity: '1',
-  chan_point: outpoint,
-  channel_id: numberOf(channel),
-  node1_pub: identity,
-  node2_pub: peer,
+  return key === lesser ? '0' : '1';
 };
 
-// A channel in the graph that is not a channel of self
-const otherChannel = {...graphChannel, node1_pub: other};
+// The channel between a node and the peer, as the graph has it
+const channelWith = key => ({
+  id: channel,
+  policies: [{public_key: key}, {public_key: peer}],
+});
 
 // The records of a hop that forwards to a next node
 const toNode = next => [{type: typeNextNodeId, value: next}];
@@ -91,61 +75,19 @@ const makePath = hops => {
   return {key, hops: path, introduction_node: first.public_key};
 };
 
-// A path that starts at self and goes to the peer
-const fromSelf = makePath([hop(identity, toNode(peer)), hop(peer, ending)]);
+// Make a path that starts at self and goes to the peer
+const fromSelf = () => {
+  return makePath([hop(identity, toNode(peer)), hop(peer, ending)]);
+};
 
 // Make a fake LND of the identity node, connected to the peer, with channels
 // that are given, and that knows the graph channel when it is given
-const makeTestLnd = ({channels, graph} = {}) => {
-  const lnd = makeLnd({});
-
-  const {getInfo, listChannels} = lnd.default;
-
-  lnd.default.getChanInfo = ({}, cbk) => cbk(!graph ? notFound : null, graph);
-
-  lnd.default.getInfo = (args, cbk) => getInfo(args, (err, res) => {
-    return cbk(err, {...res, identity_pubkey: identity});
-  });
-
-  lnd.default.listChannels = (args, cbk) => listChannels(args, (err, res) => {
-    const [own] = res.channels;
-
-    return cbk(err, {
-      channels: (channels || []).map(n => ({
-        ...own,
-        alias_scids: n.alias_scids || [],
-        chan_id: n.chan_id,
-        remote_pubkey: n.remote_pubkey,
-      })),
-    });
-  });
-
-  lnd.default.listPeers = ({}, cbk) => cbk(null, {
-    peers: [{
-      address: '127.0.0.1:9735',
-      bytes_recv: '0',
-      bytes_sent: '0',
-      errors: [],
-      features: {},
-      flap_count: 0,
-      inbound: false,
-      last_flap_ns: '0',
-      ping_time: '0',
-      pub_key: peer,
-      sat_recv: '0',
-      sat_sent: '0',
-      sync_type: 'ACTIVE_SYNC',
-    }],
-  });
-
-  lnd.signer = {
-    deriveSharedKey: ({ephemeral_pubkey}, cbk) => cbk(null, {
-      shared_key: sha256(pointMultiply(ephemeral_pubkey, secretOf(1), true)),
-    }),
-  };
-
-  return lnd;
-};
+const makeTestLnd = ({channels, graph} = {}) => makeLnd({
+  channels: channels || [],
+  graph: {channels: !graph ? [] : [graph]},
+  peers: [{public_key: peer}],
+  secret: bufferAsHex(secretOf(1)),
+});
 
 // Get what to send over a path, and read the first hop to send with the key
 // to send as the node the outbound hops end at would, since it gets the hops
@@ -168,7 +110,7 @@ const sendOver = async args => {
 
 const tests = [
   {
-    args: {path: fromSelf},
+    args: {path: fromSelf()},
     description: 'LND is expected',
     error: [400, 'ExpectedLndToGetPathOutbound'],
   },
@@ -178,25 +120,25 @@ const tests = [
     error: [400, 'ExpectedBlindedPathToGetPathOutbound'],
   },
   {
-    args: {lnd: makeTestLnd(), path: {...fromSelf, hops: []}},
+    args: {lnd: makeTestLnd(), path: {...fromSelf(), hops: []}},
     description: 'Blinded path hops are expected',
     error: [400, 'ExpectedBlindedPathHopsToGetPathOutbound'],
   },
   {
     args: {
       lnd: makeTestLnd(),
-      path: {...fromSelf, introduction_node: hexAsBuffer(identity)},
+      path: {...fromSelf(), introduction_node: hexAsBuffer(identity)},
     },
     description: 'A path introduction node is a public key',
     error: [400, 'ExpectedIntroductionNodeKeyToGetPathOutbound'],
   },
   {
-    args: {lnd: makeTestLnd(), path: {...fromSelf, key: undefined}},
+    args: {lnd: makeTestLnd(), path: {...fromSelf(), key: undefined}},
     description: 'A blinded path key is expected',
     error: [400, 'ExpectedBlindedPathKeyToGetPathOutbound'],
   },
   {
-    args: {lnd: makeTestLnd(), path: {...fromSelf, introduction_node: null}},
+    args: {lnd: makeTestLnd(), path: {...fromSelf(), introduction_node: null}},
     description: 'A path introduction is expected',
     error: [400, 'ExpectedPathIntroductionToDeterminePathIntroduction'],
   },
@@ -207,7 +149,7 @@ const tests = [
   },
   {
     args: {
-      lnd: makeTestLnd({graph: graphChannel}),
+      lnd: makeTestLnd({graph: channelWith(identity)}),
       path: {
         ...makePath([hop(peer, ending)]),
         introduction_edge: `${channel}x${directionOf(peer)}`,
@@ -218,14 +160,14 @@ const tests = [
     expected: {id, hops: 1, outbound: [peer]},
   },
   {
-    args: {lnd: makeTestLnd(), path: fromSelf},
+    args: {lnd: makeTestLnd(), path: fromSelf()},
     description: 'A path that starts at self is sent to the next node named',
     expected: {id, hops: 1, outbound: [peer]},
   },
   {
     args: {
       lnd: makeTestLnd({
-        channels: [{chan_id: numberOf(channel), remote_pubkey: peer}],
+        channels: [{id: channel, partner_public_key: peer}],
       }),
       path: makePath([hop(identity, over(channel)), hop(peer, ending)]),
     },
@@ -236,9 +178,9 @@ const tests = [
     args: {
       lnd: makeTestLnd({
         channels: [{
-          alias_scids: [numberOf(alias)],
-          chan_id: numberOf(channel),
-          remote_pubkey: peer,
+          id: channel,
+          other_ids: [alias],
+          partner_public_key: peer,
         }],
       }),
       path: makePath([hop(identity, over(alias)), hop(peer, ending)]),
@@ -248,7 +190,7 @@ const tests = [
   },
   {
     args: {
-      lnd: makeTestLnd({graph: graphChannel}),
+      lnd: makeTestLnd({graph: channelWith(identity)}),
       path: makePath([hop(identity, over(channel)), hop(peer, ending)]),
     },
     description: 'A channel that self does not list is found in the graph',
@@ -268,9 +210,9 @@ const tests = [
   },
   {
     args: {
-      lnd: makeTestLnd({graph: graphChannel}),
+      lnd: makeTestLnd({graph: channelWith(identity)}),
       path: {
-        ...fromSelf,
+        ...fromSelf(),
         introduction_edge: `${channel}x${directionOf(identity)}`,
         introduction_node: undefined,
       },
@@ -364,7 +306,7 @@ const tests = [
   },
   {
     args: {
-      lnd: makeTestLnd({graph: otherChannel}),
+      lnd: makeTestLnd({graph: channelWith(other)}),
       path: makePath([hop(identity, over(channel)), hop(peer, ending)]),
     },
     description: 'A graph channel that self does not forward over is not used',

@@ -8,9 +8,11 @@ const {sign} = require('tiny-secp256k1');
 
 const method = require('./../../respond/send_service_response');
 
-// mock-lnd makes payment requests with an ECPair-shaped signing factory
+const donationRequest = 'lnbc1pvjluezpp5qqqsyqcyq5rqwzqfqqqsyqcyq5rqwzqfqqqsyqcyq5rqwzqfqypqdpl2pkx2ctnv5sxxmmwwd5kgetjypeh2ursdae8g6twvus8g6rfwvs8qun0dfjkxaq8rkx3yf5tcsyz3d73gafnh3cax9rn449d9p5uxz9ezhhypd0elx87sjle52x86fux2ypatgddc6k63n7erqz25le42c4u4ecky03ylcqca784w';
 const ecp = {fromPrivateKey: key => ({sign: hash => sign(hash, key)})};
+const {keys} = Object;
 
+// Make arguments for the method, replacing defaults with overrides
 const makeArgs = overrides => {
   let requests = 0;
 
@@ -29,11 +31,11 @@ const makeArgs = overrides => {
   const args = {
     lnd,
     mtokens: '10000',
-    request: 'lnbc1pvjluezpp5qqqsyqcyq5rqwzqfqqqsyqcyq5rqwzqfqqqsyqcyq5rqwzqfqypqdpl2pkx2ctnv5sxxmmwwd5kgetjypeh2ursdae8g6twvus8g6rfwvs8qun0dfjkxaq8rkx3yf5tcsyz3d73gafnh3cax9rn449d9p5uxz9ezhhypd0elx87sjle52x86fux2ypatgddc6k63n7erqz25le42c4u4ecky03ylcqca784w',
+    request: donationRequest,
     text: 'text',
   };
 
-  Object.keys(overrides).forEach(k => args[k] = overrides[k]);
+  keys(overrides).forEach(k => args[k] = overrides[k]);
 
   return args;
 };

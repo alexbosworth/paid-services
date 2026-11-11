@@ -1,26 +1,19 @@
-const {createHash} = require('node:crypto');
 const {deepStrictEqual, rejects} = require('node:assert/strict');
 const {test} = require('node:test');
 
 const {blindedPathFromHops} = require('bolt04');
 const {makeLnd} = require('mock-lnd');
-const {pointFromScalar} = require('tiny-secp256k1');
-const {pointMultiply} = require('tiny-secp256k1');
 
 const method = require('./../../network/return_network_response');
+const {reply} = require('./fixtures/return_network_response');
 
-const asKey = n => Buffer.from(pointFromScalar(Buffer.alloc(32, n)))
-  .toString('hex');
 const bufferAsHex = buffer => buffer.toString('hex');
+const identity = '031b84c5567b126440995d3ed5aaba0565d71e1834604819ff9c17f5e9d5dd078f';
 const largeOnionBytes = 32834;
 const message = {type: '66', value: '00'};
+const peer = '024d4b6cd1361032ca9bd2aeb9d900aa4d45d9ead80ac9423374c451a7254d0766';
 const regularOnionBytes = 1366;
-const secret = Buffer.alloc(32, 1);
-const sha256 = n => createHash('sha256').update(n).digest();
-
-// The node identity is the key of secret 1, its peer the key of secret 2
-const identity = asKey(1);
-const peer = asKey(2);
+const secret = '01'.repeat(32);
 
 // A message of a number of bytes
 const messageOf = bytes => ({type: '66', value: '00'.repeat(bytes)});
@@ -34,65 +27,22 @@ const makeReply = hops => {
   return {key, inbound: path, introduction_node: introduction};
 };
 
-// A reply path that starts at the peer
-const reply = makeReply([peer]);
-
-// Make a fake LND of the identity node, connected to the peer, that records
-// the messages it sends and the lookups of its peers
-const makeTestLnd = () => {
-  const lnd = makeLnd({});
-
-  const {getInfo} = lnd.default;
-
-  lnd.lookups = [];
-  lnd.sent = [];
-
-  lnd.default.getInfo = (args, cbk) => getInfo(args, (err, res) => {
-    return cbk(err, {...res, identity_pubkey: identity});
-  });
-
-  lnd.default.listPeers = ({}, cbk) => {
-    lnd.lookups.push(true);
-
-    return cbk(null, {
-      peers: [{
-        address: '127.0.0.1:9735',
-        bytes_recv: '0',
-        bytes_sent: '0',
-        errors: [],
-        features: {},
-        flap_count: 0,
-        inbound: false,
-        last_flap_ns: '0',
-        ping_time: '0',
-        pub_key: peer,
-        sat_recv: '0',
-        sat_sent: '0',
-        sync_type: 'ACTIVE_SYNC',
-      }],
-    });
-  };
-
-  lnd.default.sendOnionMessage = (args, cbk) => {
-    lnd.sent.push({peer: bufferAsHex(args.peer), size: args.onion.length});
-
-    return cbk();
-  };
-
-  lnd.signer = {
-    deriveSharedKey: ({ephemeral_pubkey}, cbk) => cbk(null, {
-      shared_key: sha256(pointMultiply(ephemeral_pubkey, secret, true)),
-    }),
-  };
-
-  return lnd;
-};
+// Make a fake LND of the identity node, connected to the peer
+const makeTestLnd = () => makeLnd({secret, peers: [{public_key: peer}]});
 
 // Return a response and see what was sent and whether a route was looked up
 const respond = async args => {
   await method(args);
 
-  return {lookups: args.lnd.lookups.length, sent: args.lnd.sent};
+  const callsTo = method => args.lnd.calls.filter(n => n.method === method);
+
+  return {
+    lookups: callsTo('listPeers').length,
+    sent: callsTo('sendOnionMessage').map(({args}) => ({
+      peer: bufferAsHex(args.peer),
+      size: args.onion.length,
+    })),
+  };
 };
 
 const tests = [

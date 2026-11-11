@@ -6,8 +6,6 @@ const {recordPointTag} = require('./constants');
 
 const bufferAsHex = buffer => buffer.toString('hex');
 const evenPrefix = Buffer.from('02', 'hex');
-const firstPoint = n => isPoint(pointOf(n)) ? pointOf(n) : firstPoint(n + 1);
-const pointOf = n => Buffer.concat([evenPrefix, sha256(recordPointTag + n)]);
 const sha256 = n => createHash('sha256').update(n).digest();
 
 /** Get the point that the service record key is derived with
@@ -21,4 +19,13 @@ const sha256 = n => createHash('sha256').update(n).digest();
     public_key: <Record Point Public Key Hex String>
   }
 */
-module.exports = () => ({public_key: bufferAsHex(firstPoint(Number()))});
+module.exports = () => {
+  // A point is tried for each counter until one is on the curve
+  const firstPoint = n => {
+    const point = Buffer.concat([evenPrefix, sha256(recordPointTag + n)]);
+
+    return isPoint(point) ? point : firstPoint(n + 1);
+  };
+
+  return {public_key: bufferAsHex(firstPoint(Number()))};
+};

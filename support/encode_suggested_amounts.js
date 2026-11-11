@@ -4,8 +4,8 @@ const amountsAsHex = require('./amounts_as_hex');
 const {typeSuggestedAmounts} = require('./constants');
 const {typeSuggestedCurrency} = require('./constants');
 
-const {isArray} = Array;
 const bufferAsHex = buffer => Buffer.from(buffer).toString('hex');
+const {isArray} = Array;
 const isCurrency = n => typeof n === 'string' && /^[A-Z]{3}$/.test(n);
 
 /** Encode the value of an `offer_suggested_amounts` offer record

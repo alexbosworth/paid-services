@@ -1,4 +1,5 @@
 const asyncAuto = require('async/auto');
+const asyncify = require('async/asyncify');
 const {createInvoice} = require('ln-service');
 const {parseOffer} = require('invoices');
 const {parsePaymentRequest} = require('invoices');
@@ -59,13 +60,13 @@ module.exports = ({lnd, request}, cbk) => {
       },
 
       // Read the description of the offer to use for the invoice
-      description: ['validate', ({}, cbk) => {
+      description: ['validate', asyncify(({}) => {
         try {
-          return cbk(null, parseOffer({offer: request.offer}).description);
+          return parseOffer({offer: request.offer}).description;
         } catch (err) {
-          return cbk([400, 'ExpectedValidOfferToCreateInvoiceForRequest']);
+          throw [400, 'ExpectedValidOfferToCreateInvoiceForRequest'];
         }
-      }],
+      })],
 
       // Create an LND invoice with blinded paths to receive the payment
       createInvoice: ['description', ({description}, cbk) => {
@@ -80,24 +81,21 @@ module.exports = ({lnd, request}, cbk) => {
       }],
 
       // Get the blinded payment paths of the LND invoice
-      paths: ['createInvoice', ({createInvoice}, cbk) => {
+      paths: ['createInvoice', asyncify(({createInvoice}) => {
         try {
-          const details = parsePaymentRequest({
-            request: createInvoice.request,
-          });
-
-          if (!isArray(details.paths) || !details.paths.length) {
-            return cbk([503, 'ExpectedBlindedPathsInInvoiceForRequest']);
-          }
-
-          return cbk(null, {
-            expires_at: details.expires_at,
-            paths: details.paths,
-          });
+          parsePaymentRequest({request: createInvoice.request});
         } catch (err) {
-          return cbk([503, 'FailedToParseInvoiceForRequest', {err}]);
+          throw [503, 'FailedToParseInvoiceForRequest', {err}];
         }
-      }],
+
+        const details = parsePaymentRequest({request: createInvoice.request});
+
+        if (!isArray(details.paths) || !details.paths.length) {
+          throw [503, 'ExpectedBlindedPathsInInvoiceForRequest'];
+        }
+
+        return {expires_at: details.expires_at, paths: details.paths};
+      })],
 
       // The invoice can be paid over its blinded paths
       invoice: ['createInvoice', 'paths', ({createInvoice, paths}, cbk) => {

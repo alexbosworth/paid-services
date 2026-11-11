@@ -3,11 +3,10 @@ const {test} = require('node:test');
 
 const method = require('./../../network/relays_as_hops');
 
-const bufferAsHex = buffer => buffer.toString('hex');
-const key = n => `02${bufferAsHex(Buffer.alloc(32, n))}`;
+const a = '02' + '01'.repeat(32);
+const b = '02'.repeat(33);
+const destination = '02' + '03'.repeat(32);
 const relaying = {features: [{bit: 39}]};
-
-const [a, b, destination] = [1, 2, 3].map(key);
 
 const tests = [
   {

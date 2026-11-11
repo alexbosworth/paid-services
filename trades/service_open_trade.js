@@ -161,11 +161,9 @@ module.exports = (args, cbk) => {
           try {
             const [to] = settled;
 
-            // Exit early when there was no settlement
+            // Exit early when there was no settlement, finally calls back
             if (!to) {
-              args.logger.info({trade_ended: true});
-
-              return cbk();
+              return args.logger.info({trade_ended: true});
             }
 
             const {alias, id} = await getNodeAlias({id: to, lnd: args.lnd});

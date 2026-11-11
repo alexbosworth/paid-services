@@ -1,9 +1,9 @@
 const {encodeBigSize} = require('bolt01');
 const {encodeTlvStream} = require('bolt01');
 
+const encode = record => encodeTlvStream({records: [record]}).encoded;
 const idRecord = n => ({type: '0', value: encodeBigSize({number: n}).encoded});
 const idType = '0';
-const encode = record => encodeTlvStream({records: [record]}).encoded;
 const nameRecord = n => ({type: '1', value: Buffer.from(n).toString('hex')});
 const referenceType = '0';
 

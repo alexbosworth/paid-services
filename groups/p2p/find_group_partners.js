@@ -1,5 +1,6 @@
 const asyncAuto = require('async/auto');
 const asyncEach = require('async/each');
+const asyncify = require('async/asyncify');
 const asyncRetry = require('async/retry');
 const {connectPeer} = require('ln-sync');
 const {returnResult} = require('asyncjs-util');
@@ -112,18 +113,18 @@ module.exports = ({coordinator, count, id, lnd}, cbk) => {
       }],
 
       // Parse the group partners response
-      partners: ['request', ({request}, cbk) => {
+      partners: ['request', asyncify(({request}) => {
         // Exit early when there are no records
         if (!request) {
-          return cbk(null, {outbound: coordinator});
+          return {outbound: coordinator};
         }
 
         try {
-          return cbk(null, decodePartnersRecords({records: request}));
+          return decodePartnersRecords({records: request});
         } catch (err) {
-          return cbk([503, err.message]);
+          throw [503, err.message];
         }
-      }],
+      })],
 
       // Attempt to connect to the partners
       peer: ['partners', ({partners}, cbk) => {

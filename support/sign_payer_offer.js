@@ -1,4 +1,5 @@
 const asyncAuto = require('async/auto');
+const asyncify = require('async/asyncify');
 const {getPublicKey} = require('ln-service');
 const {parseOffer} = require('invoices');
 const {returnResult} = require('asyncjs-util');
@@ -16,8 +17,7 @@ const signaturePreimage = require('./payer_offer_signature_preimage');
 const isDate = n => typeof n === 'string' && !isNaN(Date.parse(n));
 const isExpired = date => Date.parse(date) <= Date.now();
 const isKey = n => typeof n === 'string' && /^0[23][0-9a-f]{64}$/i.test(n);
-const isName = n => typeof n === 'string' && namePattern.test(n);
-const namePattern = /^[0-9a-zA-Z\-_.]+@[0-9a-zA-Z\-_.]+$/;
+const isName = n => typeof n === 'string' && /^[\w.-]+@[\w.-]+$/.test(n);
 const typeSchnorr = 'schnorr';
 
 /** Sign the support offer of a payer to send with a payment
@@ -96,15 +96,15 @@ module.exports = (args, cbk) => {
       }],
 
       // Open the record to get the offer and its signing key index
-      decode: ['getRecordKey', ({getRecordKey}, cbk) => {
+      decode: ['getRecordKey', asyncify(({getRecordKey}) => {
         try {
           const {key} = getRecordKey;
 
-          return cbk(null, decodeSupportRecord({key, record: args.record}));
+          return decodeSupportRecord({key, record: args.record});
         } catch (err) {
-          return cbk([400, err.message]);
+          throw [400, err.message];
         }
-      }],
+      })],
 
       // Get the key of the offer issuer id
       getKey: ['decode', ({decode}, cbk) => {
@@ -118,15 +118,15 @@ module.exports = (args, cbk) => {
 
       // Check the offer can be signed for with the offer issuer id key
       check: ['decode', 'getKey', ({decode, getKey}, cbk) => {
-        const {is_expired, issuer_id} = parseOffer({offer: decode.offer});
+        const details = parseOffer({offer: decode.offer});
 
         // A payer offer for an offer that has expired would be ignored
-        if (is_expired) {
+        if (details.is_expired) {
           return cbk([400, 'ExpectedUnexpiredOfferToSignPayerOffer']);
         }
 
         // The key has to be the offer issuer id
-        if (getKey.public_key !== issuer_id) {
+        if (getKey.public_key !== details.issuer_id) {
           return cbk([400, 'ExpectedIssuerIdKeyToSignPayerOffer']);
         }
 
@@ -137,23 +137,23 @@ module.exports = (args, cbk) => {
           return cbk([400, 'ExpectedOfferNetworkToSignPayerOffer']);
         }
 
-        return cbk(null, {issuer_id, network});
+        return cbk(null, {network, issuer_id: details.issuer_id});
       }],
 
       // Encode the payer offer without its signature
-      unsigned: ['check', 'decode', ({check, decode}, cbk) => {
+      unsigned: ['check', 'decode', asyncify(({check, decode}) => {
         try {
-          return cbk(null, encodePayerOffer(payerOfferArgs({
+          return encodePayerOffer(payerOfferArgs({
             bip353_name: args.bip353_name,
             expires_at: args.expires_at,
             issuer_id: check.issuer_id,
             offer: decode.offer,
           }))
-          .unsigned);
+          .unsigned;
         } catch (err) {
-          return cbk([400, 'ExpectedValidPayerOfferToSign']);
+          throw [400, 'ExpectedValidPayerOfferToSign'];
         }
-      }],
+      })],
 
       // Sign the offer and the payer id with the offer issuer id key
       sign: [
@@ -180,7 +180,12 @@ module.exports = (args, cbk) => {
       }],
 
       // Make the record to add to the invoice request
-      payerOffer: ['check', 'decode', 'sign', ({check, decode, sign}, cbk) => {
+      payerOffer: [
+        'check',
+        'decode',
+        'sign',
+        asyncify(({check, decode, sign}) =>
+      {
         try {
           const {type, value} = encodePayerOffer({
             ...payerOfferArgs({
@@ -192,11 +197,11 @@ module.exports = (args, cbk) => {
             signature: sign.signature,
           });
 
-          return cbk(null, {type, value, offer: decode.offer});
+          return {type, value, offer: decode.offer};
         } catch (err) {
-          return cbk([503, 'FailedToEncodePayerOffer', {err}]);
+          throw [503, 'FailedToEncodePayerOffer', {err}];
         }
-      }],
+      })],
     },
     returnResult({reject, resolve, of: 'payerOffer'}, cbk));
   });

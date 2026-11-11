@@ -39,7 +39,7 @@ module.exports = ({menu, offer}) => {
     throw new Error('ExpectedMenuTlvStreamToGetMenuSignaturePreimage');
   }
 
-  const {issuer_id} = parseOffer({offer});
+  const issuerId = parseOffer({offer}).issuer_id;
   const {network} = offerBitcoinNetwork({offer});
   const {id} = readServiceLabel({offer});
 
@@ -47,7 +47,7 @@ module.exports = ({menu, offer}) => {
     throw new Error('ExpectedSupportOfferNetworkToGetMenuSignaturePreimage');
   }
 
-  if (!issuer_id) {
+  if (!issuerId) {
     throw new Error('ExpectedSupportOfferIssuerIdToGetMenuSignaturePreimage');
   }
 
@@ -57,7 +57,7 @@ module.exports = ({menu, offer}) => {
 
   const preimage = Buffer.concat([
     hexAsBuffer(bitcoinChains[network]),
-    hexAsBuffer(issuer_id),
+    hexAsBuffer(issuerId),
     hexAsBuffer(id),
     hexAsBuffer(menu),
   ]);

@@ -44,6 +44,7 @@ module.exports = ({encoded}) => {
     const size = decodeBigSize({encoded: rest});
 
     const start = hexLength(size.length);
+
     const end = start + hexLength(Number(size.decoded));
 
     if (end > rest.length) {

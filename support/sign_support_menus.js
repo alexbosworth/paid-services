@@ -1,4 +1,5 @@
 const asyncAuto = require('async/auto');
+const asyncify = require('async/asyncify');
 const asyncMapSeries = require('async/mapSeries');
 const {createInvoiceError} = require('invoices');
 const {returnResult} = require('asyncjs-util');
@@ -71,25 +72,25 @@ module.exports = (args, cbk) => {
       },
 
       // Split the entries into pages to be signed
-      unsigned: ['validate', ({}, cbk) => {
+      unsigned: ['validate', asyncify(({}) => {
         try {
           const {pages} = menuPages({
             entries: args.entries,
             expires_at: args.expires_at,
           });
 
-          const {menu_id} = menuIdForPages({pages});
+          const menuId = menuIdForPages({pages}).menu_id;
 
-          return cbk(null, pages.map((pageEntries, page) => ({
-            menu_id,
+          return pages.map((pageEntries, page) => ({
             page,
             entries: pageEntries,
+            menu_id: menuId,
             pages: pages.length,
-          })));
+          }));
         } catch (err) {
-          return cbk([400, 'FailedToMakeSupportMenuPages', {err}]);
+          throw [400, 'FailedToMakeSupportMenuPages', {err}];
         }
-      }],
+      })],
 
       // Sign each of the pages
       sign: ['unsigned', ({unsigned}, cbk) => {

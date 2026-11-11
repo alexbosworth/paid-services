@@ -1,150 +1,106 @@
 const {deepStrictEqual} = require('node:assert/strict');
 const {test} = require('node:test');
 
-const lnService = require('ln-service');
 const {makeLnd} = require('mock-lnd');
 const {pointFromScalar} = require('tiny-secp256k1');
 
-const asKey = n => Buffer.from(pointFromScalar(Buffer.alloc(32, n)))
-  .toString('hex');
-const g = '79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798';
-const peer = `03${g}`;
-
-// The identity of the node, which is also the generator point
-const identity = `02${g}`;
-const other = asKey(2);
-const partner = asKey(4);
-const relay = asKey(3);
-
-// Nodes that relay onion messages signal feature bit 38 or 39
-const noRoute = [503, 'FailedToFindMessageHopsToDestination'];
-const relaying = {features: [{bit: 38}]};
-const silent = {features: []};
-
-// Routes are faked, one after another, so that nothing is looked up, and
-// the routes that are looked up are counted
-const fakes = {lookups: 0, nodes: {}, routes: []};
-
-lnService.getNode = ({public_key}, cbk) => {
-  const node = fakes.nodes[public_key];
-
-  return !node ? cbk([503, 'UnknownNode']) : cbk(null, node);
-};
-
-lnService.getRouteToDestination = ({}, cbk) => {
-  fakes.lookups++;
-
-  return cbk(null, {route: fakes.routes.shift() || null});
-};
-
 const method = require('./../../network/get_message_hops');
+
+const {entries} = Object;
+const identity = '0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798';
+const noRoute = [503, 'FailedToFindMessageHopsToDestination'];
+const onlyChannels = [67];
+const other = '024d4b6cd1361032ca9bd2aeb9d900aa4d45d9ead80ac9423374c451a7254d0766';
+const partner = '03462779ad4aad39514614751a71085f2f10e1c7a593e4e030efb5b8721ce55b0b';
+const peer = '0379be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798';
+const relay = '02531fe6068134503d2723133227c867ac8fa6c83c537e9a44c3c5bdbdcb1fe337';
+const relaying = [38];
+const silent = [];
+
+// Get the public key of a secret of 32 bytes of a number
+const asKey = n => {
+  return Buffer.from(pointFromScalar(Buffer.alloc(32, n))).toString('hex');
+};
 
 // A route found from the destination back to self goes through hops
 const routeThrough = hops => ({hops: hops.map(key => ({public_key: key}))});
 
+// Routes through relays that do not relay messages, a relay for each route
+const silentRelayRoutes = count => Array(count).fill(null).map((n, i) => {
+  return routeThrough([asKey(20 + i), peer, identity]);
+});
+
 // Make a fake LND with a connected peer, which can require channels, with
 // more connected peers, with channels with partners, and which can itself
-// require channels
-const makeTestLnd = (args = {}) => {
-  const lnd = makeLnd({});
-
-  const {getInfo, listChannels} = lnd.default;
-
-  // Nodes that only take messages over channels signal feature bit 66 or 67
-  const onlyChannels = {
-    '67': {is_known: true, is_required: false, name: 'only-channels'},
-  };
-
-  lnd.default.getInfo = (a, cbk) => getInfo(a, (err, res) => {
-    return cbk(err, {
-      ...res,
-      features: !args.is_self_channels_only ? {} : onlyChannels,
-      identity_pubkey: identity,
-    });
-  });
-
-  // The channels are with the partners
-  lnd.default.listChannels = (a, cbk) => listChannels(a, (err, res) => {
-    const [channel] = res.channels;
-
-    return cbk(err, {
-      channels: (args.partners || []).map(key => {
-        return {...channel, remote_pubkey: key};
-      }),
-    });
-  });
-
-  lnd.default.listPeers = ({}, cbk) => cbk(null, {
-    peers: [peer].concat(args.peers || []).map(key => ({
-      address: '127.0.0.1:9735',
-      bytes_recv: '0',
-      bytes_sent: '0',
-      errors: [],
-      features: key === peer && !!args.is_channels_only ? onlyChannels : {},
-      flap_count: 0,
-      inbound: false,
-      last_flap_ns: '0',
-      ping_time: '0',
-      pub_key: key,
-      sat_recv: '0',
-      sat_sent: '0',
-      sync_type: 'ACTIVE_SYNC',
+// require channels. Nodes in the graph have features, and routes to self can
+// be found.
+const makeTestLnd = (args = {}) => makeLnd({
+  channels: (args.partners || []).map(key => ({partner_public_key: key})),
+  features: !args.is_self_channels_only ? [] : onlyChannels,
+  graph: {
+    nodes: entries(args.nodes || {}).map(([key, features]) => ({
+      features,
+      public_key: key,
     })),
-  });
+  },
+  peers: [peer].concat(args.peers || []).map(key => ({
+    features: key === peer && !!args.is_channels_only ? onlyChannels : [],
+    public_key: key,
+  })),
+  routes: args.routes || [],
+  secret: '00'.repeat(31) + '01',
+});
 
-  return lnd;
-};
+// Get message hops from a fake LND, counting the routes looked up
+const getHops = async ({args, lnd, nodes, routes}) => {
+  const fake = makeTestLnd({...lnd, nodes, routes});
 
-// Get message hops with faked routes and node details, counting the lookups
-const getHops = async ({args, nodes, routes}) => {
-  fakes.lookups = Number();
-  fakes.nodes = nodes || {};
-  fakes.routes = routes || [];
+  const lookups = () => fake.calls.filter(n => n.method === 'queryRoutes');
 
   try {
-    const {hops} = await method(args);
+    const {hops} = await method({...args, lnd: fake});
 
-    return {hops, lookups: fakes.lookups};
+    return {hops, lookups: lookups().length};
   } catch (err) {
-    return {err, lookups: fakes.lookups};
+    return {err, lookups: lookups().length};
   }
 };
 
 const tests = [
   {
-    args: {destination: peer, lnd: makeTestLnd()},
+    args: {destination: peer},
     description: 'A connected peer is sent to directly',
     expected: {hops: [peer], lookups: 0},
   },
   {
-    args: {destination: peer.toUpperCase(), lnd: makeTestLnd()},
+    args: {destination: peer.toUpperCase()},
     description: 'A connected peer key in uppercase is the same peer',
     expected: {hops: [peer], lookups: 0},
   },
   {
-    args: {destination: Buffer.from(peer, 'hex'), lnd: makeTestLnd()},
+    args: {destination: Buffer.from(peer, 'hex')},
     description: 'A destination that is not a string returns an error',
     expected: {err: [400, 'ExpectedDestinationToGetMessageHops'], lookups: 0},
   },
   {
-    args: {destination: identity, lnd: makeTestLnd()},
+    args: {destination: identity},
     description: 'A message is not sent to self',
     expected: {err: [400, 'UnexpectedMessageDestinationIsSelf'], lookups: 0},
   },
   {
-    args: {destination: other, lnd: makeTestLnd()},
+    args: {destination: other},
     description: 'Without a route to the destination there are no hops',
     expected: {err: noRoute, lookups: 1},
   },
   {
-    args: {destination: other, lnd: makeTestLnd()},
+    args: {destination: other},
     description: 'A destination that is not a peer is reached through peers',
     expected: {hops: [peer, other], lookups: 1},
     nodes: {[peer]: relaying},
     routes: [routeThrough([peer, identity])],
   },
   {
-    args: {destination: other, lnd: makeTestLnd()},
+    args: {destination: other},
     description: 'Routes through nodes that do not relay are tried again',
     expected: {hops: [peer, other], lookups: 2},
     nodes: {[peer]: relaying, [relay]: silent},
@@ -154,7 +110,7 @@ const tests = [
     ],
   },
   {
-    args: {destination: other, lnd: makeTestLnd()},
+    args: {destination: other},
     description: 'Routes that start at a node that is not a peer are retried',
     expected: {hops: [peer, other], lookups: 2},
     nodes: {[peer]: relaying, [relay]: relaying},
@@ -164,58 +120,50 @@ const tests = [
     ],
   },
   {
-    args: {destination: other, lnd: makeTestLnd()},
+    args: {destination: other},
     description: 'Finding a route is given up after ten tries',
     expected: {err: noRoute, lookups: 10},
-    nodes: {[peer]: relaying, [relay]: silent},
-    routes: Array(11).fill(routeThrough([relay, peer, identity])),
+    nodes: {[peer]: relaying},
+    routes: silentRelayRoutes(11),
   },
   {
-    args: {destination: peer, lnd: makeTestLnd({is_channels_only: true})},
+    args: {destination: peer},
     description: 'A peer that only takes messages over channels gets a route',
     expected: {hops: [peer], lookups: 1},
+    lnd: {is_channels_only: true},
     nodes: {},
     routes: [routeThrough([identity])],
   },
   {
-    args: {
-      destination: peer,
-      is_expecting_reply: true,
-      lnd: makeTestLnd({is_self_channels_only: true, partners: [peer]}),
-    },
-    description: 'A reply that needs a channel comes back from a peer with one',
+    args: {destination: peer, is_expecting_reply: true},
+    description: 'A reply needing a channel comes back from a peer with one',
     expected: {hops: [peer], lookups: 0},
+    lnd: {is_self_channels_only: true, partners: [peer]},
   },
   {
-    args: {
-      destination: peer,
-      is_expecting_reply: true,
-      lnd: makeTestLnd({
-        is_self_channels_only: true,
-        partners: [partner],
-        peers: [partner],
-      }),
-    },
+    args: {destination: peer, is_expecting_reply: true},
     description: 'A reply that needs a channel is routed back over a channel',
     expected: {hops: [partner, peer], lookups: 1},
+    lnd: {is_self_channels_only: true, partners: [partner], peers: [partner]},
     nodes: {[partner]: relaying},
     routes: [routeThrough([partner, identity])],
   },
   {
-    args: {destination: peer, is_expecting_reply: true, lnd: makeTestLnd({})},
+    args: {destination: peer, is_expecting_reply: true},
     description: 'A reply comes back without a channel when self takes any',
     expected: {hops: [peer], lookups: 0},
   },
   {
-    args: {destination: peer, lnd: makeTestLnd({is_self_channels_only: true})},
-    description: 'A peer without a channel is sent to when no reply comes back',
+    args: {destination: peer},
+    description: 'A peer with no channel is sent to when no reply comes back',
     expected: {hops: [peer], lookups: 0},
+    lnd: {is_self_channels_only: true},
   },
 ];
 
-tests.forEach(({args, description, expected, nodes, routes}) => {
+tests.forEach(({args, description, expected, lnd, nodes, routes}) => {
   test(description, async () => {
-    const got = await getHops({args, nodes, routes});
+    const got = await getHops({args, lnd, nodes, routes});
 
     deepStrictEqual(got, expected, 'Got expected result');
   });

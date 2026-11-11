@@ -5,35 +5,31 @@ const {blindedPathFromHops} = require('bolt04');
 const {createOffer} = require('invoices');
 const {encodeTlvStream} = require('bolt01');
 const {parseOffer} = require('invoices');
-const {pointFromScalar} = require('tiny-secp256k1');
 
 const {addServiceLabel} = require('./../../service_records');
 const {decodeRecords} = require('./../../service_records');
 const isSupportOffer = require('./../../support/is_support_offer');
 const method = require('./../../support/offer_bitcoin_network');
 
-const asKey = n => Buffer.from(pointFromScalar(Buffer.alloc(32, n)));
-const node = asKey(9).toString('hex');
-const blinded = blindedPathFromHops({hops: [node]});
-const {key} = blinded;
-const paths = [{key, hops: blinded.path, introduction_node: node}];
-const regtest =
-  '06226e46111a0b59caaf126043eb5bbf28c34f3a5e332a1fc7b2b73cf188910f';
+const issuer = '031b84c5567b126440995d3ed5aaba0565d71e1834604819ff9c17f5e9d5dd078f';
+const networks = ['bitcoin', 'regtest', 'signet', 'testnet', 'testnet4'];
+const node = '0256b328b30c8bf5839e24058747879408bdb36241dc9c2e7c619faa12b2920967';
+const regtest = '06226e46111a0b59caaf126043eb5bbf28c34f3a5e332a1fc7b2b73cf188910f';
 
-// Make a support offer for networks
-const supportOffer = networks => addServiceLabel({
-  id: '0d'.repeat(16),
-  offer: createOffer({
+// Make a support offer for networks, with a path from the node of secret 9
+const supportOffer = networks => {
+  const blinded = blindedPathFromHops({hops: [node]});
+
+  const {offer} = createOffer({
     networks,
-    paths,
     description: 'support',
-    issuer_id: asKey(1).toString('hex'),
-  })
-  .offer,
-  type: '1',
-  version: 1,
-})
-.offer;
+    issuer_id: issuer,
+    paths: [{hops: blinded.path, introduction_node: node, key: blinded.key}],
+  });
+
+  return addServiceLabel({offer, id: '0d'.repeat(16), type: '1', version: 1})
+    .offer;
+};
 
 // Change the chains of an offer
 const withChains = (offer, chains) => {
@@ -54,8 +50,6 @@ const read = ({offer}) => ({
   ...method({offer}),
   is_support_offer: isSupportOffer({offer}).is_support_offer,
 });
-
-const networks = ['bitcoin', 'regtest', 'signet', 'testnet', 'testnet4'];
 
 const tests = [
   {

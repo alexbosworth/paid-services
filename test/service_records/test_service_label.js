@@ -1,21 +1,17 @@
 const {deepStrictEqual, throws} = require('node:assert/strict');
 const {test} = require('node:test');
 
-const {createOffer} = require('invoices');
 const {decodeTlvStream} = require('bolt01');
 const {encodeTlvStream} = require('bolt01');
 const {parseOffer} = require('invoices');
-const {pointFromScalar} = require('tiny-secp256k1');
 
 const addServiceLabel = require('./../../service_records/add_service_label');
 const decode = require('./../../service_records/decode_service_label');
 const encode = require('./../../service_records/encode_service_label');
 const readServiceLabel = require('./../../service_records/read_service_label');
 
-const bufferAsHex = buffer => buffer.toString('hex');
-const issuerKey = Buffer.from(pointFromScalar(Buffer.alloc(32, 1)));
-
-const issuerId = bufferAsHex(issuerKey);
+const id = '0d'.repeat(16);
+const offer = 'lno1qgsqvgnwgcg35z6ee2h3yczraddm72xrfua9uve2rlrm9deu7xyfzrckyyp3hpx92ea3yezqn9wna4d2hgzkt4c7rq6xqjqel7wp0a0f6hws0rc';
 
 // Add a raw record to an offer
 const withRecord = (offer, record) => {
@@ -25,9 +21,6 @@ const withRecord = (offer, record) => {
 
   return parseOffer({encoded}).offer;
 };
-
-const id = '0d'.repeat(16);
-const offer = createOffer({issuer_id: issuerId, networks: ['regtest']}).offer;
 
 // Labels with a service type of 1 and a version of 1
 const label = records => encodeTlvStream({

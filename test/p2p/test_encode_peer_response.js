@@ -3,10 +3,13 @@ const {test} = require('node:test');
 
 const method = require('./../../p2p/encode_peer_response');
 
+const {keys} = Object;
+
+// Make arguments for the method, replacing defaults with overrides
 const makeArgs = overrides => {
   const args = {id: '00'};
 
-  Object.keys(overrides).forEach(k => args[k] = overrides[k]);
+  keys(overrides).forEach(k => args[k] = overrides[k]);
 
   return args;
 };

@@ -15,7 +15,9 @@ const responseForSchema = require('./../../services/response_for_schema');
 const encode = records => encodeTlvStream({records: [records]}).encoded;
 const id1 = Buffer.alloc(32).toString('hex');
 const id2 = Buffer.alloc(32, 1).toString('hex');
+const {keys} = Object;
 
+// Make arguments for the method, replacing defaults with overrides
 const makeArgs = overrides => {
   let requests = 0;
 
@@ -54,7 +56,7 @@ const makeArgs = overrides => {
     node: Buffer.alloc(33, 3).toString('hex'),
   };
 
-  Object.keys(overrides).forEach(k => args[k] = overrides[k]);
+  keys(overrides).forEach(k => args[k] = overrides[k]);
 
   return args;
 };

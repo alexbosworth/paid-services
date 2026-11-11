@@ -3,6 +3,9 @@ const {test} = require('node:test');
 
 const method = require('./../../actions/send_twilio_sms');
 
+const {keys} = Object;
+
+// Make arguments for the method, replacing defaults with overrides
 const makeArgs = overrides => {
   const args = {
     account: 'account',
@@ -13,7 +16,7 @@ const makeArgs = overrides => {
     to: 'to',
   };
 
-  Object.keys(overrides).forEach(k => args[k] = overrides[k]);
+  keys(overrides).forEach(k => args[k] = overrides[k]);
 
   return args;
 };

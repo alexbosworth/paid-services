@@ -1,4 +1,5 @@
 const asyncAuto = require('async/auto');
+const asyncify = require('async/asyncify');
 const {decryptBlindedPath} = require('bolt04');
 const {diffieHellmanComputeSecret} = require('ln-service');
 const {returnResult} = require('asyncjs-util');
@@ -42,7 +43,7 @@ module.exports = ({encrypted, key, lnd}, cbk) => {
       }],
 
       // Decrypt the recipient data to get the path id
-      decrypt: ['getSecret', ({getSecret}, cbk) => {
+      decrypt: ['getSecret', asyncify(({getSecret}) => {
         try {
           const {id} = decryptBlindedPath({
             encrypted,
@@ -50,11 +51,11 @@ module.exports = ({encrypted, key, lnd}, cbk) => {
             secret: getSecret.secret,
           });
 
-          return cbk(null, {id});
+          return {id};
         } catch (err) {
-          return cbk([503, 'FailedToDecryptRecipientDataForPathId', {err}]);
+          throw [503, 'FailedToDecryptRecipientDataForPathId', {err}];
         }
-      }],
+      })],
     },
     returnResult({reject, resolve, of: 'decrypt'}, cbk));
   });

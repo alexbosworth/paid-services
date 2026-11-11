@@ -1,6 +1,8 @@
 const {createHash} = require('crypto');
 
 const asyncAuto = require('async/auto');
+const asyncEach = require('async/each');
+const asyncify = require('async/asyncify');
 const asyncMap = require('async/map');
 const asyncReflect = require('async/reflect');
 const {broadcastChainTransaction} = require('ln-service');
@@ -42,7 +44,6 @@ const decodeOnToOffRecovery = require('./decode_on_to_off_recovery');
 const {typePayMetadata} = require('./swap_field_types');
 
 const bufferAsHex = buffer => buffer.toString('hex');
-const defaultMaxFundingConfirmationDelay = 12;
 const defaultMinDelta = 60;
 const estimatedSize = 150;
 const family = 805;
@@ -55,7 +56,6 @@ const hexAsBase64 = hex => Buffer.from(hex, 'hex').toString('base64');
 const hexAsBuffer = hex => Buffer.from(hex, 'hex');
 const historicBlocksRange = 144 * 30;
 const isAnnex = element => element.startsWith('50');
-const isCompressed = true;
 const locktimeOf = tx => componentsOfTransaction({transaction: tx}).locktime;
 const maxRefundMultiple = (r, t) => Math.min(100, ((1000 + t) / 150) / r);
 const {min} = Math;
@@ -63,7 +63,7 @@ const minBlocks = 50;
 const pollInterval = {btcregtest: 100};
 const pubKeyAsInternalKey = key => Buffer.from(key).slice(1).toString('hex');
 const pubKeyAsSecret = hexPublicKey => hexPublicKey.slice(2);
-const publicKeyFor = key => Buffer.from(pointFromScalar(key, isCompressed));
+const publicKeyFor = key => Buffer.from(pointFromScalar(key));
 const removeAnnex = stack => stack.slice(0, -1);
 const sha256 = preimage => createHash('sha256').update(preimage).digest('hex');
 const sighashDefault = 0;
@@ -151,7 +151,7 @@ module.exports = (args, cbk) => {
       }],
 
       // Recovery details
-      recoveryDetails: ['getDecrypt', ({getDecrypt}, cbk) => {
+      recoveryDetails: ['getDecrypt', asyncify(({getDecrypt}) => {
         const decrypt = getDecrypt.secret;
 
         try {
@@ -160,7 +160,7 @@ module.exports = (args, cbk) => {
             recovery: args.recovery,
           });
 
-          return cbk(null, {
+          return {
             claim_coop_public_key_hash: details.claim_coop_public_key_hash,
             claim_solo_public_key: details.claim_solo_public_key,
             hash: details.hash,
@@ -171,11 +171,11 @@ module.exports = (args, cbk) => {
             solo_private_key: details.refund_solo_private_key,
             timeout: details.timeout,
             tokens: details.tokens,
-          });
+          };
         } catch (err) {
-          return cbk([400, 'ExpectedValidOnToOffRecoveryDetails', {err}]);
+          throw [400, 'ExpectedValidOnToOffRecoveryDetails', {err}];
         }
-      }],
+      })],
 
       // Lookup channel ids with the incoming peer when applicable
       getChannels: ['recoveryDetails', ({recoveryDetails}, cbk) => {
@@ -229,7 +229,9 @@ module.exports = (args, cbk) => {
             return;
           }
 
-          const channels = invoice.payments.map(n => n.in_channel);
+          const held = invoice.payments.filter(n => n.is_held);
+
+          const channels = held.map(n => n.in_channel);
           const hash = recoveryDetails.claim_coop_public_key_hash;
           const timeout = min(...invoice.payments.map(n => n.timeout));
 
@@ -278,7 +280,9 @@ module.exports = (args, cbk) => {
 
           args.emitter.emit('update', {offchain_funding_held: id});
 
-          const channels = invoice.payments.map(n => n.in_channel);
+          const held = invoice.payments.filter(n => n.is_held);
+
+          const channels = held.map(n => n.in_channel);
           const timeout = min(...invoice.payments.map(n => n.timeout));
 
           const delta = timeout - recoveryDetails.timeout;
@@ -457,36 +461,59 @@ module.exports = (args, cbk) => {
       // Check incoming peer constraints
       checkIncomingPeer: [
         'getChannels',
+        'recoveryDetails',
         'waitForDepositHold',
         'waitForFundHold',
-        ({getChannels, waitForDepositHold, waitForFundHold}, cbk) =>
+        ({
+          getChannels,
+          recoveryDetails,
+          waitForDepositHold,
+          waitForFundHold,
+        },
+        cbk) =>
       {
         // Exit early when there are no incoming peer constraints
-        if (!args.incoming_peer) {
+        if (!recoveryDetails.incoming_peer) {
           return cbk();
         }
 
-        const channels = getChannels.channels.map(n => n.id);
+        // A channel with the incoming peer can also be known by an alias id
+        const channels = flatten(getChannels.channels.map(channel => {
+          return [channel.id].concat(channel.other_ids || []);
+        }));
 
         // The deposit must come in under a channel with the incoming peer
         const invalidDeposit = waitForDepositHold.channels.find(id => {
           return !channels.includes(id);
         });
 
-        if (!!invalidDeposit) {
-          return cbk([503, 'UnexpectedInboundChannelForHeldDeposit']);
-        }
-
         // The funding must come in under a channel with the incoming peer
         const invalidFunding = waitForFundHold.channels.find(id => {
           return !channels.includes(id);
         });
 
-        if (!!invalidFunding) {
-          return cbk([503, 'UnexpectedInboundChannelForHeldFunding']);
+        // Exit early when the funds came in through the incoming peer
+        if (!invalidDeposit && !invalidFunding) {
+          return cbk();
         }
 
-        return cbk();
+        // Release the held funds back to the sender since the swap is off
+        const holds = [
+          recoveryDetails.refund_coop_private_key_hash,
+          recoveryDetails.hash,
+        ];
+
+        return asyncEach(holds, (id, cbk) => {
+          return cancelHodlInvoice({id, lnd: args.lnd}, () => cbk());
+        },
+        () => {
+          // Exit early when the deposit came in through a different peer
+          if (!!invalidDeposit) {
+            return cbk([503, 'UnexpectedInboundChannelForHeldDeposit']);
+          }
+
+          return cbk([503, 'UnexpectedInboundChannelForHeldFunding']);
+        });
       }],
 
       // Check that there are sufficient remaining blocks
@@ -677,17 +704,15 @@ module.exports = (args, cbk) => {
             return;
           }
 
-          const {messages} = invoice.payments.find(payment => {
-            return !!payment.messages.find(n => n.type === typePayMetadata);
-          });
+          const {hash} = recoveryDetails;
 
-          const message = messages.find(n => n.type === typePayMetadata);
+          // The swap secret is pushed as metadata on a payment
+          const message = flatten(invoice.payments.map(n => n.messages))
+            .filter(({type}) => type === typePayMetadata)
+            .find(({value}) => sha256(hexAsBuffer(value)) === hash);
 
+          // Exit early when no payment pushes the swap secret
           if (!message) {
-            return;
-          }
-
-          if (sha256(hexAsBuffer(message.value)) !== recoveryDetails.hash) {
             return;
           }
 

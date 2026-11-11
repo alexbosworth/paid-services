@@ -21,10 +21,10 @@ const isSignature = n => typeof n === 'string' && /^[0-9a-f]{128}$/i.test(n);
 */
 module.exports = ({menu, offer, signature}) => {
   try {
-    const {issuer_id} = parseOffer({offer});
+    const issuerId = parseOffer({offer}).issuer_id;
 
     // There is no signature without an issuer id or a signature
-    if (!issuer_id || !isSignature(signature)) {
+    if (!issuerId || !isSignature(signature)) {
       return {is_valid: false};
     }
 
@@ -33,7 +33,7 @@ module.exports = ({menu, offer, signature}) => {
     // BIP 340 keys are the x coordinate of the issuer id
     const isValid = verifySchnorr(
       hexAsBuffer(hash),
-      hexAsBuffer(issuer_id).subarray(1),
+      hexAsBuffer(issuerId).subarray(1),
       hexAsBuffer(signature)
     );
 

@@ -21,8 +21,8 @@ const count = 102;
 const feeRate = 1;
 const interval = 10;
 const size = 4;
-const tokens = 1e6;
 const times = 2000;
+const tokens = 1e6;
 
 // Make a joint transaction channel group with a sort defined
 test(`Setup sorted channel group`, async () => {

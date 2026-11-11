@@ -1,4 +1,5 @@
 const asyncAuto = require('async/auto');
+const asyncify = require('async/asyncify');
 const {decryptBlindedPath} = require('bolt04');
 const {diffieHellmanComputeSecret} = require('ln-service');
 const {getChannel} = require('ln-service');
@@ -15,7 +16,6 @@ const {isArray} = Array;
 const isEven = type => !(BigInt(type) % BigInt(2));
 const isKnown = record => knownHopRecordTypes.includes(record.type);
 const isPublicKey = n => typeof n === 'string' && /^[0-9A-F]{66}$/i.test(n);
-const isUnknownEven = record => !isKnown(record) && isEven(record.type);
 
 /** Get the blinded path after self, for a blinded path that starts at self
 
@@ -81,24 +81,24 @@ module.exports = (args, cbk) => {
       }],
 
       // Decrypt the data of the hop of self to read where the path goes next
-      decrypt: ['getSecret', ({getSecret}, cbk) => {
+      decrypt: ['getSecret', asyncify(({getSecret}) => {
         const [own] = args.hops;
 
         try {
-          return cbk(null, decryptBlindedPath({
+          return decryptBlindedPath({
             encrypted: own.encrypted_data,
             key: args.key,
             secret: getSecret.secret,
-          }));
+          });
         } catch (err) {
-          return cbk([503, 'FailedToDecryptOwnBlindedPathHop', {err}]);
+          throw [503, 'FailedToDecryptOwnBlindedPathHop', {err}];
         }
-      }],
+      })],
 
       // Check the hop of self can be followed, as a forwarding node would
       check: ['decrypt', ({decrypt}, cbk) => {
         // An unknown even record cannot be ignored, so the hop cannot be used
-        if (decrypt.records.some(isUnknownEven)) {
+        if (decrypt.records.some(n => !isKnown(n) && isEven(n.type))) {
           return cbk([
             400,
             'UnexpectedUnknownRequiredRecordInOwnBlindedPathHop',
@@ -154,10 +154,11 @@ module.exports = (args, cbk) => {
           return cbk();
         }
 
+        const {channels} = getChannels;
         const id = decrypt.next_channel_id;
 
         // A private channel can be named by one of its aliases
-        return cbk(null, getChannels.channels.find(n => idsOf(n).includes(id)));
+        return cbk(null, channels.find(n => idsOf(n).includes(id)));
       }],
 
       // Look for the next channel in the graph when self does not list it

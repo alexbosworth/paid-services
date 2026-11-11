@@ -6,11 +6,9 @@ const {typePayerOffer} = require('./constants');
 const {typePayerOfferExpiry} = require('./constants');
 const {typePayerOfferSignature} = require('./constants');
 
-const {floor} = Math;
-const asSeconds = date => !date ? 0 : floor(Date.parse(date) / msPerSecond);
+const asSeconds = n => !n ? 0 : Math.floor(Date.parse(n) / 1e3);
 const isDate = n => typeof n === 'string' && !isNaN(Date.parse(n));
 const isSignature = n => typeof n === 'string' && /^[0-9a-f]{128}$/i.test(n);
-const msPerSecond = 1e3;
 
 /** Encode a payer offer record to add to an invoice request before signing
 

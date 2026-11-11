@@ -1,4 +1,5 @@
 const asyncAuto = require('async/auto');
+const asyncify = require('async/asyncify');
 const asyncReflect = require('async/reflect');
 const asyncRetry = require('async/retry');
 const {cancelHodlInvoice} = require('ln-service');
@@ -63,15 +64,15 @@ module.exports = ({ask, lnd, logger}, cbk) => {
       getIdentity: ['validate', ({}, cbk) => getIdentity({lnd}, cbk)],
 
       // Decode the trade data
-      decodeDetails: ['askForTrade', ({askForTrade}, cbk) => {
+      decodeDetails: ['askForTrade', asyncify(({askForTrade}) => {
         try {
           const details = decodeTrade({trade: askForTrade.trade});
 
-          return cbk(null, details);
+          return details;
         } catch (err) {
-          return cbk([400, err.message]);
+          throw [400, err.message];
         }
-      }],
+      })],
 
       // Get details about an open ended trade
       findTrade: [
@@ -101,13 +102,13 @@ module.exports = ({ask, lnd, logger}, cbk) => {
       }],
 
       // Parse the trade payment request
-      requestDetails: ['findTrade', ({findTrade}, cbk) => {
+      requestDetails: ['findTrade', asyncify(({findTrade}) => {
         try {
-          return cbk(null, parsePaymentRequest({request: findTrade.request}));
+          return parsePaymentRequest({request: findTrade.request});
         } catch (err) {
-          return cbk([400, err.message]);
+          throw [400, err.message];
         }
-      }],
+      })],
 
       // Get the invoice for the trade in case its our own trade
       getRequest: ['requestDetails', asyncReflect(({requestDetails}, cbk) => {

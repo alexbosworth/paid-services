@@ -5,6 +5,11 @@ const {encodeTlvStream} = require('bolt01');
 
 const method = require('./../../client/messages_for_request');
 
+const encode = records => encodeTlvStream({records}).encoded;
+const replyRequest = 'lnbc2500u1qpuskf07v3qs6qqqgzqvzq2ps8pqysqqgzqvzq2ps8pqysqqgzqvzq2ps8pqyszqsxs2rzgrrw4czqcm0venx2egrqpq7w393ehf5pfcmx382tjxl3yhcsx5d4tks90vqxg75d4wht32gvjhckp7w45ms008glc2ukggutj38zlf92va7x7qsdgej892uy90t4pcqqg9lc8wdv5qjqfwj9';
+const requestRecords = '0093010101038e0001d0018200790b25fe64410d00004080c1014181c20240004080c1014181c20240004080c1014181c202404081a0a189031bab81031b7b33332b2818020f3a258e6e9a0538d9a2752e46fc497c40d46d576815ec0191ea36aebae2a43257c583e7569b83de747f0ae5908e2e5138be92a99df1bc08351991caae10af5d43800105fe0ee6b2800205fe0ee6b2800103000101';
+const zeroSecret = '0000000000000000000000000000000000000000000000000000000000000000';
+
 const tests = [
   {
     args: {},
@@ -13,9 +18,9 @@ const tests = [
   },
   {
     args: {
-      arguments: encodeTlvStream({records: [{type: '0', value: '01'}]}).encoded,
-      reply: 'lnbc2500u1qpuskf07v3qs6qqqgzqvzq2ps8pqysqqgzqvzq2ps8pqysqqgzqvzq2ps8pqyszqsxs2rzgrrw4czqcm0venx2egrqpq7w393ehf5pfcmx382tjxl3yhcsx5d4tks90vqxg75d4wht32gvjhckp7w45ms008glc2ukggutj38zlf92va7x7qsdgej892uy90t4pcqqg9lc8wdv5qjqfwj9',
-      secret: '0000000000000000000000000000000000000000000000000000000000000000',
+      arguments: encode([{type: '0', value: '01'}]),
+      reply: replyRequest,
+      secret: zeroSecret,
       service: '1',
     },
     description: 'An encoded request is returned',
@@ -24,11 +29,11 @@ const tests = [
       messages: [
         {
           type: '805805',
-          value: '0093010101038e0001d0018200790b25fe64410d00004080c1014181c20240004080c1014181c20240004080c1014181c202404081a0a189031bab81031b7b33332b2818020f3a258e6e9a0538d9a2752e46fc497c40d46d576815ec0191ea36aebae2a43257c583e7569b83de747f0ae5908e2e5138be92a99df1bc08351991caae10af5d43800105fe0ee6b2800205fe0ee6b2800103000101',
+          value: requestRecords,
         },
         {
           type: '5482373484',
-          value: '0000000000000000000000000000000000000000000000000000000000000000',
+          value: zeroSecret,
         },
       ],
     },

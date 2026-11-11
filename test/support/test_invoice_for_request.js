@@ -1,16 +1,9 @@
 const {rejects} = require('node:assert/strict');
 const {test} = require('node:test');
 
-const {createOffer} = require('invoices');
-const {pointFromScalar} = require('tiny-secp256k1');
-
 const method = require('./../../support/invoice_for_request');
 
-const bufferAsHex = buffer => Buffer.from(buffer).toString('hex');
-
-const issuerId = bufferAsHex(pointFromScalar(Buffer.alloc(32, 1)));
-
-const {offer} = createOffer({description: 'support', issuer_id: issuerId});
+const offer = 'lno1pgrhxatswphhyaqkyyp3hpx92ea3yezqn9wna4d2hgzkt4c7rq6xqjqel7wp0a0f6hws0rc';
 
 const tests = [
   {

@@ -9,7 +9,6 @@ const responseForInvoice = require('./response_for_invoice');
 const responseForNetwork = require('./response_for_network');
 const responseForPong = require('./response_for_pong');
 const responseForProfile = require('./response_for_profile');
-const responseForRelay = require('./response_for_relay');
 const responseForSchema = require('./response_for_schema');
 const responseForServices = require('./response_for_services');
 const {types} = require('./schema');
@@ -22,7 +21,6 @@ const {types} = require('./schema');
     fetch: <Node Fetch Function>
     id: <Invoice Id Hex String>
     lnd: <Authenticated LND API Object>
-    network: <Network Name String>
     to: <Responding to Public Key Hex String>
     type: <Request Type Number String>
   }
@@ -45,7 +43,7 @@ const {types} = require('./schema');
     }
   }
 */
-module.exports = ({arguments, env, fetch, id, lnd, network, to, type}, cb) => {
+module.exports = ({arguments, env, fetch, id, lnd, to, type}, cb) => {
   return new Promise((resolve, reject) => {
     return asyncAuto({
       // Check arguments
@@ -64,10 +62,6 @@ module.exports = ({arguments, env, fetch, id, lnd, network, to, type}, cb) => {
 
         if (!lnd) {
           return cbk([400, 'ExpectedBackingLndToRespondToRequest']);
-        }
-
-        if (!network) {
-          return cbk([400, 'ExpectedNetworkNameToRespondToRequest']);
         }
 
         if (!to) {
@@ -104,9 +98,6 @@ module.exports = ({arguments, env, fetch, id, lnd, network, to, type}, cb) => {
 
         case types.profile:
           return responseForProfile({env}, cbk);
-
-        case types.relay:
-          return responseForRelay({arguments, env, lnd, network}, cbk);
 
         case types.schema:
           return responseForSchema({arguments, env}, cbk);

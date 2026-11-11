@@ -10,7 +10,7 @@ const asString = value => Buffer.from(value, 'hex').toString('utf8');
 const byteLength = hex => hex.length / 2;
 const findAmount = records => records.find(n => n.type === '1');
 const findDescription = records => records.find(n => n.type === '3');
-const isNumber = n => !isNaN(n) && !isNaN(parseFloat(n));
+const isWholeNumber = n => /^\d+$/.test(n);
 const maxAmountByteLength = 20;
 const maxDescriptionByteLength = 100;
 
@@ -85,19 +85,19 @@ module.exports = ({arguments, env, lnd, to}, cbk) => {
           return cbk([400, 'ExpectedShorterAmountForNewInvoice']);
         }
 
-        if (!!amount && !isNumber(asString(amount.value))) {
+        if (!!amount && !isWholeNumber(asString(amount.value))) {
           return cbk([400, 'ExpectedNumericValueForNewInvoice']);
         }
 
         const desc = findDescription(records);
 
         if (!!desc && byteLength(desc.value) > maxDescriptionByteLength) {
-          throw new Error('ExpectedShorterDescriptionForNewInvoice');
+          return cbk([400, 'ExpectedShorterDescriptionForNewInvoice']);
         }
 
         return cbk(null, {
           description: !!desc ? asString(desc.value) : undefined,
-          tokens: !!amount ? parseInt(asString(amount.value)) : undefined,
+          tokens: !!amount ? Number(asString(amount.value)) : undefined,
         });
       }],
 

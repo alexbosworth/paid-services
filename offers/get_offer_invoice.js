@@ -1,9 +1,9 @@
 const asyncAuto = require('async/auto');
+const asyncify = require('async/asyncify');
 const asyncReduce = require('async/reduce');
 const {createSignedInvoiceRequest} = require('invoices');
 const {getNetwork} = require('ln-sync');
 const {getPublicKey} = require('ln-service');
-const {pointFromScalar} = require('tiny-secp256k1');
 const {returnResult} = require('asyncjs-util');
 const {signBytes} = require('ln-service');
 
@@ -13,11 +13,9 @@ const {payerKeyFamily} = require('./constants');
 const requestOfferInvoice = require('./request_offer_invoice');
 const {resolvePathIntroductions} = require('./../network');
 
-const {isSafeInteger} = Number;
-const bufferAsHex = buffer => Buffer.from(buffer).toString('hex');
 const defaultTimeoutMs = 30000;
-const isTimeout = n => isSafeInteger(n) && n > 0;
-const placeholderPayerId = bufferAsHex(pointFromScalar(Buffer.alloc(32, 1)));
+const isTimeout = n => Number.isSafeInteger(n) && n > 0;
+const placeholderPayerId = '031b84c5567b126440995d3ed5aaba0565d71e1834604819ff9c17f5e9d5dd078f';
 const typeSchnorr = 'schnorr';
 
 /** Get an invoice for a BOLT 12 offer
@@ -104,20 +102,20 @@ module.exports = (args, cbk) => {
 
       // Make the request with a placeholder payer id, to check that it can be
       // made before a payer key is derived for it
-      checkRequest: ['getNetwork', ({getNetwork}, cbk) => {
+      checkRequest: ['getNetwork', asyncify(({getNetwork}) => {
         try {
-          return cbk(null, invoiceRequestForOffer({
+          return invoiceRequestForOffer({
             bip353_name: args.bip353_name,
             mtokens: args.mtokens,
             network: getNetwork.bitcoinjs,
             offer: args.offer,
             payer_id: placeholderPayerId,
             payer_note: args.payer_note,
-          }));
+          });
         } catch (err) {
-          return cbk([400, err.message]);
+          throw [400, err.message];
         }
-      }],
+      })],
 
       // Find the introduction node of each offer path to send the request to
       getPaths: ['checkRequest', ({checkRequest}, cbk) => {
@@ -147,21 +145,21 @@ module.exports = (args, cbk) => {
       unsigned: [
         'getNetwork',
         'getPayerKey',
-        ({getNetwork, getPayerKey}, cbk) =>
+        asyncify(({getNetwork, getPayerKey}) =>
       {
         try {
-          return cbk(null, invoiceRequestForOffer({
+          return invoiceRequestForOffer({
             bip353_name: args.bip353_name,
             mtokens: args.mtokens,
             network: getNetwork.bitcoinjs,
             offer: args.offer,
             payer_id: getPayerKey.public_key,
             payer_note: args.payer_note,
-          }));
+          });
         } catch (err) {
-          return cbk([400, err.message]);
+          throw [400, err.message];
         }
-      }],
+      })],
 
       // Sign the request with the payer id key, which never leaves LND
       sign: ['getPayerKey', 'unsigned', ({getPayerKey, unsigned}, cbk) => {
@@ -177,18 +175,18 @@ module.exports = (args, cbk) => {
       }],
 
       // Finish the request with its signature, to send it
-      request: ['sign', 'unsigned', ({sign, unsigned}, cbk) => {
+      request: ['sign', 'unsigned', asyncify(({sign, unsigned}) => {
         try {
           const {encoded, request} = createSignedInvoiceRequest({
             encoded: unsigned.encoded,
             signature: sign.signature,
           });
 
-          return cbk(null, {encoded, request, mtokens: unsigned.mtokens});
+          return {encoded, request, mtokens: unsigned.mtokens};
         } catch (err) {
-          return cbk([503, 'FailedToCreateSignedInvoiceRequest', {err}]);
+          throw [503, 'FailedToCreateSignedInvoiceRequest', {err}];
         }
-      }],
+      })],
 
       // Send the request over each path in turn until the recipient answers
       getReplies: ['offerPaths', 'request', ({offerPaths, request}, cbk) => {

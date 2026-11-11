@@ -5,16 +5,16 @@ const {encodeBigSize} = require('bolt01');
 const {encodeTlvStream} = require('bolt01');
 
 const bufferAsHex = buffer => buffer.toString('hex');
+const customRecordsType = '1';
 const encodeNumber = number => encodeBigSize({number: number || '0'}).encoded;
 const encodeTlv = records => encodeTlvStream({records}).encoded;
-const customRecordsType = '1';
 const hexAsBuffer = hex => Buffer.from(hex, 'hex');
 const keySendPreimageType = '5482373484';
 const paidServicesType = '805805';
 const paymentAmountType = '2';
 const paymentDetailsType = '1';
-const paymentWordsType = '0';
 const paymentType = '3';
+const paymentWordsType = '0';
 const serviceType = '1';
 const sha256 = preimage => createHash('sha256').update(preimage).digest();
 const standardRecordsType = '0';
@@ -62,7 +62,7 @@ module.exports = ({arguments, reply, secret, service}) => {
     records.push({type: customRecordsType, value: arguments});
   }
 
-  payment.push({type: paymentWordsType, value: encodeNumber(words.toString())});
+  payment.push({type: paymentWordsType, value: encodeNumber(String(words))});
   payment.push({type: paymentAmountType, value: encodeNumber(mtokens)});
   payment.push({type: paymentDetailsType, value: encoded});
 

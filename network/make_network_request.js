@@ -1,6 +1,7 @@
 const {randomBytes} = require('crypto');
 
 const asyncAuto = require('async/auto');
+const asyncify = require('async/asyncify');
 const {returnResult} = require('asyncjs-util');
 
 const encodePeerRequest = require('./../p2p/encode_peer_request');
@@ -9,10 +10,8 @@ const requestNetworkReply = require('./request_network_reply');
 
 const {isArray} = Array;
 const isPublicKey = n => typeof n === 'string' && /^[0-9A-F]{66}$/i.test(n);
-const {isSafeInteger} = Number;
-const isTimeout = n => isSafeInteger(n) && n > 0;
-const bufferAsHex = buffer => Buffer.from(buffer).toString('hex');
-const makeId = () => bufferAsHex(randomBytes(32));
+const isTimeout = n => Number.isSafeInteger(n) && n > 0;
+const makeId = () => randomBytes(32).toString('hex');
 const peerRequestType = 32768;
 const typeNetworkRequest = '32769';
 
@@ -103,15 +102,15 @@ module.exports = ({lnd, path, records, timeout, type}, cbk) => {
       id: ['validate', ({}, cbk) => cbk(null, makeId())],
 
       // Encode the request message
-      message: ['id', ({id}, cbk) => {
+      message: ['id', asyncify(({id}) => {
         try {
           const {message} = encodePeerRequest({id, records, type});
 
-          return cbk(null, {type: typeNetworkRequest, value: message});
+          return {type: typeNetworkRequest, value: message};
         } catch (err) {
-          return cbk([400, err.message]);
+          throw [400, err.message];
         }
-      }],
+      })],
 
       // Send the request and wait for the reply on its reply path
       getReply: ['message', ({message}, cbk) => {
@@ -126,27 +125,32 @@ module.exports = ({lnd, path, records, timeout, type}, cbk) => {
       }],
 
       // Read the response to the request
-      request: ['getReply', 'id', ({getReply, id}, cbk) => {
+      request: ['getReply', 'id', asyncify(({getReply, id}) => {
         try {
-          const {response} = parseRequestMessage({
+          parseRequestMessage({
             message: getReply.reply.value,
             type: peerRequestType,
           });
-
-          if (!response || response.id !== id) {
-            return cbk([503, 'ExpectedResponseToNetworkRequest']);
-          }
-
-          // Exit early when the server responds with a failure code
-          if (!!response.failure) {
-            return cbk(response.failure);
-          }
-
-          return cbk(null, {records: response.records});
         } catch (err) {
-          return cbk([503, 'ExpectedResponseToNetworkRequest']);
+          throw [503, 'ExpectedResponseToNetworkRequest'];
         }
-      }],
+
+        const {response} = parseRequestMessage({
+          message: getReply.reply.value,
+          type: peerRequestType,
+        });
+
+        if (!response || response.id !== id) {
+          throw [503, 'ExpectedResponseToNetworkRequest'];
+        }
+
+        // Exit early when the server responds with a failure code
+        if (!!response.failure) {
+          throw response.failure;
+        }
+
+        return {records: response.records};
+      })],
     },
     returnResult({reject, resolve, of: 'request'}, cbk));
   });

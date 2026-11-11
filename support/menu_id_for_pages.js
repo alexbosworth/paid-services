@@ -4,8 +4,8 @@ const encodeMenuEntry = require('./encode_menu_entry');
 const {listAsHex} = require('./../service_records');
 const {menuIdBytes} = require('./constants');
 
-const {isArray} = Array;
 const hexLength = bytes => bytes * 2;
+const {isArray} = Array;
 const sha256 = hex => createHash('sha256').update(Buffer.from(hex, 'hex'));
 
 /** Make the menu id of a menu from the encoded entries on each of its pages,

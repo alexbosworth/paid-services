@@ -3,8 +3,7 @@ const {createHash} = require('node:crypto');
 const {createSignedInvoice} = require('invoices');
 const {createUnsignedInvoice} = require('invoices');
 
-const bufferAsHex = buffer => buffer.toString('hex');
-const issuerSecret = bufferAsHex(Buffer.alloc(32, 1));
+const issuerSecret = '01'.repeat(32);
 const sha256 = n => createHash('sha256').update(n).digest('hex');
 
 /** Make a BOLT 12 invoice for a request of an offer, signed by the issuer of

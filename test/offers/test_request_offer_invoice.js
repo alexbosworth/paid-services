@@ -2,21 +2,17 @@ const {deepStrictEqual, rejects} = require('node:assert/strict');
 const {mock} = require('node:test');
 const {test} = require('node:test');
 
-const {blindedPathFromHops} = require('bolt04');
-const {createInvoiceError} = require('invoices');
-const {createOffer} = require('invoices');
-const {pointFromScalar} = require('tiny-secp256k1');
-
-const makeInvoice = require('./fixtures/make_invoice');
-const makeRequest = require('./fixtures/make_request');
+const {expired} = require('./fixtures/request_offer_invoice');
+const {fromNodeSix} = require('./fixtures/request_offer_invoice');
+const {good} = require('./fixtures/request_offer_invoice');
 const network = require('./../../network');
+const {path} = require('./fixtures/request_offer_invoice');
+const {pathTo} = require('./fixtures/request_offer_invoice');
+const {refusal} = require('./fixtures/request_offer_invoice');
+const {request} = require('./fixtures/request_offer_invoice');
+const {unissuedRequest} = require('./fixtures/request_offer_invoice');
 
-const asKey = n => bufferAsHex(keyOf(Buffer.alloc(32, n)));
-const bufferAsHex = buffer => buffer.toString('hex');
 const ended = [503, 'NetworkReplyListenerEnded'];
-const keyOf = secret => Buffer.from(pointFromScalar(secret));
-const mtokens = '1000';
-const node = asKey(9);
 
 // Reply to a request with the reply the fake LND has, noting that it was sent
 const fakeReply = ({lnd, message}, cbk) => {
@@ -29,71 +25,6 @@ const fakeReply = ({lnd, message}, cbk) => {
 mock.method(network, 'requestNetworkReply', fakeReply);
 
 const method = require('./../../offers/request_offer_invoice');
-
-const blinded = blindedPathFromHops({hops: [node]});
-
-const path = {hops: blinded.path, introduction_node: node, key: blinded.key};
-
-// The offer of the issuer of secret 1
-const offer = createOffer({
-  issuer_id: asKey(1),
-  networks: ['bitcoin'],
-  paths: [path],
-})
-.offer;
-
-const request = makeRequest({mtokens, offer, network: 'bitcoin'});
-
-// A payment path to pay an invoice over
-const paymentPath = {
-  base_fee_mtokens: '1',
-  cltv_delta: 40,
-  fee_rate: 1,
-  hops: blinded.path,
-  introduction_node: node,
-  key: blinded.key,
-  max_htlc_mtokens: '1000000',
-  min_htlc_mtokens: '1',
-};
-
-const good = makeInvoice({encoded: request.encoded, paths: [paymentPath]});
-
-// A path that ends at the node of a secret, as a path of an offer
-const pathTo = n => ({
-  hops: [{encrypted_data: '00', relay_key: asKey(n)}],
-  introduction_node: node,
-  key: asKey(7),
-});
-
-// An offer without an issuer id, with paths that end at nodes 5 and 6
-const unissued = createOffer({
-  networks: ['bitcoin'],
-  paths: [pathTo(5), pathTo(6)],
-})
-.offer;
-
-const unissuedRequest = makeRequest({
-  mtokens,
-  network: 'bitcoin',
-  offer: unissued,
-});
-
-// An invoice for the request to the offer without an issuer id, from node 6
-const fromNodeSix = makeInvoice({
-  encoded: unissuedRequest.encoded,
-  node_id: asKey(6),
-  paths: [paymentPath],
-  secret: bufferAsHex(Buffer.alloc(32, 6)),
-});
-
-const expired = makeInvoice({
-  created_at: '2024-12-31T00:00:00.000Z',
-  encoded: request.encoded,
-  expires_at: '2025-01-01T00:00:00.000Z',
-  paths: [paymentPath],
-});
-
-const refusal = createInvoiceError({message: 'refused'}).encoded;
 
 // The recipient replies with a message of a type
 const replyWith = (type, value) => ({}, cbk) => {

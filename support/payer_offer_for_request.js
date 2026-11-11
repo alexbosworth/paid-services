@@ -17,17 +17,13 @@ const {typePayerOfferServiceSequence} = require('./constants');
 const {typePayerOfferSignature} = require('./constants');
 const {withoutRecord} = require('./../service_records');
 
-const asDate = ms => new Date(Number(ms)).toISOString();
-const cap = ms => ms < maxDateMs ? ms : maxDateMs;
-const expiryMs = n => BigInt(numberOf(n)) * BigInt(msPerSecond);
+const asDate = ms => new Date(Math.min(Number(ms), 8.64e15)).toISOString();
+const asMs = seconds => BigInt(seconds) * BigInt(1e3);
 const findRecord = (records, type) => records.find(n => n.type === type);
 const hexAsBuffer = hex => Buffer.from(hex, 'hex');
 const isEven = type => !(BigInt(type) % BigInt(2));
 const isPast = ms => BigInt(Date.now()) > ms;
-const isUnknownEven = n => !knownTypes.includes(n.type) && isEven(n.type);
 const lengthSignatureHex = 128;
-const maxDateMs = BigInt(8.64e15);
-const msPerSecond = 1e3;
 const numberOf = ({value}) => truncatedAsNumber({encoded: value}).number;
 
 /** Get the payer offer of an invoice request, when it has a valid one
@@ -76,7 +72,7 @@ module.exports = ({request}) => {
     const fields = decodeRecords({encoded: record.value}).records;
 
     // A payer offer with an unknown even record cannot be used
-    if (!!fields.filter(isUnknownEven).length) {
+    if (fields.some(n => !knownTypes.includes(n.type) && isEven(n.type))) {
       return {};
     }
 
@@ -90,7 +86,7 @@ module.exports = ({request}) => {
 
     // An expiry is a minimal tu64 count of seconds from the UNIX epoch, and
     // can be later than the latest date that can be represented
-    const expiry = !expiryRecord ? undefined : expiryMs(expiryRecord);
+    const expiry = !expiryRecord ? undefined : asMs(numberOf(expiryRecord));
 
     // A payer offer whose expiry has passed is ignored
     if (expiry !== undefined && isPast(expiry)) {
@@ -98,7 +94,7 @@ module.exports = ({request}) => {
     }
 
     // An expiry past the latest date is given as the latest date
-    const expiresAt = expiry === undefined ? undefined : asDate(cap(expiry));
+    const expiresAt = expiry === undefined ? undefined : asDate(expiry);
 
     if (!signature || signature.value.length !== lengthSignatureHex) {
       return {};

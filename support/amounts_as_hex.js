@@ -1,5 +1,5 @@
-const {isArray} = Array;
 const hexLength = bytes => bytes * 2;
+const {isArray} = Array;
 const isNumber = n => typeof n === 'string' && /^\d+$/.test(n);
 const lengthAmountBytes = 8;
 const maxU64 = BigInt('18446744073709551615');

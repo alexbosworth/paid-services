@@ -1,6 +1,7 @@
 const {createDecipheriv} = require('crypto');
 
 const asyncAuto = require('async/auto');
+const asyncify = require('async/asyncify');
 const {diffieHellmanComputeSecret} = require('ln-service');
 const {getIdentity} = require('ln-service');
 const {returnResult} = require('asyncjs-util');
@@ -79,7 +80,7 @@ module.exports = ({auth, from, lnd, payload, secret}, cbk) => {
       }],
 
       // Decrypt the payload
-      decryptPayload: ['key', ({key}, cbk) => {
+      decryptPayload: ['key', asyncify(({key}) => {
         const decipher = createDecipheriv(algorithm, key, iv);
         const encrypted = hexAsBuffer(payload);
 
@@ -89,11 +90,11 @@ module.exports = ({auth, from, lnd, payload, secret}, cbk) => {
         try {
           const elements = [decipher.update(encrypted), decipher.final()];
 
-          return cbk(null, {plain: bufferAsHex(Buffer.concat(elements))});
+          return {plain: bufferAsHex(Buffer.concat(elements))};
         } catch (err) {
-          return cbk([503, 'FailedToDecryptEncryptedTradePayload', {err}]);
+          throw [503, 'FailedToDecryptEncryptedTradePayload', {err}];
         }
-      }],
+      })],
     },
     returnResult({reject, resolve, of: 'decryptPayload'}, cbk));
   });

@@ -27,8 +27,8 @@ const interval = 50;
 const outputCount = 2;
 const outputCountControl = 4;
 const size = 3;
-const tokens = 1e6;
 const times = 2000;
+const tokens = 1e6;
 const uniq = arr => Array.from(new Set(arr));
 
 // Make a joint transaction fanout group

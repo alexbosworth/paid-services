@@ -2,6 +2,7 @@ const {createHash} = require('crypto');
 const {randomBytes} = require('crypto');
 
 const asyncAuto = require('async/auto');
+const asyncify = require('async/asyncify');
 const asyncMap = require('async/map');
 const asyncMapSeries = require('async/mapSeries');
 const asyncRace = require('async/race');
@@ -56,6 +57,7 @@ const decodeOffToOnResponse = require('./decode_off_to_on_response');
 const {invoiceNetworks} = require('./constants');
 const {typePayMetadata} = require('./swap_field_types');
 
+const blockMs = 1000 * 60 * 10;
 const bufferAsHex = buffer => buffer.toString('hex');
 const {ceil} = Math;
 const decompileScript = script => scriptAsScriptElements({script}).elements;
@@ -75,18 +77,19 @@ const fuzzTimelock = 1;
 const getLoopCoopSignedTransaction = asyncTimeout(getCoopSignedTx, 1000 * 30);
 const hexAsBuffer = hex => Buffer.from(hex, 'hex');
 const {isArray} = Array;
-const isCompressed = true;
+const {max} = Math;
 const maxClaimMultiple = (r, t) => Math.min(1000, ((1000 + t) / 150) / r);
 const maxCoopMultiple = (r, t) => Math.min(1000, ((1000 + t) / 100) / r);
+const maxWaitMs = 2147483647;
 const messageRejected = 'PaymentRejectedByDestination';
 const {min} = Math;
-const minTokens = 10000;
 const minBlockMs = 1000 * 60;
+const minTokens = 10000;
 const pollInterval = {btcregtest: 100};
 const ppmRate = (fee, total) => fee * 1e6 / total;
 const preimageByteLength = 32;
 const pubKeyAsInternalKey = key => Buffer.from(key).slice(1).toString('hex');
-const publicKeyFor = key => Buffer.from(pointFromScalar(key, isCompressed));
+const publicKeyFor = key => Buffer.from(pointFromScalar(key));
 const pushSecret = asyncTimeout(releaseSwapOutSecret, 1000 * 30);
 const sha256 = preimage => createHash('sha256').update(preimage).digest('hex');
 const sighashDefault = 0;
@@ -113,10 +116,21 @@ const witnessVersionTaproot = 1;
     recovery: <Swap Request Recovery Hex String>
     [request]: <Request Function>
     response: <Swap Response Hex String>
+    [socket]: <Custom Swap Service Socket String>
     [sweep_address]: <Sweep Chain Address String>
   }
 
   @returns via cbk or Promise
+  {
+    paid_chain_fee: <Paid Sweep Chain Fee Tokens Number>
+    [paid_execution_routing_fee]: <Paid Deposit Routing Fee Tokens Number>
+    [paid_funding_routing_fee]: <Paid Funding Routing Fee Tokens Number>
+    [paid_swap_fee]: <Paid Swap Service Fee Tokens Number>
+    tokens: <Swapped Tokens Number>
+    total_fee: <Total Fees Paid Tokens Number>
+    total_fee_rate: <Total Fees Parts Per Million Rate Number>
+    transaction_fee_rate: <Sweep Transaction Fee Rate Tokens Per VByte Number>
+  }
 */
 module.exports = (args, cbk) => {
   return new Promise((resolve, reject) => {
@@ -190,34 +204,39 @@ module.exports = (args, cbk) => {
       }],
 
       // Decode the request details
-      requestDetails: ['getDecrypt', ({getDecrypt}, cbk) => {
+      requestDetails: ['getDecrypt', asyncify(({getDecrypt}) => {
         try {
-          const details = decodeOffToOnRecovery({
+          decodeOffToOnRecovery({
             decrypt: getDecrypt.secret,
             recovery: args.recovery,
           });
-
-          if (details.tokens < minTokens) {
-            return cbk([400, 'ExpectedHigherAmountToSwap']);
-          }
-
-          return cbk(null, {
-            coop_private_key: details.coop_private_key,
-            key_index: details.key_index,
-            secret: details.secret,
-            solo_private_key: details.solo_private_key,
-            tokens: details.tokens,
-          });
         } catch (err) {
-          return cbk([400, 'FailedToDecodeRequestDetails', {err}]);
+          throw [400, 'FailedToDecodeRequestDetails', {err}];
         }
-      }],
+
+        const details = decodeOffToOnRecovery({
+          decrypt: getDecrypt.secret,
+          recovery: args.recovery,
+        });
+
+        if (details.tokens < minTokens) {
+          throw [400, 'ExpectedHigherAmountToSwap'];
+        }
+
+        return {
+          coop_private_key: details.coop_private_key,
+          key_index: details.key_index,
+          secret: details.secret,
+          solo_private_key: details.solo_private_key,
+          tokens: details.tokens,
+        };
+      })],
 
       // Decode the response details
       responseDetails: [
         'getNetwork',
         'requestDetails',
-        ({getNetwork, requestDetails}, cbk) =>
+        asyncify(({getNetwork, requestDetails}) =>
       {
         // Exit early when using the Lightning Loop service
         if (!!args.is_loop_service) {
@@ -227,7 +246,7 @@ module.exports = (args, cbk) => {
               response: args.response,
             });
 
-            return cbk(null, {
+            return {
               auth_macaroon: details.auth_macaroon,
               auth_preimage: details.auth_preimage,
               deposit_id: details.deposit_id,
@@ -237,9 +256,9 @@ module.exports = (args, cbk) => {
               request: details.fund_request,
               refund_public_key: details.remote_public_key,
               timeout: details.timeout,
-            });
+            };
           } catch (err) {
-            return cbk([400, 'FailedToDecodeLoopResponseDetails', {err}]);
+            throw [400, 'FailedToDecodeLoopResponseDetails', {err}];
           }
         }
 
@@ -250,7 +269,7 @@ module.exports = (args, cbk) => {
             response: args.response,
           });
 
-          return cbk(null, {
+          return {
             coop_private_key_hash: decoded.coop_private_key_hash,
             coop_public_key: decoded.coop_public_key,
             deposit_id: decoded.coop_private_key_hash,
@@ -261,11 +280,11 @@ module.exports = (args, cbk) => {
             refund_public_key: decoded.refund_public_key,
             request: decoded.request,
             timeout: decoded.timeout,
-          });
+          };
         } catch (err) {
-          return cbk([400, 'FailedToDecodeResponseDetails', {err}]);
+          throw [400, 'FailedToDecodeResponseDetails', {err}];
         }
-      }],
+      })],
 
       // Get the deposit payment details
       getDepositPayment: ['responseDetails', ({responseDetails}, cbk) => {
@@ -336,6 +355,7 @@ module.exports = (args, cbk) => {
 
         const {service} = lightningLabsSwapService({
           network: getNetwork.network,
+          socket: args.socket,
         });
 
         return cbk(null, {metadata, service});
@@ -430,10 +450,22 @@ module.exports = (args, cbk) => {
       }],
 
       // Calculate the deadline for the swap on-chain HTLC to confirm
-      deadline: ['responseDetails', ({responseDetails}, cbk) => {
+      deadline: [
+        'getHeight',
+        'responseDetails',
+        ({getHeight, responseDetails}, cbk) =>
+      {
+        const maxHeight = responseDetails.timeout - defaultMinSweepBlocks;
+
+        // Funding is waited for until it would confirm too late to use
+        const blocks = maxHeight - getHeight.current_block_height;
+
+        // Wait at least the default time, and no longer than a timer allows
+        const waitMs = max(defaultWaitForChainFundingMs, blocks * blockMs);
+
         return cbk(null, {
-          max_reveal_height: responseDetails.timeout - defaultMinSweepBlocks,
-          remaining_ms: defaultWaitForChainFundingMs,
+          max_reveal_height: maxHeight,
+          remaining_ms: min(waitMs, maxWaitMs),
         });
       }],
 
@@ -643,7 +675,7 @@ module.exports = (args, cbk) => {
               cltv_delta: to.cltv_delta,
               destination: to.destination,
               features: to.features,
-              incoming_peer: requestDetails.incoming_peer || undefined,
+              incoming_peer: responseDetails.incoming_peer || undefined,
               lnd: args.lnd,
               max_fee: args.max_fee_deposit,
               messages: [{
@@ -920,7 +952,6 @@ module.exports = (args, cbk) => {
           args.emitter.emit('update', {releasing_funds: true});
 
           return pushSecret({
-            is_taproot: true,
             metadata: loopService.metadata,
             secret: requestDetails.secret,
             service: loopService.service,
@@ -1243,11 +1274,14 @@ module.exports = (args, cbk) => {
 
           const {outputs} = componentsOfTransaction({transaction});
 
-          const fee = requestDetails.tokens - sumOf(outputs.map(n => n.tokens));
+          const outputTokens = sumOf(outputs.map(n => n.tokens));
+
+          const fee = requestDetails.tokens - outputTokens;
+          const {vsize} = sizeOfTransaction({transaction});
 
           args.emitter.emit('update', {
             blocks_until_potential_funds_forfeit: swap.timeout - block.height,
-            broadcasting_fee_rate: fee / sizeOfTransaction({transaction}).vsize,
+            broadcasting_fee_rate: fee / vsize,
             broadcasting_tx_to_resolve_swap: transaction,
             broadcasting_tx_id: idForTransaction({transaction}).id,
           });
@@ -1265,7 +1299,9 @@ module.exports = (args, cbk) => {
         subSpend.on('confirmation', ({transaction}) => {
           const {outputs} = componentsOfTransaction({transaction});
 
-          const fee = requestDetails.tokens - sumOf(outputs.map(n => n.tokens));
+          const outputTokens = sumOf(outputs.map(n => n.tokens));
+
+          const fee = requestDetails.tokens - outputTokens;
 
           const {vsize} = sizeOfTransaction({transaction});
 
@@ -1316,6 +1352,7 @@ module.exports = (args, cbk) => {
           paid_execution_routing_fee: deposit.fee || undefined,
           paid_funding_routing_fee: funding.fee || undefined,
           paid_swap_fee: destinationFee || undefined,
+          tokens: requestDetails.tokens,
           total_fee: allFees,
           total_fee_rate: ppmRate(allFees, requestDetails.tokens),
           transaction_fee_rate: publish.rate,

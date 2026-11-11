@@ -1,76 +1,30 @@
-const {createHash} = require('node:crypto');
 const {deepStrictEqual} = require('node:assert/strict');
 const {test} = require('node:test');
 
-const {blindedPathFromHops} = require('bolt04');
-const {createOffer} = require('invoices');
-const {pointFromScalar} = require('tiny-secp256k1');
-const {signSchnorr} = require('tiny-secp256k1');
+const {makeLnd} = require('mock-lnd');
 
-const {addServiceLabel} = require('./../../service_records');
 const decode = require('./../../support/decode_support_menu');
+const {derivedKeyFamily} = require('./../../support/constants');
+const {first} = require('./fixtures/sign_support_menus');
+const {makeOffer} = require('./fixtures/sign_support_menus');
 const menuIdForPages = require('./../../support/menu_id_for_pages');
+const {offer} = require('./fixtures/sign_support_menus');
+const {related} = require('./fixtures/sign_support_menus');
+const {second} = require('./fixtures/sign_support_menus');
 const signSupportMenus = require('./../../support/sign_support_menus');
 const verify = require('./../../support/verify_menu_signature');
 
-const asKey = n => Buffer.from(pointFromScalar(Buffer.alloc(32, n)))
-  .toString('hex');
 const expiresAt = '2100-01-01T00:00:00.000Z';
-const sha256 = n => createHash('sha256').update(n).digest();
-
-// Make an offer of the issuer of secret 1, a support offer when it has an id
-const makeOffer = ({description, id, introduction}) => {
-  const blinded = blindedPathFromHops({hops: [introduction]});
-
-  const {offer} = createOffer({
-    description,
-    issuer_id: asKey(1),
-    networks: ['regtest'],
-    paths: [{
-      hops: blinded.path,
-      introduction_node: introduction,
-      key: blinded.key,
-    }],
-  });
-
-  // Exit early when the offer is not a support offer
-  if (!id) {
-    return offer;
-  }
-
-  return addServiceLabel({id, offer, type: '1', version: 1}).offer;
-};
-
-const offer = makeOffer({
-  description: 'support',
-  id: '0a'.repeat(16),
-  introduction: asKey(9),
-});
-
-// Offers with paths are large enough that only a few fit on a page
-const related = Array(6).fill(null).map((n, i) => ({
-  offer: makeOffer({description: `offer ${i}`, introduction: asKey(9)}),
-}));
-
-const [first, second] = related;
-
-// Sign the tagged hash of the message with the issuer key
-const lnd = {
-  signer: {
-    signMessage: ({msg, tag}, cbk) => {
-      const tagHash = sha256(tag);
-
-      const hash = sha256(Buffer.concat([tagHash, tagHash, msg]));
-
-      return cbk(null, {
-        signature: Buffer.from(signSchnorr(hash, Buffer.alloc(32, 1))),
-      });
-    },
-  },
-};
+const node = '0256b328b30c8bf5839e24058747879408bdb36241dc9c2e7c619faa12b2920967';
+const otherNode = '03f991f944d1e1954a7fc8b9bf62e0d78f015f4c07762d505e20e6c45260a3661b';
 
 // Sign the pages of the menu of the support offer and decode them
 const signPages = async args => {
+  // A fake LND that signs with the issuer key of secret 1 at key index 0
+  const lnd = makeLnd({
+    keys: [{family: derivedKeyFamily, index: 0, secret: '01'.repeat(32)}],
+  });
+
   const {pages} = await signSupportMenus({
     lnd,
     offer,
@@ -86,6 +40,7 @@ const signPages = async args => {
 // Sign the pages of a menu and describe them
 const describePages = async args => {
   const pages = await signPages(args);
+
   const [{menu}] = pages;
 
   return {
@@ -139,7 +94,7 @@ const tests = [
       other: makeOffer({
         description: 'support changed',
         id: '0a'.repeat(16),
-        introduction: asKey(8),
+        introduction: otherNode,
       }),
     },
     description: 'A page is the menu of every version of the support offer',
@@ -151,7 +106,7 @@ const tests = [
       other: makeOffer({
         description: 'support',
         id: '0b'.repeat(16),
-        introduction: asKey(9),
+        introduction: node,
       }),
     },
     description: 'A page is not the menu of another support offer',

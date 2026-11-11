@@ -1,6 +1,7 @@
 const {randomBytes} = require('crypto');
 
 const asyncAuto = require('async/auto');
+const asyncify = require('async/asyncify');
 const asyncRetry = require('async/retry');
 const {parsePaymentRequest} = require('ln-service');
 const {returnResult} = require('asyncjs-util');
@@ -19,8 +20,8 @@ const findIdRecord = records => records.find(n => n.type === '0');
 const findTradeRecord = records => records.find(n => n.type === '1');
 const {isArray} = Array;
 const makeRequestId = () => randomBytes(32).toString('hex');
-const requestTradeTimeoutMs = 1000 * 30;
 const requestTradesTimeoutMs = 1000 * 30;
+const requestTradeTimeoutMs = 1000 * 30;
 const tokensAsBigUnit = tokens => (tokens / 1e8).toFixed(8);
 const tradeIdRecordType = '0';
 const tradesRequestIdType = '1';
@@ -84,19 +85,21 @@ module.exports = ({ask, lnd, logger}, cbk) => {
       }],
 
       // Decode the connect details
-      connectDetails: ['askForTrade', ({askForTrade}, cbk) => {
+      connectDetails: ['askForTrade', asyncify(({askForTrade}) => {
         try {
-          const {connect} = decodeTrade({trade: askForTrade.trade});
-
-          if (!connect) {
-            return cbk([400, 'ExpectedConnectDetailsInTradeInput']);
-          }
-
-          return cbk(null, connect);
+          decodeTrade({trade: askForTrade.trade});
         } catch (err) {
-          return cbk([400, err.message]);
+          throw [400, err.message];
         }
-      }],
+
+        const {connect} = decodeTrade({trade: askForTrade.trade});
+
+        if (!connect) {
+          throw [400, 'ExpectedConnectDetailsInTradeInput'];
+        }
+
+        return connect;
+      })],
 
       // Connect to the selling node
       connectToSeller: ['connectDetails', ({connectDetails}, cbk) => {
@@ -206,13 +209,13 @@ module.exports = ({ask, lnd, logger}, cbk) => {
       }],
 
       // Parse the trade payment request
-      requestDetails: ['getTrade', ({getTrade}, cbk) => {
+      requestDetails: ['getTrade', asyncify(({getTrade}) => {
         try {
-          return cbk(null, parsePaymentRequest({request: getTrade.request}));
+          return parsePaymentRequest({request: getTrade.request});
         } catch (err) {
-          return cbk([503, 'FailedToParseBuyChannelPaymentRequest', {err}]);
+          throw [503, 'FailedToParseBuyChannelPaymentRequest', {err}];
         }
-      }],
+      })],
 
       // Pay and get the preimage through paying for it
       payForPreimage: [

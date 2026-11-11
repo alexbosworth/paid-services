@@ -71,7 +71,6 @@ module.exports = ({env, lnd}, cbk) => {
                 return cbk(err);
               }
 
-              limit = null;
               token = res.next || false;
 
               res.forwards.forEach(n => forwards.push(n));

@@ -13,17 +13,14 @@ const {typeMenuPages} = require('./constants');
 const {typeMenuSignature} = require('./constants');
 const {typeSupportMenu} = require('./constants');
 
-const asSeconds = date => floor(Date.parse(date) / msPerSecond);
+const asSeconds = date => Math.floor(Date.parse(date) / 1e3);
 const byteLength = hex => hex.length / 2;
-const {floor} = Math;
 const {isArray} = Array;
-const {isSafeInteger} = Number;
 const isDate = n => typeof n === 'string' && !isNaN(Date.parse(n));
 const isMenuId = n => typeof n === 'string' && /^[0-9a-f]*$/i.test(n);
-const isPageNumber = n => isSafeInteger(n) && n >= 0;
+const isPageNumber = n => Number.isSafeInteger(n) && n >= 0;
 const isSignature = n => /^[0-9a-f]{128}$/i.test(n);
 const lengthSignatureRecord = 66;
-const msPerSecond = 1e3;
 const truncated = number => numberAsTruncated({number: String(number)});
 
 /** Encode a page of a support menu as a record to add to an invoice error

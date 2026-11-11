@@ -20,11 +20,10 @@ const bufferAsHex = buffer => buffer.toString('hex');
 const defaultSwapExpiryMs = 1000 * 60 * 30;
 const family = 805;
 const hexAsBuffer = hex => Buffer.from(hex, 'hex');
-const isCompressed = true;
 const maxSwapDelta = 144 * 30;
 const minSwapDelta = 80;
 const {now} = Date;
-const publicKeyFor = key => Buffer.from(pointFromScalar(key, isCompressed));
+const publicKeyFor = key => Buffer.from(pointFromScalar(key));
 const refundDelta = 144;
 const sha256 = preimage => createHash('sha256').update(preimage).digest('hex');
 
@@ -119,6 +118,7 @@ module.exports = (args, cbk) => {
       // Generate the refund coop key
       generateCoopKey: ['network', ({}, cbk) => {
         const privateKey = hexAsBuffer(makePrivateKey({}).private_key);
+
         const publicKey = publicKeyFor(privateKey);
 
         return cbk(null, {
@@ -135,6 +135,7 @@ module.exports = (args, cbk) => {
         }
 
         const privateKey = hexAsBuffer(makePrivateKey({}).private_key);
+
         const publicKey = publicKeyFor(privateKey);
 
         return cbk(null, {

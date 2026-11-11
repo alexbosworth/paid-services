@@ -3,10 +3,8 @@ const {truncatedAsNumber} = require('./../service_records');
 const {typeMenuRequestPage} = require('./constants');
 
 const isEven = type => !(BigInt(type) % BigInt(2));
-const isKnown = n => knownOptions.includes(n.type);
+const isKnown = n => [typeMenuRequestPage].includes(n.type);
 const {isSafeInteger} = Number;
-const isUnknownEven = n => !isKnown(n) && isEven(n.type);
-const knownOptions = [typeMenuRequestPage];
 
 /** Read the options of a menu request record: the page number, zero when it
   is left out
@@ -32,7 +30,7 @@ module.exports = ({encoded}) => {
   }
 
   // Exit early when there is an option that has to be understood but is not
-  if (!!records.filter(isUnknownEven).length) {
+  if (records.some(n => !isKnown(n) && isEven(n.type))) {
     return {};
   }
 

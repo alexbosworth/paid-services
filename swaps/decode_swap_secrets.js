@@ -8,10 +8,10 @@ const {privateTypes} = require('./swap_field_types');
 const {publicTypes} = require('./swap_field_types');
 
 const algorithm = 'aes-256-gcm';
+const bufferAsHex = buffer => buffer.toString('hex');
 const {concat} = Buffer;
 const decodeNumber = encoded => decodeBigSize({encoded}).decoded;
 const findRecord = (records, type) => records.find(n => n.type === type);
-const bufferAsHex = buffer => buffer.toString('hex');
 const hexAsBuffer = hex => Buffer.from(hex, 'hex');
 const makeIv = () => Buffer.alloc(16, 0);
 const sha256 = n => createHash('sha256').update(n).digest();

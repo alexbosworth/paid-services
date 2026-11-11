@@ -3,6 +3,9 @@ const {test} = require('node:test');
 
 const method = require('./../../actions/execute_email_action');
 
+const {keys} = Object;
+
+// Make arguments for the method, replacing defaults with overrides
 const makeArgs = overrides => {
   const args = {
     env: {
@@ -14,7 +17,7 @@ const makeArgs = overrides => {
     message: 'message',
   };
 
-  Object.keys(overrides).forEach(k => args[k] = overrides[k]);
+  keys(overrides).forEach(k => args[k] = overrides[k]);
 
   return args;
 };
