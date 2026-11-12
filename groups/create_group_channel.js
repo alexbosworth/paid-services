@@ -9,6 +9,7 @@ const {returnResult} = require('asyncjs-util');
 
 const assembleChannelGroup = require('./assemble_channel_group');
 
+const defaultMembers = members => members === undefined ? [] : members;
 const descriptionForGroup = 'group channel open';
 const halfOf = n => n / 2;
 const {isArray} = Array;
@@ -43,8 +44,11 @@ const staleMs = 1000 * 60 * 5;
 module.exports = (args, cbk) => {
   return new Promise((resolve, reject) => {
     return asyncAuto({
+      // Default an omitted member list to unrestricted membership
+      members: cbk => cbk(null, defaultMembers(args.members)),
+
       // Check arguments
-      validate: cbk => {
+      validate: ['members', ({members}, cbk) => {
         if (!args.capacity) {
           return cbk([400, 'ExpectedChannelCapacityToCreateChannelGroup']);
         }
@@ -73,15 +77,15 @@ module.exports = (args, cbk) => {
           return cbk([400, 'ExpectedWinstonLoggerToCreateChannelGroup']);
         }
 
-        if (!isArray(args.members)) {
+        if (!isArray(members)) {
           return cbk([400, 'ExpectedArrayOfGroupMembersToCreateChannelGroup']);
         }
 
-        if (!isValidMembersCount(args.members, args.count)) {
+        if (!isValidMembersCount(members, args.count)) {
           return cbk([400, 'ExpectedCompleteSetOfAllowedGroupMembers']);
         }
 
-        if (!!args.members.filter(n => !isPublicKey(n)).length) {
+        if (!!members.filter(n => !isPublicKey(n)).length) {
           return cbk([400, 'ExpectedNodeIdentityPublicKeysForChannelGroup']);
         }
 
@@ -90,7 +94,7 @@ module.exports = (args, cbk) => {
         }
 
         return cbk();
-      },
+      }],
 
       // Get the on-chain balance to sanity check group creation
       getBalance: ['validate', ({}, cbk) => {
@@ -136,17 +140,18 @@ module.exports = (args, cbk) => {
         'confirmSigner',
         'getBalance',
         'getIdentity',
-        ({getIdentity}, cbk) =>
+        'members',
+        ({getIdentity, members}, cbk) =>
       {
         const announced = [];
-        const members = [getIdentity.public_key].concat(args.members);
+        const allowed = [getIdentity.public_key].concat(members);
 
         const coordinate = assembleChannelGroup({
           capacity: args.capacity,
           count: args.count,
           identity: getIdentity.public_key,
           lnd: args.lnd,
-          members: !!args.members.length ? members : undefined,
+          members: !!members.length ? allowed : undefined,
           rate: args.rate,
         });
 
@@ -178,14 +183,21 @@ module.exports = (args, cbk) => {
         });
 
         // The group must fill up with participants first
-        coordinate.events.once('filled', async ({ids}) => {
-          const members = ids.filter(n => n !== getIdentity.public_key);
+        coordinate.events.once('filled', ({ids}) => {
+          const others = ids.filter(n => n !== getIdentity.public_key);
 
-          const nodes = await asyncMap(members, async id => {
-            return niceName(await getNodeAlias({id, lnd: args.lnd}));
+          return asyncMap(others, (id, cbk) => {
+            return getNodeAlias({id, lnd: args.lnd}, cbk);
+          },
+          (err, nodes) => {
+            if (!!err) {
+              return;
+            }
+
+            const names = nodes.map(niceName);
+
+            return args.logger.info({ready: join(names)});
           });
-
-          return args.logger.info({ready: join(nodes)});
         });
 
         // Once filled, members will connect with their partners

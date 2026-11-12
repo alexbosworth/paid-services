@@ -63,5 +63,9 @@ module.exports = ({records}) => {
 
   const {utxos} = decodeUtxosRecord({encoded: utxosRecord.value});
 
-  return {utxos, change: changeRecord.value, funding: fundingRecord.value};
+  return {
+    utxos,
+    change: !!changeRecord ? changeRecord.value : undefined,
+    funding: fundingRecord.value,
+  };
 };

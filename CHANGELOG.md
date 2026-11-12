@@ -1,6 +1,6 @@
 # Versions
 
-## Version 11.0.0
+## Version 11.0.1
 
 - `completeOffToOnSwap`: Add method to complete an off to on swap request
 - `decodeLoopResponse`: Add method to decode the Loop service response details

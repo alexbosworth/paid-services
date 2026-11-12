@@ -288,6 +288,14 @@ module.exports = ({capacity, count, identity, lnd, members, rate}) => {
       return;
     }
 
+    // Group ids must be locked in before registering pending opens
+    if (!group.ids) {
+      return res.failure([
+        503,
+        'GroupMembersAreNotLockedInToRegisterPendingOpen',
+      ]);
+    }
+
     // Cannot register pending when not part of the locked in group
     if (!group.ids.includes(req.from)) {
       return res.failure([403, 'MembershipNotPresentInLockedInMembers']);
@@ -363,6 +371,14 @@ module.exports = ({capacity, count, identity, lnd, members, rate}) => {
     // Exit early when this request is for a different group
     if (idRecord.value !== id) {
       return;
+    }
+
+    // Group ids must be locked in before registering signatures
+    if (!group.ids) {
+      return res.failure([
+        503,
+        'GroupMembersAreNotLockedInToRegisterSignedOpen',
+      ]);
     }
 
     // Cannot register signatures when not part of the locked in group
