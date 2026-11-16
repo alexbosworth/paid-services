@@ -131,6 +131,16 @@ const witnessVersionTaproot = 1;
     total_fee_rate: <Total Fees Parts Per Million Rate Number>
     transaction_fee_rate: <Sweep Transaction Fee Rate Tokens Per VByte Number>
   }
+
+  // Signed unilateral claim transactions
+  @event 'unilateral_claims'
+  {
+    claims: [{
+      fee_rate: <Fee Tokens Per VByte Number>
+      height: <Broadcast at Block Height Number>
+      transaction: <Signed Unilateral Claim Transaction Hex String>
+    }]
+  }
 */
 module.exports = (args, cbk) => {
   return new Promise((resolve, reject) => {
@@ -928,8 +938,33 @@ module.exports = (args, cbk) => {
         cbk);
       }],
 
+      // Emit every signed claim before a claim can release the secret
+      emitClaims: [
+        'requestDetails',
+        'signClaims',
+        ({requestDetails, signClaims}, cbk) =>
+      {
+        // The fee rate is what the signed claim pays, after any fee cap
+        const claims = signClaims.map(({height, transaction}) => {
+          const {outputs} = componentsOfTransaction({transaction});
+          const {vsize} = sizeOfTransaction({transaction});
+
+          const outputTokens = sumOf(outputs.map(n => n.tokens));
+
+          const fee = requestDetails.tokens - outputTokens;
+
+          return {height, transaction, fee_rate: fee / vsize};
+        });
+
+        // Claims have their own event so update listeners don't get them all
+        args.emitter.emit('unilateral_claims', {claims});
+
+        return cbk();
+      }],
+
       // Push the preimage to allow for a cooperative swap
       pushPreimage: [
+        'emitClaims',
         'findOutput',
         'loopService',
         'requestDetails',

@@ -1,5 +1,9 @@
 # Versions
 
+## Version 11.1.0
+
+- `completeOffToOnSwap`: Add `unilateral_claims` event to back up claims
+
 ## Version 11.0.1
 
 - `completeOffToOnSwap`: Add method to complete an off to on swap request
